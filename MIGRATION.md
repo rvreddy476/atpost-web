@@ -7,12 +7,15 @@ until each zone is carved out.
 ## Status
 - [x] **P0 (scaffold)** — Turborepo root, `@atpost/config`, `@atpost/ui` seed
   (Button, Input, EmailField+validation, DatePicker). *No app moved yet.*
-- [ ] **P1 (shared packages)** — extract `@atpost/api-client` (postbook-ui
-  `src/lib/api.ts` + `src/app/api/{proxy,auth}` + the cookie/CSRF hardening),
-  `@atpost/hooks` (`src/hooks`, 83), `@atpost/types` (`src/types`, 19). Grow
-  `@atpost/ui` from `src/components` (188). Remap imports with a codemod
-  (`@/components` → `@atpost/ui`, etc.) — 133 files import `@/components`,
-  56 import `@/features`.
+- [~] **P1 (shared packages)** — in progress:
+  - [x] `@atpost/api-client` — extracted `src/lib/api.ts` (axios client) +
+    `src/app/api/proxy` + `src/app/api/auth/refresh` (the cookie/CSRF-aware
+    proxy + refresh) into the package; apps re-export the handlers in one line.
+  - [ ] `@atpost/hooks` (`src/hooks`, 83), `@atpost/types` (`src/types`, 19),
+    grow `@atpost/ui` from `src/components` (188).
+  - [ ] Remap imports with a codemod (`@/components` → `@atpost/ui`,
+    `@/lib/api` → `@atpost/api-client`, etc.) — 133 files import `@/components`,
+    56 import `@/features`.
 - [ ] **P2 (first zone)** — move one loosely-coupled area into `apps/<zone>`
   (recommend `admin` or `commerce`): set `basePath`, wire Multi-Zones `rewrites`
   in `apps/shell`, deploy + route its path at the edge.
