@@ -11,11 +11,16 @@ until each zone is carved out.
   - [x] `@atpost/api-client` — extracted `src/lib/api.ts` (axios client) +
     `src/app/api/proxy` + `src/app/api/auth/refresh` (the cookie/CSRF-aware
     proxy + refresh) into the package; apps re-export the handlers in one line.
-  - [ ] `@atpost/hooks` (`src/hooks`, 83), `@atpost/types` (`src/types`, 19),
+  - [x] `@atpost/types` — `src/types` (pure, self-contained) copied verbatim +
+    barrel `index.ts`.
+  - [ ] `@atpost/hooks` (`src/hooks`, 83 — coupled to api/types, needs remap),
     grow `@atpost/ui` from `src/components` (188).
-  - [ ] Remap imports with a codemod (`@/components` → `@atpost/ui`,
-    `@/lib/api` → `@atpost/api-client`, etc.) — 133 files import `@/components`,
-    56 import `@/features`.
+  - [x] Codemod provided: `scripts/codemod-dedup.sh` (conservative remap of the
+    extracted symbols, optional/gradual, post-move).
+- [ ] **P0 move** — `scripts/migrate-shell.sh` moves postbook-ui → `apps/shell`
+  intact (the `@/*` alias keeps every import working, **no codemod required**).
+  Run it locally + `bun install && bun run build` to verify (build needs network
+  this sandbox lacks).
 - [ ] **P2 (first zone)** — move one loosely-coupled area into `apps/<zone>`
   (recommend `admin` or `commerce`): set `basePath`, wire Multi-Zones `rewrites`
   in `apps/shell`, deploy + route its path at the edge.

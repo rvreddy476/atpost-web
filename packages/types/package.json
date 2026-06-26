@@ -1,0 +1,20 @@
+{
+  "name": "@atpost/types",
+  "version": "0.1.0",
+  "description": "atPost shared TypeScript domain types (pure, framework-free).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "echo '@atpost/types lint ok'"
+  },
+  "devDependencies": {
+    "@atpost/config": "workspace:*",
+    "typescript": "^5.8.2"
+  }
+}
