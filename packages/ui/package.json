@@ -16,11 +16,13 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "react-dom": ">=18"
+    "react-dom": ">=18",
+    "lucide-react": ">=0.400.0"
   },
   "devDependencies": {
     "@atpost/config": "workspace:*",
     "@types/react": "^19.2.2",
+    "lucide-react": "^0.460.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.0"
   }

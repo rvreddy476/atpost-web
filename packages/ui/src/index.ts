@@ -14,3 +14,10 @@ export { EmailField } from "./EmailField"
 export type { EmailFieldProps } from "./EmailField"
 export { DatePicker } from "./DatePicker"
 export type { DatePickerProps } from "./DatePicker"
+// Additional primitives ported from postbook-ui src/components/ui (self-contained).
+export * from "./dob-picker"      // DobPicker + validateDob
+export * from "./StarRating"      // StarRating
+export * from "./skeleton"        // Skeleton
+export * from "./card"            // Card, CardHeader, CardTitle, CardContent
+export * from "./dialog"          // Dialog
+export * from "./MessageToast"    // MessageToastContent
