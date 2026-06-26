@@ -1,0 +1,20 @@
+{
+  "name": "atpost-web",
+  "private": true,
+  "packageManager": "bun@1.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "dev": "turbo run dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.0",
+    "typescript": "^5.8.2"
+  }
+}
