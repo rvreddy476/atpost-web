@@ -19,8 +19,10 @@ remap() {  # $1=from-regex  $2=to
 
 echo "→ remapping @/lib/api → @atpost/api-client"
 remap 'from "@/lib/api"'                 'from "@atpost/api-client"'
-echo "→ remapping @/types(/*)?      → @atpost/types"
-remap 'from "@/types(/[a-zA-Z0-9_-]+)?"' 'from "@atpost/types"'
+echo "→ remapping @/types/<mod> → @atpost/types/<mod> (preserve subpath; the"
+echo "   barrel is namespaced, so subpath imports keep flat named exports)"
+remap 'from "@/types/([a-zA-Z0-9_-]+)"' 'from "@atpost/types/\1"'
+remap 'from "@/types"'                  'from "@atpost/types"'
 echo "→ remapping @/components/ui/button → @atpost/ui"
 remap 'from "@/components/ui/button"'    'from "@atpost/ui"'
 remap 'from "@/components/ui/input"'     'from "@atpost/ui"'
