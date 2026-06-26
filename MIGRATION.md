@@ -29,6 +29,27 @@ until each zone is carved out.
 - [ ] **P4 (deploy/scale)** — per-app Helm release (reuse `charts/atpost-service`
   + ArgoCD ApplicationSet), CloudFront/ALB path routing, per-app HPA.
 
+## First zone template — `apps/commerce` (`/shop`)
+A ready-to-fill zone is scaffolded: `next.config.ts` (basePath/assetPrefix
+`/shop`, transpilePackages, `/v1`→`/api/proxy` rewrite), Tailwind via the shared
+`@atpost/config/tailwind-preset`, a placeholder `page.tsx` using `@atpost/ui`,
+and the proxy/refresh routes re-exported from `@atpost/api-client`. Move the
+commerce routes (cart, checkout, orders, products, seller, rfq) into
+`apps/commerce/src/app/`. Copy this app as the template for each new zone (change
+name, basePath, port).
+
+**Host wiring (in `apps/shell/next.config.ts`)** — route `/shop/*` to this zone:
+```ts
+async rewrites() {
+  return { beforeFiles: [
+    { source: "/shop",        destination: `${process.env.COMMERCE_ZONE_URL}/shop` },
+    { source: "/shop/:path*", destination: `${process.env.COMMERCE_ZONE_URL}/shop/:path*` },
+  ] }
+}
+```
+In prod the edge (CloudFront/ALB) routes `/shop/*` to the commerce deployment
+directly; the shell rewrite is the local-dev equivalent.
+
 ## Zone grouping (≈10, not 48 apps)
 shell `/` · social `/social` · commerce `/shop` · community `/community` ·
 creator `/creator` · messenger `/messenger` · live `/live` · memories `/memories`
