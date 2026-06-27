@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   basePath: "/live",
   assetPrefix: "/live",
+  compress: true, // gzip responses (also handled at the CDN/ALB in prod)
+  poweredByHeader: false, // drop X-Powered-By (smaller responses, less fingerprinting)
   // Source-only shared packages must be transpiled by this app.
   transpilePackages: ["@atpost/ui", "@atpost/api-client", "@atpost/types"],
   // Bundle-size: rewrite barrel imports (@atpost/ui, lucide-react) to direct
@@ -18,6 +20,9 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["@atpost/ui", "@atpost/types", "lucide-react"],
   },
   images: {
+    // Serve modern formats (smaller payloads) + cache optimized images long.
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 2_592_000, // 30 days
     remotePatterns: [
       { protocol: "https", hostname: "*.cleestudio.com" },
       { protocol: "http", hostname: "localhost" },

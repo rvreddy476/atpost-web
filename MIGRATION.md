@@ -63,16 +63,27 @@ directly; the shell rewrite is the local-dev equivalent.
 `shell` comes from `migrate-shell.sh` (the moved monolith); the other 10 are
 generated via `scripts/new-zone.sh <name> <basePath> <port>`.
 
-## Performance / bundle size
+## Performance (Next.js) — enabled by default in every zone
+Runtime: **React 19** + **SWC** compiler (no Babel; no `.babelrc`). React
+Compiler intentionally **not** enabled (adds a Babel pass / experimental).
 - `experimental.optimizePackageImports: ["@atpost/ui","@atpost/types","lucide-react"]`
-  in every zone — rewrites barrel imports to direct module imports so only the
-  components actually used are bundled (big win vs the @atpost/ui barrel +
-  lucide-react's thousands of icons).
-- `@atpost/ui`/`@atpost/api-client` set `"sideEffects": false` → tree-shaking.
+  — rewrites barrel imports to direct imports so only used components ship (big
+  win vs the @atpost/ui barrel + lucide-react's icon set).
+- `@atpost/ui`/`@atpost/api-client` `"sideEffects": false` → tree-shaking.
+- `images.formats: ["image/avif","image/webp"]` + `minimumCacheTTL: 30d` →
+  smaller, long-cached images (matters for a media-heavy app).
+- `compress: true`, `poweredByHeader: false`.
 - `output: "standalone"` → minimal Docker images per zone.
+- `next dev --turbopack` → fast local dev (build still uses webpack).
 - Multi-Zones means each zone bundles its own React/@atpost copies (the cost of
-  independent deploys) — acceptable per the chosen architecture; shared HTTP
-  caching at the edge + per-zone code-splitting keep payloads small.
+  independent deploys); per-zone code-splitting + edge HTTP caching keep payloads
+  small.
+
+**Safe to add later (verify per-zone):** `next/font` when fonts move in (zero
+layout-shift, self-hosted); route-segment `revalidate`/`dynamic` per route;
+`experimental.optimizeCss` (critical-CSS inlining — needs `critters`, watch for
+FOUC); a CloudFront image loader. Left off by default to keep the "don't change
+behavior" guarantee.
 
 ## How to bring the monolith in (P0 move, run locally — needs `bun install`)
 ```bash
