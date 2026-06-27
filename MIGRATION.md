@@ -50,10 +50,29 @@ async rewrites() {
 In prod the edge (CloudFront/ALB) routes `/shop/*` to the commerce deployment
 directly; the shell rewrite is the local-dev equivalent.
 
-## Zone grouping (≈10, not 48 apps)
-shell `/` · social `/social` · commerce `/shop` · community `/community` ·
-creator `/creator` · messenger `/messenger` · live `/live` · memories `/memories`
-· dating `/match` · miniapps `/apps` · admin `/admin`.
+## Zones (scaffolded — `apps/*`, dev ports)
+| zone | basePath | port | | zone | basePath | port |
+|---|---|---|---|---|---|---|
+| commerce | /shop | 3001 | | messenger | /messenger | 3007 |
+| admin | /admin | 3002 | | live | /live | 3008 |
+| dating | /match | 3003 | | memories | /memories | 3009 |
+| social | /social | 3004 | | miniapps | /apps | 3010 |
+| community | /community | 3005 | | shell | / (host) | 3000 |
+| creator | /creator | 3006 | | | | |
+
+`shell` comes from `migrate-shell.sh` (the moved monolith); the other 10 are
+generated via `scripts/new-zone.sh <name> <basePath> <port>`.
+
+## Performance / bundle size
+- `experimental.optimizePackageImports: ["@atpost/ui","@atpost/types","lucide-react"]`
+  in every zone — rewrites barrel imports to direct module imports so only the
+  components actually used are bundled (big win vs the @atpost/ui barrel +
+  lucide-react's thousands of icons).
+- `@atpost/ui`/`@atpost/api-client` set `"sideEffects": false` → tree-shaking.
+- `output: "standalone"` → minimal Docker images per zone.
+- Multi-Zones means each zone bundles its own React/@atpost copies (the cost of
+  independent deploys) — acceptable per the chosen architecture; shared HTTP
+  caching at the edge + per-zone code-splitting keep payloads small.
 
 ## How to bring the monolith in (P0 move, run locally — needs `bun install`)
 ```bash

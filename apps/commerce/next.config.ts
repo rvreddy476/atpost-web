@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
   assetPrefix: "/shop",
   // Source-only shared packages must be transpiled by this app.
   transpilePackages: ["@atpost/ui", "@atpost/api-client", "@atpost/types"],
+  // Bundle-size: rewrite barrel imports (@atpost/ui, lucide-react) to direct
+  // module imports so only used components ship. Pairs with sideEffects:false
+  // on the packages for proper tree-shaking.
+  experimental: {
+    optimizePackageImports: ["@atpost/ui", "@atpost/types", "lucide-react"],
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.cleestudio.com" },

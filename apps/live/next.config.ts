@@ -7,8 +7,8 @@ import type { NextConfig } from "next"
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
-  basePath: "/admin",
-  assetPrefix: "/admin",
+  basePath: "/live",
+  assetPrefix: "/live",
   // Source-only shared packages must be transpiled by this app.
   transpilePackages: ["@atpost/ui", "@atpost/api-client", "@atpost/types"],
   // Bundle-size: rewrite barrel imports (@atpost/ui, lucide-react) to direct
