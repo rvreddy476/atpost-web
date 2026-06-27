@@ -1,0 +1,58 @@
+name: Publish packages
+
+# Versions + publishes the @atpost/* packages to AWS CodeArtifact on merge to
+# main (when packages change). Auth is GitHub-OIDC → the CI role created by the
+# Terraform iam + codeartifact modules; no static npm token.
+#
+# Required repo config:
+#   secret AWS_CI_ROLE_ARN  = terraform output ci_role_arn
+#   (region/domain/repo are atpost / atpost-web / ap-south-1)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - ".changeset/**"
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC → AWS
+  contents: write # changeset version bump/commit
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.1.0"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Authenticate npm to CodeArtifact
+        run: |
+          aws codeartifact login --tool npm \
+            --domain atpost --repository atpost-web \
+            --namespace @atpost --region ap-south-1
+
+      - run: bun install --frozen-lockfile
+
+      # Packages ship source (files: ["src"], consumed via transpilePackages),
+      # so no build step is needed before publish.
+      # changeset version (apply pending bumps + changelogs), then publish the
+      # packages whose version isn't yet in the registry.
+      - name: Version + publish
+        run: |
+          bunx changeset version
+          bunx changeset publish

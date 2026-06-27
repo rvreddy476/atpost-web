@@ -25,5 +25,8 @@
     "lucide-react": "^0.460.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.0"
-  }
+  },
+  "files": [
+    "src"
+  ]
 }
