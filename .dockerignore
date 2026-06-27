@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/.turbo
+**/.git
+**/dist
+**/coverage
+**/*.log
+**/.env*.local
+**/test-results
+**/playwright-report
+Dockerfile
+.dockerignore

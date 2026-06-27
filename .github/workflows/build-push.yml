@@ -1,0 +1,64 @@
+name: Build & push zone images
+
+# Builds each Multi-Zone app into a container and pushes to ECR (atpost/web-<zone>).
+# GitHub-OIDC → CI role (same one used for CodeArtifact). ArgoCD (in modernsmapp)
+# then deploys the pushed tag per deploy/web/<zone>/values-<env>.yaml.
+#
+# Required: secret AWS_CI_ROLE_ARN, var AWS_ACCOUNT_ID (region ap-south-1).
+# Optimization TODO: build only --affected zones (turbo) instead of the matrix.
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/**", "packages/**", "Dockerfile", ".github/workflows/build-push.yml"]
+  workflow_dispatch:
+    inputs:
+      zone:
+        description: "Single zone to build (blank = all)"
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # shell joins after migrate-shell.sh creates apps/shell.
+        zone: [commerce, admin, dating, social, community, creator, messenger, live, memories, miniapps]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip non-selected zones (manual single-zone runs)
+        id: gate
+        run: |
+          sel="${{ github.event.inputs.zone }}"
+          if [ -n "$sel" ] && [ "$sel" != "${{ matrix.zone }}" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.run == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CI_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - if: steps.gate.outputs.run == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - if: steps.gate.outputs.run == 'true'
+        name: Build & push web-${{ matrix.zone }}
+        env:
+          IMAGE: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com/atpost/web-${{ matrix.zone }}
+        run: |
+          docker build --build-arg ZONE=${{ matrix.zone }} \
+            -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
