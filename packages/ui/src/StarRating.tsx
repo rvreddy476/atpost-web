@@ -1,6 +1,6 @@
 'use client'
 
-import { cn } from '@/lib/utils'
+import { cn } from "./cn"
 
 type Props = {
   value: number // 0..5
