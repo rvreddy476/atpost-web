@@ -1,3 +1,5 @@
+"use client"
+
 import { forwardRef, useId, useState } from "react"
 import { Input } from "./Input"
 import { validateEmail } from "./validation"
