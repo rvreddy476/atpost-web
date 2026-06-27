@@ -21,7 +21,7 @@ DST="$HERE/apps/$NAME"
 
 echo "→ cloning apps/commerce → apps/$NAME ($BASEPATH, port $PORT)"
 # Copy source only (skip build/dep artifacts if present).
-rsync -a --exclude node_modules --exclude .next --exclude .turbo "$TPL/" "$DST/"
+rsync -a --exclude node_modules --exclude .next --exclude .turbo --exclude "*.tsbuildinfo" --exclude next-env.d.ts "$TPL/" "$DST/"
 
 # Title-case the name for display (admin → Admin, mini-apps → Mini-apps).
 TITLE="$(printf '%s' "$NAME" | sed -E 's/(^|-)([a-z])/\1\u\2/g')"
