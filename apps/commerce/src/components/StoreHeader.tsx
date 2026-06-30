@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Search, ShoppingCart, Package, User } from "lucide-react"
+import { Search, ShoppingCart, Package, User, Store } from "lucide-react"
 import { useCart } from "@/hooks/useCommerce"
 import { getCurrentUserId } from "@atpost/api-client"
 
@@ -47,6 +47,10 @@ export function StoreHeader() {
             </div>
           </div>
         </form>
+
+        <Link href="/sell" className="hidden items-center gap-1 text-sm text-gray-700 hover:text-gray-900 sm:flex">
+          <Store size={18} /> Sell
+        </Link>
 
         <Link href="/orders" className="hidden items-center gap-1 text-sm text-gray-700 hover:text-gray-900 sm:flex">
           <Package size={18} /> Orders
