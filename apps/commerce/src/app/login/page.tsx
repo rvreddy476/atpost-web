@@ -1,15 +1,17 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useState } from "react"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import api, { saveSession } from "@atpost/api-client"
 import { Button, Input } from "@atpost/ui"
 
-// Minimal email/phone + password login for the commerce zone. Posts to the
-// gateway via the same /api/proxy the rest of the app uses, then persists the
-// session through @atpost/api-client so every subsequent call is authenticated.
-export default function LoginPage() {
+// Email/phone + password login. Honors ?redirect=<path> so auth-gated actions
+// (e.g. "Sell") return the user where they intended after signing in.
+function LoginForm() {
   const router = useRouter()
+  const params = useSearchParams()
+  const redirect = params.get("redirect") || "/"
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -26,7 +28,7 @@ export default function LoginPage() {
       const refresh = d?.tokens?.refresh_token ?? d?.tokens?.refreshToken ?? ""
       if (!access) throw new Error("login response had no access token")
       saveSession({ accessToken: access, refreshToken: refresh }, d?.user ?? { id: "" })
-      router.push("/")
+      router.push(redirect)
     } catch (err: unknown) {
       const e2 = err as { response?: { data?: { error?: { message?: string } } }; message?: string }
       setError(e2?.response?.data?.error?.message ?? e2?.message ?? "Login failed")
@@ -59,6 +61,23 @@ export default function LoginPage() {
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
+      <p className="text-sm text-gray-600">
+        New here?{" "}
+        <Link
+          href={`/register${redirect !== "/" ? `?redirect=${encodeURIComponent(redirect)}` : ""}`}
+          className="font-medium underline"
+        >
+          Create an account
+        </Link>
+      </p>
     </main>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-500">Loading…</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }

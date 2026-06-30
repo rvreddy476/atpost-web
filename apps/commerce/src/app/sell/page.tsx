@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { StoreHeader } from "@/components/StoreHeader"
 import { useOnboardingStatus, useStartOnboarding } from "@/hooks/useSellerOnboarding"
 import { useMyProducts, useSubmitProduct } from "@/hooks/useSellerDashboard"
 import { Button, Input } from "@atpost/ui"
+import { getCurrentUserId } from "@atpost/api-client"
 
 function OnboardingForm() {
   const start = useStartOnboarding()
@@ -100,13 +102,29 @@ function MyProducts() {
 }
 
 export default function SellPage() {
+  const router = useRouter()
+  const [authed, setAuthed] = useState<boolean | null>(null)
+
+  // Selling requires an account. If not signed in, send them to login and
+  // bring them straight back to /sell afterwards.
+  useEffect(() => {
+    if (getCurrentUserId()) {
+      setAuthed(true)
+    } else {
+      setAuthed(false)
+      router.replace("/login?redirect=/sell")
+    }
+  }, [router])
+
   const status = useOnboardingStatus()
 
   return (
     <div className="min-h-screen bg-gray-50">
       <StoreHeader />
       <main className="mx-auto max-w-4xl px-4 py-8">
-        {status.isLoading ? (
+        {authed !== true ? (
+          <p className="text-gray-500">Redirecting to sign in…</p>
+        ) : status.isLoading ? (
           <p className="text-gray-500">Loading…</p>
         ) : status.data && !status.isError ? (
           <MyProducts />
