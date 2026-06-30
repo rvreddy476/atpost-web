@@ -75,6 +75,24 @@ const getUserId = (): string | null => {
  */
 export const getCurrentUserId = getUserId
 
+/**
+ * Persist a login result so subsequent api calls carry the Bearer token and
+ * X-User-Id. Writes the same storage slots the interceptor reads. Call after a
+ * successful POST /v1/auth/login (or register). `user` must include `id`.
+ */
+export const saveSession = (
+    tokens: { accessToken: string; refreshToken: string },
+    user: { id: string } & Record<string, unknown>
+) => {
+    if (!canUseStorage()) return
+    saveTokens(tokens.accessToken, tokens.refreshToken)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user))
+    window.dispatchEvent(new Event(SESSION_CHANGE_EVENT))
+}
+
+/** Clear the session (logout). */
+export const clearSession = clearStoredAuth
+
 const ensureCsrfToken = (): string => {
     if (typeof document === "undefined") return ""
     const match = document.cookie.split("; ").find((c) => c.startsWith("csrf_token="))

@@ -11,4 +11,4 @@
 //   export { GET, POST, PUT, DELETE, PATCH } from "@atpost/api-client/proxy"
 //   // app/api/auth/refresh/route.ts
 //   export { POST } from "@atpost/api-client/refresh"
-export { default, getCurrentUserId } from "./client"
+export { default, getCurrentUserId, saveSession, clearSession } from "./client"
