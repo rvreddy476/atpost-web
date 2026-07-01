@@ -114,6 +114,7 @@ export type ProductVariant = {
   selling_price: number
   currency_code: string
   status: string
+  image_media_id?: string | null
 }
 
 export type Product = {
@@ -130,6 +131,17 @@ export type Product = {
   status: string
   hsn_code?: string | null
   weight_grams?: number | null
+  primary_image_media_id?: string | null
+  brand_name?: string | null
+  warranty_info?: string | null
+  return_policy_type?: string
+  return_policy_days?: number
+  avg_rating?: number
+  review_count?: number
+  default_variant_id?: string | null
+  min_selling_price?: number | null
+  min_mrp?: number | null
+  total_stock?: number | null
 }
 
 export type Review = {
@@ -196,14 +208,19 @@ export interface ProductListPage {
   offset: number
 }
 
-export function useProducts(opts: { category?: string; q?: string; limit?: number; offset?: number } = {}) {
-  const { category, q, limit = 24, offset = 0 } = opts
+export function useProducts(opts: { category?: string; q?: string; minRating?: number; inStock?: boolean; limit?: number; offset?: number } = {}) {
+  const { category, q, minRating, inStock, limit = 24, offset = 0 } = opts
   return useQuery<ProductListPage>({
-    queryKey: ['commerce', 'products', category ?? null, q ?? null, limit, offset],
+    queryKey: ['commerce', 'products', category ?? null, q ?? null, minRating ?? null, inStock ?? false, limit, offset],
     queryFn: async () => {
-      const params: Record<string, string | number> = { limit, offset }
+      const params: Record<string, string | number> = { limit }
+      // The backend's legacy offset path does not apply rating/stock filters.
+      // Use the enriched catalog path whenever those filters are active.
+      if (!minRating && !inStock) params.offset = offset
       if (category) params.category = category
       if (q) params.q = q
+      if (minRating) params.min_rating = minRating
+      if (inStock) params.in_stock = 'true'
       const res = (await api.get('/v1/commerce/products', { params })).data.data
       // Tolerate both wrapped {items,total} and a bare array if a future
       // backend variant returns one — keeps the hook resilient.

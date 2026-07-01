@@ -20,7 +20,11 @@ function ShopContent() {
   const params = useSearchParams()
   const q = params.get("q") ?? ""
   const category = params.get("category") ?? undefined
-  const { data, isLoading } = useProducts({ q, category, limit: 24 })
+  const minRating = Number(params.get("rating") ?? 0) || undefined
+  const inStock = params.get("stock") === "true"
+  const offset = Math.max(0, Number(params.get("offset") ?? 0) || 0)
+  const limit = 24
+  const { data, isLoading, isError } = useProducts({ q, category, minRating, inStock, limit, offset })
   const { data: cats } = useCategories()
 
   return (
@@ -33,7 +37,7 @@ function ShopContent() {
             All
           </Link>
           {cats?.map((c) => (
-            <Link key={c.id} href={`/?category=${c.slug}`} className={chip(category === c.slug)}>
+            <Link key={c.id} href={`/?category=${c.id}`} className={chip(category === c.id)}>
               {c.name}
             </Link>
           ))}
@@ -41,14 +45,32 @@ function ShopContent() {
       </nav>
 
       <main className="mx-auto max-w-7xl px-4 py-6">
-        <h1 className="mb-4 text-lg font-semibold">
+        <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <h1 className="text-lg font-semibold">
           {q ? `Results for “${q}”` : "All products"}
         </h1>
+        <div className="flex flex-wrap gap-2 text-sm">
+          <Link href={`/?${new URLSearchParams({ ...(q && { q }), ...(category && { category }), stock: inStock ? 'false' : 'true', ...(minRating && { rating: String(minRating) }) })}`} className={chip(inStock)}>
+            In stock
+          </Link>
+          <Link href={`/?${new URLSearchParams({ ...(q && { q }), ...(category && { category }), ...(inStock && { stock: 'true' }), rating: minRating === 4 ? '' : '4' })}`} className={chip(minRating === 4)}>
+            4★ & up
+          </Link>
+        </div>
+        </div>
+        {isError ? <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">Products could not be loaded. Please refresh and try again.</div> : null}
         <ProductGrid
           products={(data?.items ?? []) as ProductCardData[]}
           isLoading={isLoading}
           emptyLabel={q ? "No products match your search" : "No products yet — add one from the seller dashboard"}
         />
+        {data && data.total > limit ? (
+          <nav className="mt-8 flex items-center justify-center gap-3" aria-label="Product pages">
+            {offset > 0 ? <Link className="rounded-lg border bg-white px-4 py-2 text-sm" href={`/?${new URLSearchParams({ ...(q && { q }), ...(category && { category }), ...(inStock && { stock: 'true' }), ...(minRating && { rating: String(minRating) }), offset: String(Math.max(0, offset - limit)) })}`}>Previous</Link> : null}
+            <span className="text-sm text-gray-500">Page {Math.floor(offset / limit) + 1} of {Math.ceil(data.total / limit)}</span>
+            {offset + limit < data.total ? <Link className="rounded-lg border bg-white px-4 py-2 text-sm" href={`/?${new URLSearchParams({ ...(q && { q }), ...(category && { category }), ...(inStock && { stock: 'true' }), ...(minRating && { rating: String(minRating) }), offset: String(offset + limit) })}`}>Next</Link> : null}
+          </nav>
+        ) : null}
       </main>
     </div>
   )

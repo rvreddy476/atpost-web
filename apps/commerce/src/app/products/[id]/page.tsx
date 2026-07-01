@@ -38,12 +38,17 @@ export default function ProductDetailPage() {
           <div className="grid gap-8 md:grid-cols-2">
             {/* Gallery */}
             <div className="aspect-square overflow-hidden rounded-xl border border-gray-200 bg-white">
-              <div className="grid h-full place-items-center text-gray-400">No image</div>
+              {(selected?.image_media_id || product.primary_image_media_id) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/v1/media/${selected?.image_media_id || product.primary_image_media_id}/serve?w=900&q=85`} alt={product.title} className="h-full w-full object-contain" />
+              ) : <div className="grid h-full place-items-center text-gray-400">No image available</div>}
             </div>
 
             {/* Details */}
             <div>
               <h1 className="text-2xl font-semibold">{product.title}</h1>
+              {product.brand_name ? <p className="mt-1 text-sm text-gray-500">Brand: {product.brand_name}</p> : null}
+              {product.avg_rating ? <p className="mt-2 text-sm text-amber-700">★ {product.avg_rating.toFixed(1)} <span className="text-gray-500">({product.review_count ?? 0} reviews)</span></p> : null}
               {product.short_description && (
                 <p className="mt-1 text-gray-600">{product.short_description}</p>
               )}
@@ -56,6 +61,7 @@ export default function ProductDetailPage() {
                   {selected.mrp > selected.selling_price && (
                     <span className="text-gray-400 line-through">{selected.mrp}</span>
                   )}
+                  {selected.mrp > selected.selling_price ? <span className="text-sm font-medium text-emerald-700">{Math.round((1 - selected.selling_price / selected.mrp) * 100)}% off</span> : null}
                 </div>
               )}
 
@@ -90,6 +96,11 @@ export default function ProductDetailPage() {
                     Go to cart →
                   </Link>
                 )}
+              </div>
+              <div className="mt-6 grid gap-2 rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                <p>✓ Secure payments</p><p>✓ Fulfilled by verified sellers</p>
+                {product.return_policy_days ? <p>✓ {product.return_policy_days}-day {product.return_policy_type?.replace(/_/g, ' ') || 'return'} policy</p> : null}
+                {product.warranty_info ? <p>✓ {product.warranty_info}</p> : null}
               </div>
 
               {product.description && (
