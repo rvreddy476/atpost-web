@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useOrders } from '@/hooks/useCommerce'
+import { StoreHeader } from '@/components/StoreHeader'
 
 const statusColor: Record<string, string> = {
   payment_pending: 'bg-yellow-100 text-yellow-800',
@@ -16,19 +17,19 @@ const statusColor: Record<string, string> = {
 export default function OrdersPage() {
   const { data: orders, isLoading } = useOrders()
 
-  if (isLoading) return <div className="p-8">Loading orders…</div>
+  if (isLoading) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8">Loading orders…</div></>
   if (!orders || orders.length === 0)
     return (
-      <div className="mx-auto max-w-3xl p-8 text-center">
+      <><StoreHeader /><div className="mx-auto max-w-3xl p-8 text-center">
         <h1 className="text-2xl font-semibold mb-4">No orders yet</h1>
-        <Link href="/commerce" className="text-indigo-600 hover:underline">
+        <Link href="/" className="text-indigo-600 hover:underline">
           Start shopping
         </Link>
-      </div>
+      </div></>
     )
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <><StoreHeader /><main className="mx-auto max-w-4xl p-4 sm:p-6">
       <h1 className="text-2xl font-semibold mb-6">Your Orders</h1>
       <div className="space-y-3">
         {orders.map((o) => (
@@ -55,6 +56,6 @@ export default function OrdersPage() {
           </Link>
         ))}
       </div>
-    </div>
+    </main></>
   )
 }

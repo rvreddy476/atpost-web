@@ -3,6 +3,7 @@
 import { use } from 'react'
 import Link from 'next/link'
 import { useOrder, useShipment, useInvoice, useCancelOrder } from '@/hooks/useCommerce'
+import { StoreHeader } from '@/components/StoreHeader'
 
 // Maps payment_status (server-side, from payments-service) to a label
 // + tailwind classes. P6/P7 introduced 'partially_refunded' — surface
@@ -42,14 +43,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { data: invoiceData } = useInvoice(id)
   const cancel = useCancelOrder()
 
-  if (isLoading) return <div className="p-8">Loading order…</div>
-  if (!order) return <div className="p-8 text-red-600">Order not found</div>
+  if (isLoading) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8">Loading order…</div></>
+  if (!order) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8 text-red-600">Order not found</div></>
 
   const cancellable = ['payment_pending', 'confirmed', 'packed'].includes(order.status)
   const payUI = paymentStatusUI(order.payment_status)
 
   return (
-    <div className="mx-auto max-w-4xl p-6 space-y-6">
+    <><StoreHeader /><main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <div>
         <Link href="/orders" className="text-sm text-gray-500 hover:text-indigo-600">
           ← All orders
@@ -144,23 +145,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             Cancel Order
           </button>
         ) : null}
-        {order.status === 'delivered' ? (
-          <>
-            <Link
-              href={`/orders/${order.id}/review`}
-              className="rounded border border-indigo-300 text-indigo-600 px-4 py-2 text-sm hover:bg-indigo-50"
-            >
-              Write a review
-            </Link>
-            <Link
-              href={`/orders/${order.id}/return`}
-              className="rounded border border-gray-300 text-gray-700 px-4 py-2 text-sm hover:bg-gray-50"
-            >
-              Return an item
-            </Link>
-          </>
-        ) : null}
       </div>
-    </div>
+    </main></>
   )
 }

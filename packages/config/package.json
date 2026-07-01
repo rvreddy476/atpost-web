@@ -2,8 +2,20 @@
   "name": "@atpost/config",
   "version": "0.1.0",
   "private": true,
+  "exports": {
+    "./next": {
+      "types": "./next-config.d.ts",
+      "default": "./next-config.mjs"
+    },
+    "./tailwind": "./tailwind-preset.js",
+    "./tailwind-preset": "./tailwind-preset.js",
+    "./tailwind-preset.js": "./tailwind-preset.js",
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  },
   "files": [
     "tsconfig.base.json",
-    "tailwind-preset.js"
+    "tailwind-preset.js",
+    "next-config.mjs",
+    "next-config.d.ts"
   ]
 }
