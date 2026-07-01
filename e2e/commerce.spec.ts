@@ -69,6 +69,8 @@ async function mockCommerce(page: Page, options: { delivered?: boolean; prepaidP
   let reviewSubmitted = false
   let returnSubmitted = false
   let paymentConfirmed = false
+  let sellerProducts: Array<typeof product & { approval_status: string }> = []
+  let productSubmitted = false
   const testOrder = {
     ...order,
     ...(options.delivered ? { status: 'delivered', payment_status: 'succeeded' } : {}),
@@ -88,6 +90,11 @@ async function mockCommerce(page: Page, options: { delivered?: boolean; prepaidP
 
     if (path === '/v1/commerce/categories') return json(route, [{ id: product.category_id, name: 'Electronics', slug: 'electronics' }])
     if (path === '/v1/commerce/products' && method === 'GET') return json(route, { items: [product], total: 1, limit: 24, offset: 0 })
+    if (path === '/v1/commerce/onboarding/status') return json(route, { id: product.seller_id, status: 'approved', store_name: 'Sound Store' })
+    if (path === '/v1/commerce/sellers/me') return json(route, { id: product.seller_id })
+    if (path === `/v1/commerce/sellers/${product.seller_id}/products` && method === 'GET') return json(route, sellerProducts)
+    if (path === '/v1/commerce/products' && method === 'POST') { sellerProducts = [{ ...product, approval_status: 'draft' }]; return json(route, sellerProducts[0], 201) }
+    if (path === `/v1/commerce/products/${product.id}/submit` && method === 'POST') { productSubmitted = true; sellerProducts = [{ ...product, approval_status: 'submitted' }]; return json(route, { ok: true }) }
     if (path === `/v1/commerce/products/${product.id}`) return json(route, { product, variants: [variant] })
     if (path === `/v1/commerce/products/${product.id}/reviews` && method === 'GET') return json(route, { reviews: [], total: 0 })
     if (path === '/v1/commerce/cart' && method === 'GET') return json(route, cart)
@@ -110,6 +117,7 @@ async function mockCommerce(page: Page, options: { delivered?: boolean; prepaidP
     reviewSubmitted: () => reviewSubmitted,
     returnSubmitted: () => returnSubmitted,
     paymentConfirmed: () => paymentConfirmed,
+    productSubmitted: () => productSubmitted,
   }
 }
 
@@ -166,4 +174,28 @@ test('customer can retry a payment-pending prepaid order', async ({ page }) => {
   await page.getByRole('button', { name: 'Retry payment' }).click()
   await expect(page.getByText('Payment confirmed. Your order is being prepared.').first()).toBeVisible()
   expect(state.paymentConfirmed()).toBe(true)
+})
+
+test('seller can create a draft product and submit it for approval', async ({ page }) => {
+  const state = await mockCommerce(page)
+  await page.addInitScript(() => {
+    localStorage.setItem('postbook_session', JSON.stringify({ id: '66666666-6666-4666-8666-666666666666' }))
+  })
+  await page.goto('/shop/sell')
+
+  await expect(page.getByRole('heading', { name: 'My products' })).toBeVisible()
+  await page.getByRole('link', { name: /Add product/ }).click()
+  await page.getByLabel('Title').fill(product.title)
+  await page.getByLabel('Description').fill(product.description)
+  await page.getByLabel('SKU').fill(variant.sku)
+  await page.getByLabel('MRP').fill('3999')
+  await page.getByLabel('Selling price').fill('2499')
+  await page.getByLabel('Stock qty').fill('20')
+  await page.getByRole('button', { name: 'Create product' }).click()
+
+  await expect(page.getByText(product.title)).toBeVisible()
+  await expect(page.getByText('draft')).toBeVisible()
+  await page.getByRole('button', { name: 'Submit for review' }).click()
+  await expect(page.getByText('submitted')).toBeVisible()
+  expect(state.productSubmitted()).toBe(true)
 })
