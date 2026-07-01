@@ -16,6 +16,7 @@ import {
 import { AddressForm } from '@/components/commerce/AddressForm'
 import { StoreHeader } from '@/components/StoreHeader'
 import { openRazorpayCheckout } from '@/lib/razorpay'
+import { getCheckoutBlockReason } from '@/lib/checkout'
 
 const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? ''
 
@@ -75,6 +76,13 @@ function CheckoutContent() {
     coupon_code: couponCode.trim() || undefined,
   } : null
   const quote = useCheckoutQuote(quoteInput)
+  const checkoutBlockReason = getCheckoutBlockReason({
+    selectedAddress: selectedAddr,
+    isProcessing,
+    isQuoteFetching: quote.isFetching,
+    paymentMethod,
+    quote: quote.data,
+  })
 
   const place = async () => {
     if (!selectedAddr) return
@@ -380,7 +388,7 @@ function CheckoutContent() {
         {quote.data && !quote.data.serviceable && <p className="mt-2 text-sm text-red-600">Some items cannot be delivered to this address.</p>}
         {quote.data && paymentMethod === 'cod' && !quote.data.cod_eligible && <p className="mt-2 text-sm text-red-600">Cash on delivery is not available for this order.</p>}
         <button
-          disabled={!selectedAddr || isProcessing || quote.isFetching || (paymentMethod !== 'credit' && (!quote.data || !quote.data.serviceable || (paymentMethod === 'cod' && !quote.data.cod_eligible)))}
+          disabled={checkoutBlockReason !== null}
           onClick={place}
           className="mt-4 w-full rounded-lg bg-indigo-600 text-white py-3 font-medium disabled:bg-gray-300 hover:bg-indigo-700"
         >
@@ -392,6 +400,9 @@ function CheckoutContent() {
                 ? 'Place Credit Order'
                 : 'Pay & Place Order'}
         </button>
+        {checkoutBlockReason && !isProcessing ? (
+          <p className="mt-2 text-xs text-gray-500">{checkoutBlockReason}</p>
+        ) : null}
         {paymentError ? (
           <div className="mt-2 text-sm text-red-600">{paymentError}</div>
         ) : null}
