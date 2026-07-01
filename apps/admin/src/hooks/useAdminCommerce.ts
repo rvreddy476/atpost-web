@@ -5,7 +5,7 @@ import type { Seller, Product } from "@atpost/types/commerce"
 // Admin commerce endpoints live under /v1/commerce/admin. They require the
 // caller's JWT to carry admin scopes — locally that means the logged-in user's
 // id is in the gateway's SUPERADMIN_USER_IDS (then re-login). Otherwise 403.
-const ADMIN = "/v1/commerce/admin"
+const ADMIN = "/v1/admin/commerce"
 
 const list = <T>(path: string) => async (): Promise<T[]> =>
   (await api.get(`${ADMIN}${path}`)).data.data ?? []

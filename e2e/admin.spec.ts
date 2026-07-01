@@ -15,10 +15,10 @@ test('admin can approve a submitted product', async ({ page }) => {
   await page.route('**/v1/**', async (route) => {
     const request = route.request()
     const path = new URL(request.url()).pathname
-    if (path.endsWith('/v1/commerce/admin/products/queue') && request.method() === 'GET') {
+    if (path.endsWith('/v1/admin/commerce/products/queue') && request.method() === 'GET') {
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: approved ? [] : [product] }) })
     }
-    if (path.endsWith(`/v1/commerce/admin/products/${product.id}/approve`) && request.method() === 'POST') {
+    if (path.endsWith(`/v1/admin/commerce/products/${product.id}/approve`) && request.method() === 'POST') {
       approved = true
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { ...product, approval_status: 'approved' } }) })
     }

@@ -10,12 +10,13 @@ export type AddressFormValues = {
   city: string
   state: string
   postal_code: string
+  address_type: 'home' | 'work' | 'other'
   is_default?: boolean
 }
 
 const emptyForm: AddressFormValues = {
   full_name: '', phone: '', address_line_1: '', address_line_2: '',
-  city: '', state: '', postal_code: '',
+  city: '', state: '', postal_code: '', address_type: 'home',
 }
 
 type Props = {
@@ -59,6 +60,10 @@ export function AddressForm({ initialValues, submitLabel = 'Save', showDefault =
         className="border rounded px-3 py-2" />
       <input required placeholder="Postal code" value={form.postal_code} onChange={update('postal_code')}
         className="border rounded px-3 py-2" />
+      <select value={form.address_type} onChange={(e) => setForm({ ...form, address_type: e.target.value as AddressFormValues['address_type'] })}
+        aria-label="Address type" className="border rounded px-3 py-2">
+        <option value="home">Home</option><option value="work">Work</option><option value="other">Other</option>
+      </select>
       {showDefault ? (
         <label className="col-span-2 flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" checked={!!form.is_default}
