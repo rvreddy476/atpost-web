@@ -12,7 +12,7 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "echo '@atpost/types lint ok'"
+    "lint": "eslint src --ext .ts --max-warnings=0"
   },
   "devDependencies": {
     "@atpost/config": "workspace:*",

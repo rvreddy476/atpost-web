@@ -28,6 +28,8 @@ export function MessageToastContent({
             className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-brand-secondary/50 transition-colors rounded-2xl"
         >
             <div className="w-9 h-9 rounded-xl overflow-hidden border border-white shadow-sm flex-shrink-0">
+                {/* Shared UI cannot couple consumers to Next.js image configuration. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                     src={senderAvatar}
                     alt={senderName}
