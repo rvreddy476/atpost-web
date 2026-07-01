@@ -624,8 +624,13 @@ export function useCheckout() {
   return useMutation({
     mutationFn: async (input: CheckoutInput) =>
       (await api.post('/v1/commerce/orders/checkout', input)).data.data as Order,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['commerce', 'cart'] })
+    onSuccess: (_, input) => {
+      // Prepaid checkout creates a payment-pending order before Razorpay opens.
+      // Keep the cart snapshot visible until payment is confirmed so a query
+      // refetch cannot replace the checkout with an empty-cart screen mid-flow.
+      if (input.payment_method !== 'prepaid') {
+        qc.invalidateQueries({ queryKey: ['commerce', 'cart'] })
+      }
       qc.invalidateQueries({ queryKey: ['commerce', 'orders'] })
     },
   })
@@ -701,6 +706,7 @@ export function useConfirmPayment() {
         gateway: input.gateway ?? 'razorpay',
       })).data,
     onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['commerce', 'cart'] })
       qc.invalidateQueries({ queryKey: ['commerce', 'orders'] })
       qc.invalidateQueries({ queryKey: ['commerce', 'order', vars.order_id] })
     },

@@ -10,13 +10,14 @@ import { Button } from "@atpost/ui"
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading } = useProduct(id)
-  const { data: reviews } = useProductReviews(id)
+  const { data: reviewData } = useProductReviews(id)
   const addToCart = useAddToCart()
   const [variantId, setVariantId] = useState("")
   const [added, setAdded] = useState(false)
 
   const product = data?.product
   const variants = data?.variants ?? []
+  const reviews = reviewData?.reviews ?? []
   const selected = variants.find((v) => v.id === variantId) ?? variants[0]
 
   async function add() {
@@ -105,7 +106,7 @@ export default function ProductDetailPage() {
         {product && (
           <section className="mt-10">
             <h2 className="mb-3 font-semibold">Reviews</h2>
-            {!reviews || reviews.length === 0 ? (
+            {reviews.length === 0 ? (
               <p className="text-sm text-gray-500">No reviews yet.</p>
             ) : (
               <ul className="space-y-3">

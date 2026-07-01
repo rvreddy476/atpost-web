@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import {
   useCart,
   useAddresses,
@@ -10,8 +11,10 @@ import {
   useCreatePaymentIntent,
   useConfirmPayment,
   useMyOrganizations,
+  useCheckoutQuote,
 } from '@/hooks/useCommerce'
 import { AddressForm } from '@/components/commerce/AddressForm'
+import { StoreHeader } from '@/components/StoreHeader'
 import { openRazorpayCheckout } from '@/lib/razorpay'
 
 const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? ''
@@ -26,8 +29,9 @@ const STUB_PAYMENTS_ENABLED =
   process.env.NODE_ENV !== 'production' &&
   process.env.NEXT_PUBLIC_ENABLE_STUB_PAYMENTS === 'true'
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: cart } = useCart()
   const { data: addresses } = useAddresses()
   const addAddress = useAddAddress()
@@ -37,10 +41,11 @@ export default function CheckoutPage() {
 
   const [selectedAddr, setSelectedAddr] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'prepaid' | 'cod' | 'credit'>('prepaid')
-  const [couponCode, setCouponCode] = useState('')
+  const [couponCode, setCouponCode] = useState(() => searchParams.get('coupon') ?? '')
   const [showAddForm, setShowAddForm] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  const checkoutKey = useRef<string | null>(null)
 
   // Phase 5 — optional B2B context. If the user belongs to any organization
   // we expose a selector; selecting one unlocks PO / cost center / invoice
@@ -54,17 +59,29 @@ export default function CheckoutPage() {
   const selectedOrg = myOrgs.find((o) => o.id === selectedOrgId)
   const creditAvailable = !!selectedOrg && selectedOrg.credit_terms_days > 0
 
-  const addrList = addresses ?? []
-  if (!selectedAddr && addrList.length > 0) {
-    const def = addrList.find((a) => a.is_default) ?? addrList[0]
-    if (def) setSelectedAddr(def.id)
-  }
+  const addrList = useMemo(() => addresses ?? [], [addresses])
+  useEffect(() => {
+    if (selectedAddr || addrList.length === 0) return
+    setSelectedAddr((addrList.find((address) => address.is_default) ?? addrList[0]).id)
+  }, [addrList, selectedAddr])
+
+  useEffect(() => {
+    if (!creditAvailable && paymentMethod === 'credit') setPaymentMethod('prepaid')
+  }, [creditAvailable, paymentMethod])
+
+  const quoteInput = selectedAddr && paymentMethod !== 'credit' ? {
+    address_id: selectedAddr,
+    payment_method: paymentMethod,
+    coupon_code: couponCode.trim() || undefined,
+  } : null
+  const quote = useCheckoutQuote(quoteInput)
 
   const place = async () => {
     if (!selectedAddr) return
     setPaymentError(null)
     setIsProcessing(true)
     try {
+      checkoutKey.current ??= crypto.randomUUID()
       // 1. Create the order. Backend reserves stock for prepaid (status =
       //    payment_pending) or deducts immediately for COD (status = confirmed).
       const order = await checkout.mutateAsync({
@@ -75,6 +92,7 @@ export default function CheckoutPage() {
         po_number: poNumber || undefined,
         cost_center: costCenter || undefined,
         invoice_email: invoiceEmail || undefined,
+        idempotency_key: checkoutKey.current,
       })
 
       // B2B order parked for approval — no payment yet, take buyer to the
@@ -117,6 +135,7 @@ export default function CheckoutPage() {
         amount: order.final_amount,
         currency: order.currency_code || 'INR',
         method: 'razorpay',
+        idempotency_key: `order:${order.id}`,
       })
 
       const amountMinor = Math.round(order.final_amount * 100)
@@ -183,10 +202,10 @@ export default function CheckoutPage() {
   }
 
   if (!cart || cart.ItemCount === 0)
-    return <div className="p-8 text-center">Your cart is empty.</div>
+    return <><StoreHeader /><div className="p-8 text-center">Your cart is empty. <Link href="/" className="text-indigo-600">Continue shopping</Link>.</div></>
 
   return (
-    <div className="mx-auto max-w-4xl p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <><StoreHeader /><main className="mx-auto grid max-w-5xl grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-6">
         <section className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="text-lg font-semibold mb-4">Shipping Address</h2>
@@ -349,12 +368,19 @@ export default function CheckoutPage() {
             className="w-full border rounded px-3 py-2 text-sm" />
         </div>
 
-        <div className="mt-4 pt-3 border-t flex justify-between font-semibold">
-          <span>Subtotal</span>
-          <span>₹{cart.Subtotal.toFixed(2)}</span>
+        <div className="mt-4 space-y-2 border-t pt-3 text-sm">
+          <div className="flex justify-between"><span>Subtotal</span><span>₹{(quote.data?.subtotal ?? cart.Subtotal).toFixed(2)}</span></div>
+          {!!quote.data?.coupon_discount && <div className="flex justify-between text-emerald-700"><span>Discount</span><span>−₹{quote.data.coupon_discount.toFixed(2)}</span></div>}
+          {!!quote.data?.shipping && <div className="flex justify-between"><span>Delivery</span><span>₹{quote.data.shipping.toFixed(2)}</span></div>}
+          {!!quote.data?.tax && <div className="flex justify-between"><span>Tax</span><span>₹{quote.data.tax.toFixed(2)}</span></div>}
+          <div className="flex justify-between border-t pt-2 text-base font-semibold"><span>Order total</span><span>₹{(quote.data?.grand_total ?? cart.Subtotal).toFixed(2)}</span></div>
         </div>
+        {quote.isFetching && <p className="mt-2 text-xs text-gray-500">Updating price and delivery eligibility…</p>}
+        {quote.isError && <p className="mt-2 text-sm text-red-600">We could not validate the latest price and availability. Retry before placing your order.</p>}
+        {quote.data && !quote.data.serviceable && <p className="mt-2 text-sm text-red-600">Some items cannot be delivered to this address.</p>}
+        {quote.data && paymentMethod === 'cod' && !quote.data.cod_eligible && <p className="mt-2 text-sm text-red-600">Cash on delivery is not available for this order.</p>}
         <button
-          disabled={!selectedAddr || isProcessing}
+          disabled={!selectedAddr || isProcessing || quote.isFetching || (paymentMethod !== 'credit' && (!quote.data || !quote.data.serviceable || (paymentMethod === 'cod' && !quote.data.cod_eligible)))}
           onClick={place}
           className="mt-4 w-full rounded-lg bg-indigo-600 text-white py-3 font-medium disabled:bg-gray-300 hover:bg-indigo-700"
         >
@@ -375,6 +401,14 @@ export default function CheckoutPage() {
           </div>
         ) : null}
       </aside>
-    </div>
+    </main></>
+  )
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-5xl p-8 text-gray-500">Preparing secure checkout…</div>}>
+      <CheckoutContent />
+    </Suspense>
   )
 }

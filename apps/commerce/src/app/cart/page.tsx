@@ -2,29 +2,31 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { useCart, useCouponPreview, useRemoveFromCart } from '@/hooks/useCommerce'
+import { StoreHeader } from '@/components/StoreHeader'
+import { useCart, useCouponPreview, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
 
 export default function CartPage() {
   const { data: cart, isLoading, error } = useCart()
   const remove = useRemoveFromCart()
+  const update = useUpdateCartItem()
   const [couponDraft, setCouponDraft] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState('')
   const couponPreview = useCouponPreview(appliedCoupon)
 
-  if (isLoading) return <div className="p-8">Loading cart…</div>
-  if (error) return <div className="p-8 text-red-600">Failed to load cart</div>
+  if (isLoading) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8">Loading cart…</div></>
+  if (error) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8 text-red-600">Failed to load cart. Please try again.</div></>
   if (!cart || cart.ItemCount === 0)
     return (
-      <div className="mx-auto max-w-3xl p-8 text-center">
+      <><StoreHeader /><div className="mx-auto max-w-3xl p-8 text-center">
         <h1 className="text-2xl font-semibold mb-4">Your cart is empty</h1>
-        <Link href="/commerce" className="text-indigo-600 hover:underline">
+        <Link href="/" className="text-indigo-600 hover:underline">
           Browse products
         </Link>
-      </div>
+      </div></>
     )
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <><StoreHeader /><main className="mx-auto max-w-5xl p-4 sm:p-6">
       <h1 className="text-2xl font-semibold mb-6">Your Cart</h1>
       <div className="space-y-3">
         {cart.Items.map((ci) => (
@@ -43,6 +45,23 @@ export default function CartPage() {
               <div className="font-semibold">
                 ₹{(ci.Item.price_snapshot * ci.Item.quantity).toFixed(2)}
               </div>
+              <label className="mt-2 flex items-center justify-end gap-2 text-sm">
+                <span className="sr-only">Quantity for {ci.Product?.title ?? 'product'}</span>
+                <select
+                  aria-label={`Quantity for ${ci.Product?.title ?? 'product'}`}
+                  value={ci.Item.quantity}
+                  disabled={update.isPending}
+                  onChange={(event) => update.mutate({
+                    variant_id: ci.Item.variant_id,
+                    quantity: Number(event.target.value),
+                  })}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1"
+                >
+                  {Array.from({ length: 10 }, (_, index) => index + 1).map((quantity) => (
+                    <option key={quantity} value={quantity}>Qty: {quantity}</option>
+                  ))}
+                </select>
+              </label>
               <button
                 onClick={() => remove.mutate(ci.Item.variant_id)}
                 className="text-sm text-red-600 hover:underline mt-1"
@@ -144,6 +163,6 @@ export default function CartPage() {
           Proceed to Checkout
         </Link>
       </div>
-    </div>
+    </main></>
   )
 }
