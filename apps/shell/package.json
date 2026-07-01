@@ -1,0 +1,24 @@
+{
+  "name": "@atpost/shell",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000 --turbopack",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "15.5.19",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@atpost/config": "workspace:*",
+    "@types/node": "22.14.0",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "typescript": "5.8.3"
+  }
+}
