@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { StoreHeader } from "@/components/StoreHeader"
 import { useOnboardingStatus, useStartOnboarding } from "@/hooks/useSellerOnboarding"
 import { useMyProducts, useSubmitProduct } from "@/hooks/useSellerDashboard"
@@ -102,7 +101,6 @@ function MyProducts() {
 }
 
 export default function SellPage() {
-  const router = useRouter()
   const [authed, setAuthed] = useState<boolean | null>(null)
 
   // Selling requires an account. If not signed in, send them to login and
@@ -112,9 +110,9 @@ export default function SellPage() {
       setAuthed(true)
     } else {
       setAuthed(false)
-      router.replace("/login?redirect=/sell")
+      window.location.replace("/login?redirect=%2Fshop")
     }
-  }, [router])
+  }, [])
 
   const status = useOnboardingStatus()
 

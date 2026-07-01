@@ -65,12 +65,12 @@ export function StoreHeader() {
           )}
         </Link>
 
-        <Link
-          href={userId ? "/orders" : "/login"}
+        <a
+          href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"}
           className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900"
         >
           <User size={18} /> {userId ? "Account" : "Sign in"}
-        </Link>
+        </a>
       </div>
     </header>
   )

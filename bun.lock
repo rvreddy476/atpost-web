@@ -236,6 +236,7 @@
       "name": "@atpost/shell",
       "version": "0.1.0",
       "dependencies": {
+        "@atpost/api-client": "workspace:*",
         "next": "15.5.19",
         "react": "19.2.4",
         "react-dom": "19.2.4",
@@ -246,6 +247,7 @@
         "@types/react": "19.2.2",
         "@types/react-dom": "19.2.2",
         "typescript": "5.8.3",
+        "vitest": "2.1.9",
       },
     },
     "apps/social": {

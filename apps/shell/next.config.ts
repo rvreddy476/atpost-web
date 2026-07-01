@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   compress: true,
+  transpilePackages: ['@atpost/api-client'],
   async headers() {
     return [{ source: '/:path*', headers: [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -27,13 +28,13 @@ const nextConfig: NextConfig = {
     ] }]
   },
   async rewrites() {
-    const beforeFiles: Rewrite[] = zones.flatMap(([path, envName, localUrl]) => {
+    const beforeFiles: Rewrite[] = [{ source: '/v1/:path*', destination: '/api/proxy/:path*' }, ...zones.flatMap(([path, envName, localUrl]) => {
       const origin = process.env[envName] || localUrl
       return [
         { source: path, destination: `${origin}${path}` },
         { source: `${path}/:path*`, destination: `${origin}${path}/:path*` },
       ]
-    })
+    })]
     return { beforeFiles, afterFiles: [], fallback: [] }
   },
 }

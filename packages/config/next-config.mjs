@@ -33,6 +33,14 @@ export function createZoneConfig({ basePath }) {
     async rewrites() {
       return [{ source: "/v1/:path*", destination: "/api/proxy/:path*" }]
     },
+    async redirects() {
+      const authOrigin = (process.env.AUTH_APP_URL || '').replace(/\/$/, '')
+      const returnTo = encodeURIComponent(basePath)
+      return [
+        { source: `${basePath}/login`, destination: `${authOrigin}/login?redirect=${returnTo}`, permanent: false, basePath: false },
+        { source: `${basePath}/register`, destination: `${authOrigin}/register?redirect=${returnTo}`, permanent: false, basePath: false },
+      ]
+    },
     async headers() {
       return [{
         source: "/:path*",

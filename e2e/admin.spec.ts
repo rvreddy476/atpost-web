@@ -25,7 +25,7 @@ test('admin can approve a submitted product', async ({ page }) => {
     return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ data: null }) })
   })
 
-  await page.goto('http://127.0.0.1:3002/admin/products')
+  await page.goto('http://127.0.0.1:3022/admin/products')
   await expect(page.getByRole('heading', { name: 'Product queue' })).toBeVisible()
   await expect(page.getByText(product.title)).toBeVisible()
   await page.getByRole('button', { name: 'Approve' }).click()
