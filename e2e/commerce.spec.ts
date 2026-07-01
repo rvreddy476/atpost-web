@@ -199,3 +199,20 @@ test('seller can create a draft product and submit it for approval', async ({ pa
   await expect(page.getByText('submitted')).toBeVisible()
   expect(state.productSubmitted()).toBe(true)
 })
+
+test('storefront remains usable on a mobile viewport and by keyboard', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockCommerce(page)
+  await page.goto('/shop')
+
+  const search = page.getByPlaceholder('Search products')
+  await search.focus()
+  await search.fill('headphones')
+  await search.press('Enter')
+  await expect(page).toHaveURL(/q=headphones/)
+  await expect(page.getByText(product.title)).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await page.keyboard.press('Tab')
+  await expect(page.locator(':focus')).toBeVisible()
+})

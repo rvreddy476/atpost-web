@@ -28,8 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # shell joins after migrate-shell.sh creates apps/shell.
-        zone: [commerce, admin, dating, social, community, creator, messenger, live, memories, miniapps]
+        zone: [shell, commerce, admin, dating, social, community, creator, messenger, live, memories, miniapps]
     steps:
       - uses: actions/checkout@v4
 

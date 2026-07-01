@@ -1,0 +1,36 @@
+name: Web quality
+
+on:
+  pull_request:
+    paths: ["apps/**", "packages/**", "e2e/**", "*.json", "*.ts", ".github/workflows/quality.yml"]
+  push:
+    branches: [main]
+    paths: ["apps/**", "packages/**", "e2e/**", "*.json", "*.ts", ".github/workflows/quality.yml"]
+
+concurrency:
+  group: web-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bunx turbo run build --concurrency=2
+
+  critical-journeys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run e2e
