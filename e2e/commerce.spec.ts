@@ -64,8 +64,16 @@ function json(route: Route, data: unknown, status = 200) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ data }) })
 }
 
-async function mockCommerce(page: Page) {
+async function mockCommerce(page: Page, options: { delivered?: boolean; prepaidPending?: boolean } = {}) {
   let quantity = 0
+  let reviewSubmitted = false
+  let returnSubmitted = false
+  let paymentConfirmed = false
+  const testOrder = {
+    ...order,
+    ...(options.delivered ? { status: 'delivered', payment_status: 'succeeded' } : {}),
+    ...(options.prepaidPending ? { status: 'payment_pending', payment_method: 'prepaid', payment_status: 'payment_pending' } : {}),
+  }
   await page.route('**/v1/**', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -81,19 +89,28 @@ async function mockCommerce(page: Page) {
     if (path === '/v1/commerce/categories') return json(route, [{ id: product.category_id, name: 'Electronics', slug: 'electronics' }])
     if (path === '/v1/commerce/products' && method === 'GET') return json(route, { items: [product], total: 1, limit: 24, offset: 0 })
     if (path === `/v1/commerce/products/${product.id}`) return json(route, { product, variants: [variant] })
-    if (path === `/v1/commerce/products/${product.id}/reviews`) return json(route, { reviews: [], total: 0 })
+    if (path === `/v1/commerce/products/${product.id}/reviews` && method === 'GET') return json(route, { reviews: [], total: 0 })
     if (path === '/v1/commerce/cart' && method === 'GET') return json(route, cart)
     if (path === '/v1/commerce/cart/items' && method === 'POST') { quantity = 1; return json(route, { ok: true }, 201) }
     if (path.includes('/v1/commerce/cart/items/by-variant/') && method === 'PATCH') { quantity = Number(request.postDataJSON().quantity); return json(route, { ok: true }) }
     if (path === '/v1/commerce/addresses') return json(route, [address])
     if (path === '/v1/commerce/organizations/me') return json(route, { organizations: [] })
     if (path === '/v1/commerce/checkout/quote') return json(route, { subtotal: quantity * 2499, coupon_discount: 0, shipping: 0, tax: 0, grand_total: quantity * 2499, currency: 'INR', items: [], unavailable_items: [], cod_eligible: true, serviceable: true, seller_ids: [product.seller_id] })
-    if (path === '/v1/commerce/orders/checkout' && method === 'POST') return json(route, order, 201)
-    if (path === `/v1/commerce/orders/${order.id}`) return json(route, order)
-    if (path === `/v1/commerce/orders/${order.id}/items`) return json(route, { order, items: [{ id: 'order-item-1', order_id: order.id, product_id: product.id, variant_id: variant.id, seller_id: product.seller_id, product_title: product.title, sku: variant.sku, quantity, unit_price: 2499, final_price: quantity * 2499, status: 'confirmed' }] })
+    if (path === '/v1/commerce/orders/checkout' && method === 'POST') return json(route, testOrder, 201)
+    if (path === `/v1/commerce/orders/${order.id}`) return json(route, paymentConfirmed ? { ...testOrder, status: 'confirmed', payment_status: 'succeeded' } : testOrder)
+    if (path === `/v1/commerce/orders/${order.id}/items`) return json(route, { order: testOrder, items: [{ id: 'order-item-1', order_id: order.id, product_id: product.id, variant_id: variant.id, seller_id: product.seller_id, product_title: product.title, sku: variant.sku, quantity: quantity || 1, unit_price: 2499, final_price: (quantity || 1) * 2499, status: options.delivered ? 'delivered' : 'confirmed', return_eligible_until: options.delivered ? '2027-07-01T00:00:00Z' : null }] })
+    if (path === `/v1/commerce/products/${product.id}/reviews` && method === 'POST') { reviewSubmitted = true; return json(route, { id: 'review-1' }, 201) }
+    if (path === `/v1/commerce/orders/${order.id}/returns` && method === 'POST') { returnSubmitted = true; return json(route, { id: 'return-1' }, 201) }
+    if (path === '/v1/payments/intents' && method === 'POST') return json(route, { id: 'intent-1', provider_ref: 'stub-order', amount: testOrder.final_amount, currency: 'INR', status: 'created' }, 201)
+    if (path === `/v1/commerce/orders/${order.id}/payment/confirm` && method === 'POST') { paymentConfirmed = true; return json(route, { ok: true }) }
     if (path.endsWith('/shipment') || path.endsWith('/invoice')) return json(route, { message: 'not ready' }, 404)
     return json(route, { message: `Unhandled mock route: ${method} ${path}` }, 404)
   })
+  return {
+    reviewSubmitted: () => reviewSubmitted,
+    returnSubmitted: () => returnSubmitted,
+    paymentConfirmed: () => paymentConfirmed,
+  }
 }
 
 test('customer can discover a product and complete a COD order', async ({ page }) => {
@@ -122,4 +139,31 @@ test('customer can discover a product and complete a COD order', async ({ page }
   await expect(page).toHaveURL(new RegExp(`/shop/orders/${order.id}$`))
   await expect(page.getByRole('heading', { name: `Order ${order.order_number}` })).toBeVisible()
   await expect(page.getByText('confirmed').first()).toBeVisible()
+})
+
+test('customer can submit a verified review and return request', async ({ page }) => {
+  const state = await mockCommerce(page, { delivered: true })
+  await page.goto(`/shop/orders/${order.id}`)
+
+  await expect(page.getByText(product.title)).toBeVisible()
+  await page.getByRole('button', { name: 'Write a review' }).click()
+  await page.getByPlaceholder('What should other customers know?').fill('Comfortable and clear sound.')
+  await page.getByRole('button', { name: 'Submit review' }).click()
+  await expect(page.getByText('Your verified-purchase review was submitted.').first()).toBeVisible()
+  expect(state.reviewSubmitted()).toBe(true)
+
+  await page.getByRole('button', { name: 'Return item' }).click()
+  await page.getByPlaceholder('Describe the issue').fill('The left ear cup arrived damaged.')
+  await page.getByRole('button', { name: 'Request return' }).click()
+  await expect(page.getByText('Your return request was submitted.').first()).toBeVisible()
+  expect(state.returnSubmitted()).toBe(true)
+})
+
+test('customer can retry a payment-pending prepaid order', async ({ page }) => {
+  const state = await mockCommerce(page, { prepaidPending: true })
+  await page.goto(`/shop/orders/${order.id}`)
+
+  await page.getByRole('button', { name: 'Retry payment' }).click()
+  await expect(page.getByText('Payment confirmed. Your order is being prepared.').first()).toBeVisible()
+  expect(state.paymentConfirmed()).toBe(true)
 })
