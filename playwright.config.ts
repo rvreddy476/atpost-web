@@ -11,7 +11,9 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:3001',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // System Chrome is used in constrained CI; traces and screenshots provide
+    // diagnostics without requiring Playwright's separate FFmpeg artifact.
+    video: 'off',
     ...devices['Desktop Chrome'],
     launchOptions: {
       executablePath: process.env.PLAYWRIGHT_CHROME_PATH || '/usr/bin/google-chrome',
