@@ -20,11 +20,19 @@ export default defineConfig({
       args: ['--no-sandbox'],
     },
   },
-  webServer: {
-    command: 'bun run --cwd apps/commerce dev',
-    url: 'http://127.0.0.1:3001/shop',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: { NEXT_PUBLIC_ENABLE_STUB_PAYMENTS: 'true' },
-  },
+  webServer: [
+    {
+      command: 'bun run --cwd apps/commerce dev',
+      url: 'http://127.0.0.1:3001/shop',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: { NEXT_PUBLIC_ENABLE_STUB_PAYMENTS: 'true' },
+    },
+    {
+      command: 'bun run --cwd apps/admin dev',
+      url: 'http://127.0.0.1:3002/admin',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 })
