@@ -10,8 +10,12 @@ apps/        # one independent Next.js app per product zone (Multi-Zones)
 packages/
   ui         @atpost/ui      — shared design system (Button, Input, EmailField, DatePicker, validateEmail)
   config     @atpost/config  — shared tsconfig base / presets
+  api-client @atpost/api-client — gateway client, proxy and refresh handlers
+  types      @atpost/types   — cross-zone API/domain contracts
 ```
-(`api-client`, `auth`, `hooks`, `types` packages land as the monolith is carved up.)
+
+`apps/shell` composes zones locally through Multi-Zone rewrites. Production can
+route the same prefixes directly to independent zone deployments at the edge.
 
 ## Develop
 ```bash

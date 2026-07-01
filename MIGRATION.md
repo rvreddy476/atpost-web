@@ -5,38 +5,34 @@ Next.js App Router app. We move it here incrementally; the monolith keeps shippi
 until each zone is carved out.
 
 ## Status
-- [x] **P0 (scaffold)** — Turborepo root, `@atpost/config`, `@atpost/ui` seed
-  (Button, Input, EmailField+validation, DatePicker). *No app moved yet.*
-- [~] **P1 (shared packages)** — in progress:
+- [x] **P0 (scaffold)** — Turborepo root, shared configuration, UI package,
+  API client, types, and non-interactive lint/typecheck/test/build tasks.
+- [x] **P1 (shared packages)**:
   - [x] `@atpost/api-client` — extracted `src/lib/api.ts` (axios client) +
     `src/app/api/proxy` + `src/app/api/auth/refresh` (the cookie/CSRF-aware
     proxy + refresh) into the package; apps re-export the handlers in one line.
   - [x] `@atpost/types` — `src/types` (pure, self-contained) copied verbatim +
     barrel `index.ts`.
-  - [ ] `@atpost/hooks` (`src/hooks`, 83 — coupled to api/types, needs remap),
-    grow `@atpost/ui` from `src/components` (188).
+  - Domain-specific hooks remain inside their owning apps. Promote a hook only
+    after a second app needs the same behavior; this avoids a new shared monolith.
   - [x] Codemod provided: `scripts/codemod-dedup.sh` (conservative remap of the
     extracted symbols, optional/gradual, post-move).
-- [ ] **P0 move** — `scripts/migrate-shell.sh` moves postbook-ui → `apps/shell`
-  intact (the `@/*` alias keeps every import working, **no codemod required**).
-  Run it locally + `bun install && bun run build` to verify (build needs network
-  this sandbox lacks).
-- [ ] **P2 (first zone)** — move one loosely-coupled area into `apps/<zone>`
-  (recommend `admin` or `commerce`): set `basePath`, wire Multi-Zones `rewrites`
-  in `apps/shell`, deploy + route its path at the edge.
-- [ ] **P3 (repeat)** — dating, messenger, live, community, creator, memories,
-  miniapps, social, admin.
+- [x] **Shell host** — `apps/shell` provides local Multi-Zone composition on
+  port 3000. Production should route zone prefixes directly at the edge.
+- [~] **P2 (active zones)** — commerce and admin contain migrated functionality.
+  Commerce has storefront, cart, authoritative quote, idempotent checkout,
+  Razorpay confirmation, orders, seller onboarding, and checkout safety tests.
+- [~] **P3 (remaining zones)** — dating, messenger, live, community, creator,
+  memories, miniapps, and social are independently buildable placeholders; their
+  product functionality still needs migration from `postbook-ui`.
 - [ ] **P4 (deploy/scale)** — per-app Helm release (reuse `charts/atpost-service`
   + ArgoCD ApplicationSet), CloudFront/ALB path routing, per-app HPA.
 
-## First zone template — `apps/commerce` (`/shop`)
-A ready-to-fill zone is scaffolded: `next.config.ts` (basePath/assetPrefix
-`/shop`, transpilePackages, `/v1`→`/api/proxy` rewrite), Tailwind via the shared
-`@atpost/config/tailwind-preset`, a placeholder `page.tsx` using `@atpost/ui`,
-and the proxy/refresh routes re-exported from `@atpost/api-client`. Move the
-commerce routes (cart, checkout, orders, products, seller, rfq) into
-`apps/commerce/src/app/`. Copy this app as the template for each new zone (change
-name, basePath, port).
+## First active zone — `apps/commerce` (`/shop`)
+Commerce is the reference implementation for an active zone. Shared production
+defaults come from `@atpost/config/next`; domain hooks and components remain
+inside the app. Copy a placeholder zone—not commerce business code—when creating
+a new product zone.
 
 **Host wiring (in `apps/shell/next.config.ts`)** — route `/shop/*` to this zone:
 ```ts
@@ -60,8 +56,8 @@ directly; the shell rewrite is the local-dev equivalent.
 | community | /community | 3005 | | shell | / (host) | 3000 |
 | creator | /creator | 3006 | | | | |
 
-`shell` comes from `migrate-shell.sh` (the moved monolith); the other 10 are
-generated via `scripts/new-zone.sh <name> <basePath> <port>`.
+New zones can be generated with `scripts/new-zone.sh <name> <basePath> <port>`;
+also add their local and production origins to `apps/shell/next.config.ts`.
 
 ## Performance (Next.js) — enabled by default in every zone
 Runtime: **React 19** + **SWC** compiler (no Babel; no `.babelrc`). React
@@ -85,16 +81,10 @@ layout-shift, self-hosted); route-segment `revalidate`/`dynamic` per route;
 FOUC); a CloudFront image loader. Left off by default to keep the "don't change
 behavior" guarantee.
 
-## How to bring the monolith in (P0 move, run locally — needs `bun install`)
-```bash
-# from atpost-web/
-mkdir -p apps/shell
-git -C ../postbook-ui ls-files | grep -v '^node_modules' | \
-  rsync -a --files-from=- ../postbook-ui/ apps/shell/   # or git mv within a merged repo
-# then in apps/shell: keep its package.json/next.config/tsconfig (extend
-# @atpost/config), add "@atpost/ui": "workspace:*", set transpilePackages.
-bun install && bun run build   # verify the shell builds unchanged
-```
+## Local multi-zone development
+Run `bun run dev` to start every zone, or start `@atpost/shell` and only the
+zones being changed with Turbo filters. The shell defaults to localhost ports
+and accepts `*_ZONE_URL` overrides defined in `apps/shell/next.config.ts`.
 
 ## Notes / gotchas
 - Per-zone `assetPrefix` is mandatory or static assets collide across zones.
