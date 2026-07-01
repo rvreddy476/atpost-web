@@ -1,8 +1,8 @@
 'use client'
 
-import { use } from 'react'
+import { use, useState } from 'react'
 import Link from 'next/link'
-import { useOrder, useShipment, useInvoice, useCancelOrder } from '@/hooks/useCommerce'
+import { useOrder, useOrderWithItems, useShipment, useInvoice, useCancelOrder, useCreateReview, useCreateReturn } from '@/hooks/useCommerce'
 import { StoreHeader } from '@/components/StoreHeader'
 
 // Maps payment_status (server-side, from payments-service) to a label
@@ -39,9 +39,19 @@ function paymentStatusUI(status: string): { label: string; cls: string; caption?
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { data: order, isLoading } = useOrder(id)
+  const { data: orderItemsData } = useOrderWithItems(id)
   const { data: shipmentData } = useShipment(id)
   const { data: invoiceData } = useInvoice(id)
   const cancel = useCancelOrder()
+  const createReview = useCreateReview()
+  const createReturn = useCreateReturn()
+  const [reviewItemId, setReviewItemId] = useState<string | null>(null)
+  const [returnItemId, setReturnItemId] = useState<string | null>(null)
+  const [rating, setRating] = useState(5)
+  const [reviewBody, setReviewBody] = useState('')
+  const [returnReason, setReturnReason] = useState('damaged')
+  const [returnDescription, setReturnDescription] = useState('')
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
 
   if (isLoading) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8">Loading order…</div></>
   if (!order) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8 text-red-600">Order not found</div></>
@@ -85,6 +95,56 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
+
+      {orderItemsData?.items?.length ? (
+        <section className="rounded-xl border border-gray-200 bg-white p-6">
+          <h2 className="mb-4 text-lg font-semibold">Items</h2>
+          <div className="divide-y divide-gray-100">
+            {orderItemsData.items.map((item) => {
+              const delivered = item.status === 'delivered' || order.status === 'delivered'
+              const returnEligible = delivered && (!item.return_eligible_until || new Date(item.return_eligible_until) >= new Date())
+              return (
+                <div key={item.id} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex flex-col justify-between gap-3 sm:flex-row">
+                    <div><p className="font-medium">{item.product_title}</p><p className="text-sm text-gray-500">{item.sku} · Qty {item.quantity}</p></div>
+                    <div className="sm:text-right"><p className="font-semibold">{order.currency_code} {item.final_price.toFixed(2)}</p><p className="text-xs text-gray-500">{item.status.replace(/_/g, ' ')}</p></div>
+                  </div>
+                  {delivered ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button onClick={() => { setReviewItemId(reviewItemId === item.id ? null : item.id); setReturnItemId(null); setActionMessage(null) }} className="rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700">Write a review</button>
+                      {returnEligible ? <button onClick={() => { setReturnItemId(returnItemId === item.id ? null : item.id); setReviewItemId(null); setActionMessage(null) }} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">Return item</button> : null}
+                    </div>
+                  ) : null}
+                  {reviewItemId === item.id ? (
+                    <form className="mt-4 space-y-3 rounded-lg bg-gray-50 p-4" onSubmit={async (event) => {
+                      event.preventDefault()
+                      await createReview.mutateAsync({ product_id: item.product_id, seller_id: item.seller_id, order_item_id: item.id, rating, body: reviewBody.trim() || undefined })
+                      setReviewItemId(null); setReviewBody(''); setActionMessage('Your verified-purchase review was submitted.')
+                    }}>
+                      <label className="block text-sm font-medium">Rating<select value={rating} onChange={(event) => setRating(Number(event.target.value))} className="ml-3 rounded border px-2 py-1">{[5,4,3,2,1].map((value) => <option key={value} value={value}>{value} stars</option>)}</select></label>
+                      <textarea value={reviewBody} onChange={(event) => setReviewBody(event.target.value)} placeholder="What should other customers know?" maxLength={2000} className="min-h-24 w-full rounded-lg border p-3 text-sm" />
+                      <button disabled={createReview.isPending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{createReview.isPending ? 'Submitting…' : 'Submit review'}</button>
+                    </form>
+                  ) : null}
+                  {returnItemId === item.id ? (
+                    <form className="mt-4 space-y-3 rounded-lg bg-gray-50 p-4" onSubmit={async (event) => {
+                      event.preventDefault()
+                      await createReturn.mutateAsync({ order_id: order.id, order_item_id: item.id, seller_id: item.seller_id, reason_code: returnReason, reason_description: returnDescription.trim() || undefined })
+                      setReturnItemId(null); setReturnDescription(''); setActionMessage('Your return request was submitted.')
+                    }}>
+                      <label className="block text-sm font-medium">Reason<select value={returnReason} onChange={(event) => setReturnReason(event.target.value)} className="ml-3 rounded border px-2 py-1"><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="not_as_described">Not as described</option><option value="quality_issue">Quality issue</option><option value="changed_mind">Changed my mind</option></select></label>
+                      <textarea value={returnDescription} onChange={(event) => setReturnDescription(event.target.value)} placeholder="Describe the issue" maxLength={1000} className="min-h-24 w-full rounded-lg border p-3 text-sm" />
+                      <button disabled={createReturn.isPending} className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{createReturn.isPending ? 'Submitting…' : 'Request return'}</button>
+                    </form>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+          {actionMessage ? <p role="status" className="mt-4 text-sm font-medium text-emerald-700">{actionMessage}</p> : null}
+          {(createReview.error || createReturn.error) ? <p role="alert" className="mt-3 text-sm text-red-600">The request could not be submitted. Check the details and try again.</p> : null}
+        </section>
+      ) : null}
 
       {shipmentData?.shipment ? (
         <section className="rounded-xl border border-gray-200 bg-white p-6">
