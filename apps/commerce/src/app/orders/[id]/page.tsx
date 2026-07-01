@@ -2,8 +2,9 @@
 
 import { use, useState } from 'react'
 import Link from 'next/link'
-import { useOrder, useOrderWithItems, useShipment, useInvoice, useCancelOrder, useCreateReview, useCreateReturn } from '@/hooks/useCommerce'
+import { useOrder, useOrderWithItems, useShipment, useInvoice, useCancelOrder, useCreateReview, useCreateReturn, useCreatePaymentIntent, useConfirmPayment } from '@/hooks/useCommerce'
 import { StoreHeader } from '@/components/StoreHeader'
+import { completeOrderPayment } from '@/lib/orderPayment'
 
 // Maps payment_status (server-side, from payments-service) to a label
 // + tailwind classes. P6/P7 introduced 'partially_refunded' — surface
@@ -45,6 +46,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const cancel = useCancelOrder()
   const createReview = useCreateReview()
   const createReturn = useCreateReturn()
+  const createIntent = useCreatePaymentIntent()
+  const confirmPayment = useConfirmPayment()
+  const [retryingPayment, setRetryingPayment] = useState(false)
   const [reviewItemId, setReviewItemId] = useState<string | null>(null)
   const [returnItemId, setReturnItemId] = useState<string | null>(null)
   const [rating, setRating] = useState(5)
@@ -195,6 +199,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       ) : null}
 
       <div className="flex flex-wrap gap-3">
+        {order.status === 'payment_pending' && order.payment_method === 'prepaid' ? (
+          <button
+            disabled={retryingPayment}
+            onClick={async () => {
+              setActionMessage(null); setRetryingPayment(true)
+              try { await completeOrderPayment(order, createIntent.mutateAsync, confirmPayment.mutateAsync); setActionMessage('Payment confirmed. Your order is being prepared.') }
+              catch (error) { setActionMessage(error instanceof Error && error.message === 'payment_cancelled' ? 'Payment was cancelled. Your order is reserved and you can retry.' : 'Payment could not be completed. Please retry.') }
+              finally { setRetryingPayment(false) }
+            }}
+            className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >{retryingPayment ? 'Opening payment…' : 'Retry payment'}</button>
+        ) : null}
         {cancellable ? (
           <button
             onClick={() => {
@@ -206,6 +222,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </button>
         ) : null}
       </div>
+      {actionMessage ? <p role="status" className="text-sm font-medium text-emerald-700">{actionMessage}</p> : null}
     </main></>
   )
 }

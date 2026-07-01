@@ -15,20 +15,8 @@ import {
 } from '@/hooks/useCommerce'
 import { AddressForm } from '@/components/commerce/AddressForm'
 import { StoreHeader } from '@/components/StoreHeader'
-import { openRazorpayCheckout } from '@/lib/razorpay'
 import { getCheckoutBlockReason } from '@/lib/checkout'
-
-const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? ''
-
-// Phase 0.3 stub guard: the synthetic-payment fallback exists for local dev
-// against payments-service's StubGateway. It must NOT be reachable in a
-// production build — even one with a missing key — because the previous
-// behaviour was to silently confirm orders without any signature check.
-// Set NEXT_PUBLIC_ENABLE_STUB_PAYMENTS=true alongside NODE_ENV=development
-// to opt in; production-built bundles refuse outright.
-const STUB_PAYMENTS_ENABLED =
-  process.env.NODE_ENV !== 'production' &&
-  process.env.NEXT_PUBLIC_ENABLE_STUB_PAYMENTS === 'true'
+import { completeOrderPayment } from '@/lib/orderPayment'
 
 function CheckoutContent() {
   const router = useRouter()
@@ -123,77 +111,7 @@ function CheckoutContent() {
         return
       }
 
-      // Prepaid: enforce that a real Razorpay key is configured. The
-      // synthetic-payment fallback is dev-only and refuses to run in a
-      // production build (Phase 0.3).
-      if (!RAZORPAY_KEY_ID && !STUB_PAYMENTS_ENABLED) {
-        throw new Error(
-          'Razorpay is not configured. Set NEXT_PUBLIC_RAZORPAY_KEY_ID, or set NEXT_PUBLIC_ENABLE_STUB_PAYMENTS=true for local dev.',
-        )
-      }
-
-      // 2. Create a payment intent at payments-service. Returns provider_ref
-      //    (Razorpay order_id) which checkout.js needs, plus the intent id
-      //    we hand to commerce-service so it can ask payments-service to
-      //    verify the signature against this exact intent.
-      const intent = await createIntent.mutateAsync({
-        payee_id: order.id, // Internal accounting reference; not user-visible.
-        reference_type: 'order',
-        reference_id: order.id,
-        amount: order.final_amount,
-        currency: order.currency_code || 'INR',
-        method: 'razorpay',
-        idempotency_key: `order:${order.id}`,
-      })
-
-      const amountMinor = Math.round(order.final_amount * 100)
-
-      // Stub path — only reachable when NEXT_PUBLIC_ENABLE_STUB_PAYMENTS is
-      // explicitly true AND NODE_ENV !== 'production'. commerce-service
-      // additionally requires PAYMENTS_ALLOW_STUB=true server-side to
-      // accept gateway=stub; mis-configured prod builds fail closed.
-      if (STUB_PAYMENTS_ENABLED && !RAZORPAY_KEY_ID) {
-        await confirmPayment.mutateAsync({
-          order_id: order.id,
-          payment_intent_id: intent.id,
-          razorpay_order_id: intent.provider_ref ?? `stub_order_${Date.now()}`,
-          razorpay_payment_id: `stub_pay_${Date.now()}`,
-          razorpay_signature: 'stub_signature',
-          amount_minor: amountMinor,
-          gateway: 'stub',
-        })
-        router.push(`/orders/${order.id}`)
-        return
-      }
-
-      if (!intent.provider_ref) {
-        throw new Error('Payment provider did not return an order id')
-      }
-
-      // 3. Open Razorpay checkout. Amount is paise — multiply rupees by 100.
-      const resp = await openRazorpayCheckout({
-        key: RAZORPAY_KEY_ID,
-        order_id: intent.provider_ref,
-        amount: amountMinor,
-        currency: order.currency_code || 'INR',
-        name: 'VChat',
-        description: `Order ${order.order_number}`,
-      })
-
-      // 4. Confirm with commerce-service. The backend forwards the
-      //    razorpay signature triple to payments-service for HMAC
-      //    verification + amount check before marking the order paid.
-      //    The webhook → consumer path is the resilient backup if the
-      //    user closes the tab before this fires.
-      await confirmPayment.mutateAsync({
-        order_id: order.id,
-        payment_intent_id: intent.id,
-        razorpay_order_id: resp.razorpay_order_id,
-        razorpay_payment_id: resp.razorpay_payment_id,
-        razorpay_signature: resp.razorpay_signature,
-        amount_minor: amountMinor,
-        gateway: 'razorpay',
-      })
+      await completeOrderPayment(order, createIntent.mutateAsync, confirmPayment.mutateAsync)
 
       router.push(`/orders/${order.id}`)
     } catch (e) {
