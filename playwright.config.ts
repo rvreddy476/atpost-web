@@ -26,7 +26,11 @@ export default defineConfig({
       url: 'http://127.0.0.1:3001/shop',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      env: { NEXT_PUBLIC_ENABLE_STUB_PAYMENTS: 'true' },
+      env: {
+        NEXT_PUBLIC_ENABLE_STUB_PAYMENTS: 'true',
+        API_GATEWAY_URL: 'http://127.0.0.1:8080',
+        AUTH_SERVICE_URL: 'http://127.0.0.1:8081',
+      },
     },
     {
       command: 'bun run --cwd apps/admin dev',
