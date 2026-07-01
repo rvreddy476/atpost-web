@@ -11,7 +11,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --concurrency=15",
     "e2e": "playwright test",
     "e2e:commerce": "playwright test e2e/commerce.spec.ts",
     "e2e:admin": "playwright test e2e/admin.spec.ts",
