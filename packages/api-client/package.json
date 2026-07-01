@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./proxy": "./src/proxy.ts",
-    "./refresh": "./src/refresh.ts"
+    "./refresh": "./src/refresh.ts",
+    "./health": "./src/health.ts"
   },
   "sideEffects": false,
   "scripts": {
