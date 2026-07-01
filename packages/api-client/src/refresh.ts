@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || "http://localhost:8081"
+const AUTH_TIMEOUT_MS = Math.min(Math.max(Number(process.env.AUTH_REFRESH_TIMEOUT_MS) || 15_000, 1_000), 60_000)
 
 export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null)
@@ -36,11 +37,21 @@ export async function POST(req: NextRequest) {
     // for mobile/non-browser clients. Sending it as a Cookie header was broken
     // because encodeURIComponent() changed the token value (e.g. + → %2B) and
     // Gin reads cookie values raw (no URL-decoding), causing a database mismatch.
-    const upstream = await fetch(`${AUTH_SERVICE_URL}/v1/auth/refresh`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ refresh_token: refreshToken }),
-    })
+    const timeout = AbortSignal.timeout(AUTH_TIMEOUT_MS)
+    let upstream: Response
+    try {
+        upstream = await fetch(`${AUTH_SERVICE_URL}/v1/auth/refresh`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ refresh_token: refreshToken }),
+            signal: timeout,
+        })
+    } catch {
+        return NextResponse.json(
+            { error: timeout.aborted ? "Refresh timed out" : "Authentication service unavailable" },
+            { status: timeout.aborted ? 504 : 502, headers: { "cache-control": "no-store" } },
+        )
+    }
 
     const data = await upstream.json().catch(() => null)
 
@@ -53,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     // Forward the rotated httpOnly cookies (access/refresh/csrf) back to the
     // browser so cookie-mode sessions stay alive across refreshes.
-    const res = NextResponse.json(data)
+    const res = NextResponse.json(data, { headers: { "cache-control": "no-store" } })
     const getSetCookie = (upstream.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie
     const cookies = typeof getSetCookie === "function" ? getSetCookie.call(upstream.headers) : []
     for (const cookie of cookies) {

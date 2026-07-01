@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const API_GATEWAY = process.env.API_GATEWAY_URL || "http://localhost:8080"
+const UPSTREAM_TIMEOUT_MS = Math.min(Math.max(Number(process.env.API_PROXY_TIMEOUT_MS) || 30_000, 1_000), 120_000)
 
 const FORWARDED_HEADERS = [
     "authorization",
@@ -12,7 +13,7 @@ const FORWARDED_HEADERS = [
     "cookie",
 ]
 
-async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
     const { path } = await params
     const target = `${API_GATEWAY}/v1/${path.join("/")}`
     const url = new URL(target)
@@ -30,6 +31,8 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
             headers.set(name, value)
         }
     }
+    const requestId = req.headers.get("x-request-id") || crypto.randomUUID()
+    headers.set("x-request-id", requestId)
 
     // Read body for non-GET/HEAD requests
     let body: BodyInit | null = null
@@ -39,18 +42,31 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
 
     // For /serve endpoints, follow redirects so the proxy streams image bytes
     // directly to the browser (avoids cross-origin redirect issues with MinIO).
-    const upstream = await fetch(url.toString(), {
-        method: req.method,
-        headers,
-        body,
-        redirect: "follow",
-    })
+    const timeout = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+    let upstream: Response
+    try {
+        upstream = await fetch(url.toString(), {
+            method: req.method,
+            headers,
+            body,
+            redirect: "follow",
+            signal: timeout,
+        })
+    } catch {
+        const status = timeout.aborted ? 504 : 502
+        return NextResponse.json(
+            { error: { code: timeout.aborted ? "UPSTREAM_TIMEOUT" : "UPSTREAM_UNAVAILABLE", message: "The service is temporarily unavailable." } },
+            { status, headers: { "cache-control": "no-store", "x-request-id": requestId } },
+        )
+    }
 
     if (!upstream.ok) {
         const errBody = await upstream.text()
-        console.log(`[proxy] Upstream ERROR ${upstream.status}: ${errBody}`)
+        console.warn(`[proxy] upstream error status=${upstream.status} request_id=${requestId}`)
         const errHeaders = new Headers({
             "content-type": upstream.headers.get("content-type") ?? "application/json",
+            "cache-control": "no-store",
+            "x-request-id": requestId,
         })
         // Forward Set-Cookie even on error responses (e.g. logout/clear-cookie
         // paths may return non-2xx) so httpOnly auth cookies stay consistent.
@@ -69,10 +85,13 @@ async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ pa
         // Skip hop-by-hop headers and set-cookie (handled separately below —
         // Headers.forEach folds multiple Set-Cookie into one comma-joined value,
         // which corrupts the httpOnly access/refresh/csrf cookies).
-        if (!["transfer-encoding", "connection", "keep-alive", "set-cookie"].includes(lower)) {
+        // fetch may transparently decompress responses; forwarding the original
+        // encoding/length would make the browser interpret the streamed bytes incorrectly.
+        if (!["transfer-encoding", "connection", "keep-alive", "set-cookie", "content-encoding", "content-length"].includes(lower)) {
             responseHeaders.set(key, value)
         }
     })
+    responseHeaders.set("x-request-id", requestId)
     forwardSetCookies(upstream, responseHeaders)
 
     return new NextResponse(upstream.body, {
