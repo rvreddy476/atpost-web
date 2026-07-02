@@ -82,6 +82,17 @@ body {
 .category-card div { display: flex; flex-direction: column; padding: 14px 16px 16px; }
 .category-card strong { color: #111827; font-size: 16px; }.category-card span { margin-top: 3px; color: #6b7280; font-size: 12px; }
 
+.vbag-action { display: flex; height: 43px; align-items: center; overflow: hidden; border: 1px solid #111827; border-radius: 17px 5px 17px 5px; background: rgb(255 255 255 / .94); color: #111827; box-shadow: 0 7px 18px rgb(17 24 39 / .14); backdrop-filter: blur(10px); transition: transform .18s, background .18s, color .18s; }
+.vbag-action:hover { transform: translateY(-2px); background: #111827; color: #fff; }
+.vbag-action:focus-visible { outline: 3px solid rgb(17 24 39 / .25); outline-offset: 3px; }
+.vbag-action:disabled { cursor: not-allowed; border-color: #d1d5db; background: #f3f4f6; color: #9ca3af; box-shadow: none; transform: none; }
+.vbag-action[data-added="true"] { border-color: #111827; background: #111827; color: #fff; }
+.vbag-action-icon { display: grid; width: 40px; height: 100%; flex: none; place-items: center; background: #111827; color: #fff; }
+.vbag-action:disabled .vbag-action-icon { background: #d1d5db; }
+.vbag-action-copy { display: flex; min-width: 70px; flex-direction: column; align-items: flex-start; padding: 0 10px 0 8px; line-height: 1; }
+.vbag-action-copy small { margin-bottom: 3px; font-size: 7px; font-weight: 900; letter-spacing: .13em; }
+.vbag-action-copy strong { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 11px; font-weight: 850; }
+
 @media (max-width: 1050px) {
   .delivery-location { display: none; }
   .header-action span { display: none; }

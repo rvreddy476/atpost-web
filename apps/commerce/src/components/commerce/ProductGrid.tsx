@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Check, ShoppingBag } from 'lucide-react'
+import { Check, Plus, ShoppingBag } from 'lucide-react'
 import { useAddToCart } from '@/hooks/useCommerce'
 
 export type ProductCardData = {
@@ -71,7 +71,7 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
                 <img src={p.primary_image_media_id ? `/v1/media/${p.primary_image_media_id}/serve?w=480&q=80` : p.source_image_url!} alt={p.title} loading="lazy" className="w-full h-full object-contain p-5 transition-transform duration-300 group-hover:scale-105" />
               ) : <span className="text-xs">No image</span>}
             </div>
-            <div className="min-h-[8.5rem] p-3 pr-14">
+            <div className="min-h-[10.5rem] p-3 pb-16">
               <div className="text-sm font-medium line-clamp-2 group-hover:text-black">{p.title}</div>
             {p.retailer_name ? <div className="mt-1 text-xs text-gray-500">Sold by {p.retailer_name}</div> : null}
             {p.avg_rating ? <div className="mt-1 text-xs text-gray-700">★ {p.avg_rating.toFixed(1)} <span className="text-gray-400">({p.review_count ?? 0})</span></div> : null}
@@ -88,11 +88,18 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
               type="button"
               onClick={() => add(p)}
               disabled={!p.default_variant_id || p.total_stock === 0 || addingId === p.id}
-              className="grid h-10 w-10 place-items-center rounded-full bg-gray-900 text-white transition hover:scale-105 hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300"
+              className="vbag-action"
+              data-added={addedId === p.id ? 'true' : 'false'}
               aria-label={addedId === p.id ? `${p.title} added to bag` : `Add ${p.title} to bag`}
               title={p.total_stock === 0 ? 'Out of stock' : 'Add to bag'}
             >
-              {addingId === p.id ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : addedId === p.id ? <Check size={18} /> : <ShoppingBag size={18} />}
+              <span className="vbag-action-icon">
+                {addingId === p.id ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : addedId === p.id ? <Check size={17} /> : <Plus size={17} />}
+              </span>
+              <span className="vbag-action-copy">
+                <small>{addedId === p.id ? 'READY' : 'QUICK ADD'}</small>
+                <strong>{addedId === p.id ? 'In V-Bag' : 'V-Bag'} <ShoppingBag size={13} /></strong>
+              </span>
             </button>
           </div>
         </article>
