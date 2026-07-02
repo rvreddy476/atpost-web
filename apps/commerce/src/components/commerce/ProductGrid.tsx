@@ -44,7 +44,7 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
         <Link
           key={p.id}
           href={`/products/${p.id}`}
-          className="group rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-indigo-300 transition-colors"
+          className="group rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-gray-900 transition-colors"
         >
           <div className="aspect-square bg-gray-100 flex items-center justify-center text-gray-400">
             {p.primary_image_media_id ? (
@@ -55,10 +55,10 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
             )}
           </div>
           <div className="p-3">
-            <div className="text-sm font-medium line-clamp-2 group-hover:text-indigo-600">
+            <div className="text-sm font-medium line-clamp-2 group-hover:text-black">
               {p.title}
             </div>
-            {p.avg_rating ? <div className="mt-1 text-xs text-amber-700">★ {p.avg_rating.toFixed(1)} <span className="text-gray-400">({p.review_count ?? 0})</span></div> : null}
+            {p.avg_rating ? <div className="mt-1 text-xs text-gray-700">★ {p.avg_rating.toFixed(1)} <span className="text-gray-400">({p.review_count ?? 0})</span></div> : null}
             {p.min_selling_price != null ? (
               <div className="mt-1 flex items-baseline gap-1.5 text-sm text-gray-700">
                 <span className="font-semibold">₹{p.min_selling_price.toFixed(2)}</span>
