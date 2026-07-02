@@ -132,6 +132,8 @@ export type Product = {
   hsn_code?: string | null
   weight_grams?: number | null
   primary_image_media_id?: string | null
+  source_image_url?: string | null
+  retailer_name?: string | null
   brand_name?: string | null
   warranty_info?: string | null
   return_policy_type?: string

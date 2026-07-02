@@ -8,6 +8,8 @@ export type ProductCardData = {
   slug?: string
   short_description?: string | null
   primary_image_media_id?: string | null
+  source_image_url?: string | null
+  retailer_name?: string | null
   min_selling_price?: number | null
   min_mrp?: number | null
   avg_rating?: number
@@ -47,9 +49,9 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
           className="group rounded-xl border border-gray-200 bg-white overflow-hidden hover:border-gray-900 transition-colors"
         >
           <div className="aspect-square bg-gray-100 flex items-center justify-center text-gray-400">
-            {p.primary_image_media_id ? (
+            {p.primary_image_media_id || p.source_image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={`/v1/media/${p.primary_image_media_id}/serve?w=480&q=80`} alt={p.title} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+              <img src={p.primary_image_media_id ? `/v1/media/${p.primary_image_media_id}/serve?w=480&q=80` : p.source_image_url!} alt={p.title} loading="lazy" className="w-full h-full object-contain p-5 transition-transform duration-300 group-hover:scale-105" />
             ) : (
               <span className="text-xs">No image</span>
             )}
@@ -58,6 +60,7 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
             <div className="text-sm font-medium line-clamp-2 group-hover:text-black">
               {p.title}
             </div>
+            {p.retailer_name ? <div className="mt-1 text-xs text-gray-500">Sold by {p.retailer_name}</div> : null}
             {p.avg_rating ? <div className="mt-1 text-xs text-gray-700">★ {p.avg_rating.toFixed(1)} <span className="text-gray-400">({p.review_count ?? 0})</span></div> : null}
             {p.min_selling_price != null ? (
               <div className="mt-1 flex items-baseline gap-1.5 text-sm text-gray-700">
