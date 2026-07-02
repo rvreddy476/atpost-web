@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Check, Plus, ShoppingBag } from 'lucide-react'
-import { useAddToCart } from '@/hooks/useCommerce'
+import { Minus, Plus, ShoppingBag } from 'lucide-react'
+import { useAddToCart, useCart, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
 
 export type ProductCardData = {
   id: string
@@ -29,6 +29,9 @@ type Props = {
 
 export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }: Props) {
   const addToCart = useAddToCart()
+  const updateCart = useUpdateCartItem()
+  const removeFromCart = useRemoveFromCart()
+  const { data: cart } = useCart()
   const [addingId, setAddingId] = useState<string | null>(null)
   const [addedId, setAddedId] = useState<string | null>(null)
 
@@ -39,6 +42,18 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
       await addToCart.mutateAsync({ variant_id: product.default_variant_id, quantity: 1 })
       setAddedId(product.id)
       window.setTimeout(() => setAddedId((current) => current === product.id ? null : current), 1800)
+    } finally {
+      setAddingId(null)
+    }
+  }
+
+  async function changeQuantity(product: ProductCardData, quantity: number) {
+    if (!product.default_variant_id) return
+    setAddingId(product.id)
+    try {
+      if (quantity <= 0) await removeFromCart.mutateAsync(product.default_variant_id)
+      else await updateCart.mutateAsync({ variant_id: product.default_variant_id, quantity })
+      if (quantity <= 0) setAddedId(null)
     } finally {
       setAddingId(null)
     }
@@ -62,7 +77,11 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
   }
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-      {products.map((p) => (
+      {products.map((p) => {
+        const cartItem = cart?.Items.find((item) => item.Item.variant_id === p.default_variant_id)
+        const quantity = cartItem?.Item.quantity ?? (addedId === p.id ? 1 : 0)
+        const isPending = addingId === p.id
+        return (
         <article key={p.id} className="group relative flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-colors hover:border-gray-900">
           <Link href={`/products/${p.id}`} className="flex min-w-0 flex-1 flex-col">
             <div className="aspect-square bg-gray-100 flex items-center justify-center text-gray-400">
@@ -84,26 +103,29 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
             </div>
           </Link>
           <div className="absolute bottom-3 right-3">
-            <button
-              type="button"
-              onClick={() => add(p)}
-              disabled={!p.default_variant_id || p.total_stock === 0 || addingId === p.id}
-              className="vbag-action"
-              data-added={addedId === p.id ? 'true' : 'false'}
-              aria-label={addedId === p.id ? `${p.title} added to bag` : `Add ${p.title} to bag`}
-              title={p.total_stock === 0 ? 'Out of stock' : 'Add to bag'}
-            >
-              <span className="vbag-action-icon">
-                {addingId === p.id ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : addedId === p.id ? <Check size={17} /> : <Plus size={17} />}
-              </span>
-              <span className="vbag-action-copy">
-                <small>{addedId === p.id ? 'READY' : 'QUICK ADD'}</small>
-                <strong>{addedId === p.id ? 'In V-Bag' : 'V-Bag'} <ShoppingBag size={13} /></strong>
-              </span>
-            </button>
+            {quantity > 0 ? (
+              <div className="vbag-stepper" aria-label={`${p.title} quantity in bag`}>
+                <button type="button" onClick={() => changeQuantity(p, quantity - 1)} disabled={isPending} aria-label={`Decrease ${p.title} quantity`}><Minus size={16} /></button>
+                <span><small>IN BAG</small><strong>{isPending ? '·' : quantity}</strong></span>
+                <button type="button" onClick={() => changeQuantity(p, quantity + 1)} disabled={isPending || quantity >= (p.total_stock ?? 99)} aria-label={`Increase ${p.title} quantity`}><Plus size={16} /></button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => add(p)}
+                disabled={!p.default_variant_id || p.total_stock === 0 || isPending}
+                className="vbag-action"
+                aria-label={`Add ${p.title} to bag`}
+                title={p.total_stock === 0 ? 'Out of stock' : 'Add to bag'}
+              >
+                <span className="vbag-action-icon">{isPending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Plus size={17} />}</span>
+                <span className="vbag-action-copy"><small>QUICK ADD</small><strong>V-Bag <ShoppingBag size={13} /></strong></span>
+              </button>
+            )}
           </div>
         </article>
-      ))}
+        )
+      })}
     </div>
   )
 }

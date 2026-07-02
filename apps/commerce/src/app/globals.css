@@ -92,6 +92,13 @@ body {
 .vbag-action-copy { display: flex; min-width: 70px; flex-direction: column; align-items: flex-start; padding: 0 10px 0 8px; line-height: 1; }
 .vbag-action-copy small { margin-bottom: 3px; font-size: 7px; font-weight: 900; letter-spacing: .13em; }
 .vbag-action-copy strong { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 11px; font-weight: 850; }
+.vbag-stepper { display: grid; height: 43px; grid-template-columns: 38px 43px 38px; overflow: hidden; border: 1px solid #111827; border-radius: 17px 5px 17px 5px; background: #111827; color: #fff; box-shadow: 0 7px 18px rgb(17 24 39 / .16); }
+.vbag-stepper button { display: grid; place-items: center; transition: background .15s, color .15s; }
+.vbag-stepper button:hover:not(:disabled) { background: #fff; color: #111827; }
+.vbag-stepper button:disabled { cursor: wait; opacity: .45; }
+.vbag-stepper > span { display: flex; flex-direction: column; align-items: center; justify-content: center; border-inline: 1px solid #374151; line-height: 1; }
+.vbag-stepper small { margin-bottom: 3px; color: #9ca3af; font-size: 6px; font-weight: 900; letter-spacing: .12em; }
+.vbag-stepper strong { font-size: 13px; }
 
 @media (max-width: 1050px) {
   .delivery-location { display: none; }
