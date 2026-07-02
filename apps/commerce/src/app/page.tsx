@@ -47,10 +47,10 @@ function MarketplaceLanding({
       <section className="marketplace-hero" aria-label="Featured offers">
         <Link href={categoryHref("Fashion", categories)} className="hero-fashion">
           <div className="hero-copy">
-            <span className="hero-kicker">THE STYLE EDIT</span>
-            <h1>Fashion that feels like you</h1>
-            <p>Fresh dresses, everyday essentials and occasion-ready looks.</p>
-            <span className="hero-action">Shop fashion <ArrowRight size={18} /></span>
+            <span className="hero-kicker">THE VCHAT EDIT / 01</span>
+            <h1>Find your next favourite thing.</h1>
+            <p>A living marketplace of expressive style, clever technology and everyday discoveries.</p>
+            <span className="hero-action">Enter the edit <ArrowRight size={18} /></span>
           </div>
         </Link>
         <div className="hero-side">

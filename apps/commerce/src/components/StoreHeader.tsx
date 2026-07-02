@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Search, ShoppingCart, Package, User, Store, Menu, MapPin, ChevronDown } from "lucide-react"
+import { Search, ShoppingBag, Package, User, Store, Menu, Sparkles } from "lucide-react"
 import { useCart } from "@/hooks/useCommerce"
 import { getCurrentUserId } from "@atpost/api-client"
 
@@ -26,37 +26,32 @@ export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
 
   return (
     <header className="marketplace-header">
+      <div className="market-note"><Sparkles size={14} /> Curated finds, independent sellers, one VChat experience</div>
       <div className="header-main">
         <Link href="/" className="shop-brand" aria-label="VChat Shop home">
-          <span>V</span><strong>Chat</strong><small>shop</small>
+          <span>V</span><strong>VChat</strong><small>MARKET</small>
         </Link>
-        <button className="delivery-location" type="button" aria-label="Choose delivery location">
-          <MapPin size={18} /><span><small>Deliver to</small><strong>Select location</strong></span>
-        </button>
         <form onSubmit={onSearch} className="market-search" role="search">
           <label className="sr-only" htmlFor="market-search-input">Search products</label>
-          <select aria-label="Search category" defaultValue="all">
-            <option value="all">All</option>
-            {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
-          </select>
-          <input id="market-search-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VChat Shop" />
+          <Search size={19} />
+          <input id="market-search-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="What are you looking for today?" />
           <button type="submit" aria-label="Search"><Search size={22} /></button>
         </form>
         <nav className="header-actions" aria-label="Account and shopping">
-          <a href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action">
-            <User size={20} /><span><small>{userId ? "Welcome back" : "Hello, sign in"}</small><strong>Account <ChevronDown size={12} /></strong></span>
+          <a href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action" aria-label={userId ? "Account" : "Sign in"}>
+            <User size={20} /><span>{userId ? "Account" : "Sign in"}</span>
           </a>
-          <Link href="/orders" className="header-action"><Package size={20} /><span><small>Returns</small><strong>& Orders</strong></span></Link>
-          <Link href="/cart" className="cart-action"><span><ShoppingCart size={27} />{count > 0 && <b>{count}</b>}</span><strong>Cart</strong></Link>
+          <Link href="/orders" className="header-action" aria-label="Orders"><Package size={20} /><span>Orders</span></Link>
+          <Link href="/cart" className="cart-action" aria-label={`Shopping bag with ${count} items`}><span><ShoppingBag size={22} />{count > 0 && <b>{count}</b>}</span><strong>Bag</strong></Link>
         </nav>
       </div>
       <nav className="category-menu" aria-label="Product categories">
-        <Link href="/?stock=true" className="all-categories"><Menu size={20} /> All categories</Link>
+        <Link href="/?stock=true" className="all-categories"><Menu size={18} /> Explore all</Link>
         {(categories.length ? categories.slice(0, 9) : [
           { id: "fashion", name: "Fashion" }, { id: "electronics", name: "Electronics" }, { id: "grocery", name: "Grocery & Food" },
           { id: "home", name: "Home & Kitchen" }, { id: "books", name: "Books" }, { id: "beauty", name: "Beauty" }, { id: "sports", name: "Sports" },
         ]).map((category) => <Link key={category.id} href={`/?category=${encodeURIComponent(category.id)}`}>{category.name}</Link>)}
-        <Link href="/sell" className="sell-link"><Store size={17} /> Sell on VChat</Link>
+        <Link href="/sell" className="sell-link"><Store size={17} /> Open your shop</Link>
       </nav>
     </header>
   )
