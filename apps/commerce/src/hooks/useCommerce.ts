@@ -12,8 +12,15 @@ export type CartItem = {
     quantity: number
     price_snapshot: number
   }
-  Product: { id: string; title: string; slug: string } | null
-  Variant: { id: string; sku: string; mrp: number; selling_price: number } | null
+  Product: {
+    id: string
+    title: string
+    slug: string
+    primary_image_media_id?: string | null
+    source_image_url?: string | null
+    retailer_name?: string | null
+  } | null
+  Variant: { id: string; sku: string; mrp: number; selling_price: number; image_media_id?: string | null } | null
 }
 
 export type CartSummary = {

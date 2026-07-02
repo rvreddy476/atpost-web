@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { ArrowLeft, ArrowRight, Minus, Plus, ShieldCheck, ShoppingBag, Sparkles, Tag, Trash2 } from 'lucide-react'
 import { StoreHeader } from '@/components/StoreHeader'
 import { useCart, useCouponPreview, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
 
@@ -12,156 +13,88 @@ export default function CartPage() {
   const [couponDraft, setCouponDraft] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState('')
   const couponPreview = useCouponPreview(appliedCoupon)
+  const isChanging = remove.isPending || update.isPending
 
-  if (isLoading) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8">Loading cart…</div></>
-  if (error) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8 text-red-600">Failed to load cart. Please try again.</div></>
-  if (!cart || cart.ItemCount === 0)
-    return (
-      <><StoreHeader /><div className="mx-auto max-w-3xl p-8 text-center">
-        <h1 className="text-2xl font-semibold mb-4">Your cart is empty</h1>
-        <Link href="/" className="text-indigo-600 hover:underline">
-          Browse products
-        </Link>
-      </div></>
-    )
+  if (isLoading) return <><StoreHeader /><div className="cart-state"><span className="cart-loader" />Preparing your V-Bag…</div></>
+  if (error) return <><StoreHeader /><div className="cart-state text-red-600">Your V-Bag could not be loaded. Please try again.</div></>
+  if (!cart || cart.ItemCount === 0) return (
+    <><StoreHeader /><main className="empty-vbag">
+      <div className="empty-vbag-mark"><ShoppingBag size={34} /></div>
+      <span>YOUR V-BAG / 00</span>
+      <h1>Room for something<br />remarkable.</h1>
+      <p>Your saved finds will live here, ready whenever you are.</p>
+      <Link href="/">Explore the market <ArrowRight size={18} /></Link>
+    </main></>
+  )
+
+  const finalTotal = couponPreview.data?.applied ? couponPreview.data.grand_total : cart.Subtotal
 
   return (
-    <><StoreHeader /><main className="mx-auto max-w-5xl p-4 sm:p-6">
-      <h1 className="text-2xl font-semibold mb-6">Your Cart</h1>
-      <div className="space-y-3">
-        {cart.Items.map((ci) => (
-          <div
-            key={ci.Item.id}
-            className="flex items-center gap-4 rounded-xl border border-gray-200 p-4 bg-white"
-          >
-            <div className="flex-1">
-              <div className="font-medium">{ci.Product?.title ?? 'Product'}</div>
-              <div className="text-sm text-gray-500">SKU: {ci.Variant?.sku}</div>
-              <div className="text-sm text-gray-500">
-                ₹{ci.Item.price_snapshot} × {ci.Item.quantity}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="font-semibold">
-                ₹{(ci.Item.price_snapshot * ci.Item.quantity).toFixed(2)}
-              </div>
-              <label className="mt-2 flex items-center justify-end gap-2 text-sm">
-                <span className="sr-only">Quantity for {ci.Product?.title ?? 'product'}</span>
-                <select
-                  aria-label={`Quantity for ${ci.Product?.title ?? 'product'}`}
-                  value={ci.Item.quantity}
-                  disabled={update.isPending}
-                  onChange={(event) => update.mutate({
-                    variant_id: ci.Item.variant_id,
-                    quantity: Number(event.target.value),
-                  })}
-                  className="rounded-md border border-gray-300 bg-white px-2 py-1"
-                >
-                  {Array.from({ length: 10 }, (_, index) => index + 1).map((quantity) => (
-                    <option key={quantity} value={quantity}>Qty: {quantity}</option>
-                  ))}
-                </select>
-              </label>
-              <button
-                onClick={() => remove.mutate(ci.Item.variant_id)}
-                className="text-sm text-red-600 hover:underline mt-1"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ))}
+    <><StoreHeader /><main className="vbag-page">
+      <div className="vbag-heading">
+        <div><span>VCHAT MARKET / CHECKOUT</span><h1>Your V-Bag</h1></div>
+        <p><strong>{cart.ItemCount}</strong> {cart.ItemCount === 1 ? 'piece' : 'pieces'} selected</p>
       </div>
 
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-        {/* Coupon preview (commerce TODO M#1). Pure preview — the
-            actual application happens at checkout, so the user can
-            try several codes risk-free. */}
-        <div className="mb-4 pb-4 border-b border-gray-100">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Have a coupon?
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={couponDraft}
-              onChange={(e) => setCouponDraft(e.target.value.toUpperCase())}
-              placeholder="ENTER CODE"
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') setAppliedCoupon(couponDraft.trim())
-              }}
-            />
-            {appliedCoupon && appliedCoupon === couponDraft.trim() ? (
-              <button
-                onClick={() => {
-                  setAppliedCoupon('')
-                  setCouponDraft('')
-                }}
-                className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200"
-              >
-                Clear
-              </button>
-            ) : (
-              <button
-                onClick={() => setAppliedCoupon(couponDraft.trim())}
-                disabled={!couponDraft.trim() || couponPreview.isFetching}
-                className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {couponPreview.isFetching ? 'Checking…' : 'Apply'}
-              </button>
-            )}
-          </div>
+      <div className="vbag-layout">
+        <section className="vbag-items" aria-label="Items in your bag">
+          {cart.Items.map((ci, index) => {
+            const image = ci.Variant?.image_media_id
+              ? `/v1/media/${ci.Variant.image_media_id}/serve?w=500&q=85`
+              : ci.Product?.primary_image_media_id
+                ? `/v1/media/${ci.Product.primary_image_media_id}/serve?w=500&q=85`
+                : ci.Product?.source_image_url
+            return (
+              <article className="vbag-item" key={ci.Item.id}>
+                <span className="vbag-item-index">{String(index + 1).padStart(2, '0')}</span>
+                <Link href={`/products/${ci.Item.product_id}`} className="vbag-item-image">
+                  {image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={image} alt={ci.Product?.title ?? 'Product'} />
+                  ) : <ShoppingBag size={30} />}
+                </Link>
+                <div className="vbag-item-copy">
+                  <span>{ci.Product?.retailer_name ? `FROM ${ci.Product.retailer_name}` : 'VCHAT MARKET FIND'}</span>
+                  <Link href={`/products/${ci.Item.product_id}`}>{ci.Product?.title ?? 'Product'}</Link>
+                  <small>REF / {ci.Variant?.sku ?? 'STANDARD'}</small>
+                  <div className="vbag-item-unit">₹{ci.Item.price_snapshot.toFixed(2)} each</div>
+                </div>
+                <div className="vbag-item-controls">
+                  <strong>₹{(ci.Item.price_snapshot * ci.Item.quantity).toFixed(2)}</strong>
+                  <div className="cart-quantity" aria-label={`Quantity for ${ci.Product?.title ?? 'product'}`}>
+                    <button type="button" disabled={isChanging} onClick={() => ci.Item.quantity === 1 ? remove.mutate(ci.Item.variant_id) : update.mutate({ variant_id: ci.Item.variant_id, quantity: ci.Item.quantity - 1 })} aria-label="Decrease quantity"><Minus size={15} /></button>
+                    <span>{ci.Item.quantity}</span>
+                    <button type="button" disabled={isChanging || ci.Item.quantity >= 10} onClick={() => update.mutate({ variant_id: ci.Item.variant_id, quantity: ci.Item.quantity + 1 })} aria-label="Increase quantity"><Plus size={15} /></button>
+                  </div>
+                  <button className="vbag-remove" type="button" disabled={isChanging} onClick={() => remove.mutate(ci.Item.variant_id)}><Trash2 size={14} /> Remove</button>
+                </div>
+              </article>
+            )
+          })}
+          <Link href="/" className="continue-market"><ArrowLeft size={16} /> Continue discovering</Link>
+        </section>
 
-          {appliedCoupon && couponPreview.isError && (
-            <p className="mt-2 text-sm text-red-600">
-              {(() => {
-                const err = couponPreview.error as { response?: { data?: { error?: { message?: string } } } } | null
-                return err?.response?.data?.error?.message || 'Coupon could not be applied.'
-              })()}
-            </p>
-          )}
-          {appliedCoupon && couponPreview.data?.applied && (
-            <p className="mt-2 text-sm text-emerald-700 font-medium">
-              Coupon {couponPreview.data.coupon_code} applied — you save ₹
-              {couponPreview.data.coupon_discount.toFixed(2)}.
-            </p>
-          )}
-          {appliedCoupon && couponPreview.data && !couponPreview.data.applied && (
-            <p className="mt-2 text-sm text-amber-700">
-              This coupon doesn&apos;t apply to your current cart.
-            </p>
-          )}
-        </div>
-
-        <div className="flex justify-between text-sm text-gray-700">
-          <span>Subtotal</span>
-          <span>₹{cart.Subtotal.toFixed(2)}</span>
-        </div>
-        {couponPreview.data?.applied && couponPreview.data.coupon_discount > 0 && (
-          <div className="flex justify-between text-sm text-emerald-700 mt-1">
-            <span>Coupon ({couponPreview.data.coupon_code})</span>
-            <span>−₹{couponPreview.data.coupon_discount.toFixed(2)}</span>
+        <aside className="vbag-summary">
+          <div className="summary-orbit"><Sparkles size={18} /></div>
+          <span>ORDER COMPOSITION</span>
+          <h2>Almost yours.</h2>
+          <div className="coupon-field">
+            <Tag size={16} />
+            <input value={couponDraft} onChange={(event) => setCouponDraft(event.target.value.toUpperCase())} onKeyDown={(event) => { if (event.key === 'Enter') setAppliedCoupon(couponDraft.trim()) }} placeholder="PROMO CODE" aria-label="Promo code" />
+            <button type="button" disabled={!couponDraft.trim() || couponPreview.isFetching} onClick={() => appliedCoupon === couponDraft.trim() ? (setAppliedCoupon(''), setCouponDraft('')) : setAppliedCoupon(couponDraft.trim())}>{appliedCoupon === couponDraft.trim() ? 'Clear' : 'Apply'}</button>
           </div>
-        )}
-        <div className="flex justify-between text-lg mt-3 pt-3 border-t border-gray-100">
-          <span>Estimated total</span>
-          <span className="font-semibold">
-            ₹
-            {couponPreview.data?.applied
-              ? couponPreview.data.grand_total.toFixed(2)
-              : cart.Subtotal.toFixed(2)}
-          </span>
-        </div>
-        <div className="text-sm text-gray-500 mt-2">
-          Shipping and taxes calculated at checkout.
-        </div>
-        <Link
-          href={`/checkout${appliedCoupon && couponPreview.data?.applied ? `?coupon=${encodeURIComponent(appliedCoupon)}` : ''}`}
-          className="mt-4 block w-full rounded-lg bg-indigo-600 text-white text-center py-3 font-medium hover:bg-indigo-700"
-        >
-          Proceed to Checkout
-        </Link>
+          {appliedCoupon && couponPreview.isError ? <p className="coupon-message error">That code is not available for this bag.</p> : null}
+          {couponPreview.data?.applied ? <p className="coupon-message">Code {couponPreview.data.coupon_code} saved ₹{couponPreview.data.coupon_discount.toFixed(2)}</p> : null}
+
+          <div className="summary-lines">
+            <div><span>Pieces</span><strong>{cart.ItemCount}</strong></div>
+            <div><span>Subtotal</span><strong>₹{cart.Subtotal.toFixed(2)}</strong></div>
+            {couponPreview.data?.applied ? <div><span>VChat saving</span><strong>−₹{couponPreview.data.coupon_discount.toFixed(2)}</strong></div> : null}
+            <div className="summary-total"><span>Estimated total<small>Taxes and delivery calculated next</small></span><strong>₹{finalTotal.toFixed(2)}</strong></div>
+          </div>
+          <Link href={`/checkout${appliedCoupon && couponPreview.data?.applied ? `?coupon=${encodeURIComponent(appliedCoupon)}` : ''}`} className="vbag-checkout">Continue securely <ArrowRight size={18} /></Link>
+          <div className="summary-trust"><ShieldCheck size={16} /> Protected checkout · Easy returns</div>
+        </aside>
       </div>
     </main></>
   )
