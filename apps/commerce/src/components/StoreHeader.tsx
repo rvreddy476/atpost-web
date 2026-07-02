@@ -1,16 +1,18 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
-import { Search, ShoppingCart, Package, User, Store } from "lucide-react"
+import { Search, ShoppingCart, Package, User, Store, Menu, MapPin, ChevronDown } from "lucide-react"
 import { useCart } from "@/hooks/useCommerce"
 import { getCurrentUserId } from "@atpost/api-client"
 
-// Amazon/eBay-style storefront header: brand, big search, orders, cart, account.
-export function StoreHeader() {
+type Category = { id: string; name: string }
+
+export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
   const router = useRouter()
-  const [q, setQ] = useState("")
+  const params = useSearchParams()
+  const [q, setQ] = useState(params.get("q") ?? "")
   const [userId, setUserId] = useState<string | null>(null)
   const { data: cart } = useCart()
   const count = cart?.ItemCount ?? 0
@@ -23,55 +25,39 @@ export function StoreHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
-        <Link href="/" className="flex shrink-0 items-center gap-2">
-          <span className="grid h-9 w-9 place-items-center rounded-lg bg-gray-900 text-sm font-bold text-white">
-            VC
-          </span>
-          <span className="hidden text-lg font-semibold sm:block">Shop</span>
+    <header className="marketplace-header">
+      <div className="header-main">
+        <Link href="/" className="shop-brand" aria-label="VChat Shop home">
+          <span>V</span><strong>Chat</strong><small>shop</small>
         </Link>
-
-        <form onSubmit={onSearch} className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-md">
-            <div className="flex items-center rounded-lg border border-gray-300 focus-within:border-gray-900">
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search products"
-                className="w-full bg-transparent px-4 py-2 text-sm outline-none"
-              />
-              <button type="submit" className="px-3 text-gray-500 hover:text-gray-900" aria-label="Search">
-                <Search size={18} />
-              </button>
-            </div>
-          </div>
+        <button className="delivery-location" type="button" aria-label="Choose delivery location">
+          <MapPin size={18} /><span><small>Deliver to</small><strong>Select location</strong></span>
+        </button>
+        <form onSubmit={onSearch} className="market-search" role="search">
+          <label className="sr-only" htmlFor="market-search-input">Search products</label>
+          <select aria-label="Search category" defaultValue="all">
+            <option value="all">All</option>
+            {categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}
+          </select>
+          <input id="market-search-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search VChat Shop" />
+          <button type="submit" aria-label="Search"><Search size={22} /></button>
         </form>
-
-        <Link href="/sell" className="hidden items-center gap-1 text-sm text-gray-700 hover:text-gray-900 sm:flex">
-          <Store size={18} /> Sell
-        </Link>
-
-        <Link href="/orders" className="hidden items-center gap-1 text-sm text-gray-700 hover:text-gray-900 sm:flex">
-          <Package size={18} /> Orders
-        </Link>
-
-        <Link href="/cart" className="relative flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900">
-          <ShoppingCart size={20} />
-          {count > 0 && (
-            <span className="absolute -right-2 -top-2 grid h-5 min-w-[1.25rem] place-items-center rounded-full bg-gray-900 px-1 text-[11px] font-semibold text-white">
-              {count}
-            </span>
-          )}
-        </Link>
-
-        <a
-          href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"}
-          className="flex items-center gap-1 text-sm text-gray-700 hover:text-gray-900"
-        >
-          <User size={18} /> {userId ? "Account" : "Sign in"}
-        </a>
+        <nav className="header-actions" aria-label="Account and shopping">
+          <a href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action">
+            <User size={20} /><span><small>{userId ? "Welcome back" : "Hello, sign in"}</small><strong>Account <ChevronDown size={12} /></strong></span>
+          </a>
+          <Link href="/orders" className="header-action"><Package size={20} /><span><small>Returns</small><strong>& Orders</strong></span></Link>
+          <Link href="/cart" className="cart-action"><span><ShoppingCart size={27} />{count > 0 && <b>{count}</b>}</span><strong>Cart</strong></Link>
+        </nav>
       </div>
+      <nav className="category-menu" aria-label="Product categories">
+        <Link href="/?stock=true" className="all-categories"><Menu size={20} /> All categories</Link>
+        {(categories.length ? categories.slice(0, 9) : [
+          { id: "fashion", name: "Fashion" }, { id: "electronics", name: "Electronics" }, { id: "grocery", name: "Grocery & Food" },
+          { id: "home", name: "Home & Kitchen" }, { id: "books", name: "Books" }, { id: "beauty", name: "Beauty" }, { id: "sports", name: "Sports" },
+        ]).map((category) => <Link key={category.id} href={`/?category=${encodeURIComponent(category.id)}`}>{category.name}</Link>)}
+        <Link href="/sell" className="sell-link"><Store size={17} /> Sell on VChat</Link>
+      </nav>
     </header>
   )
 }
