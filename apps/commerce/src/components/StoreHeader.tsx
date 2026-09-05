@@ -2,27 +2,65 @@
 
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { Search, ShoppingBag, Package, User, Store, Menu, Sparkles } from "lucide-react"
 import { useCart } from "@/hooks/useCommerce"
 import { getCurrentUserId } from "@atpost/api-client"
 
 type Category = { id: string; name: string }
 
-export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
+// The search box is the only part of this header that reads the URL, and
+// `useSearchParams` opts its whole tree out of prerendering. Left inline it
+// took the entire commerce zone's build down — every page that renders the
+// header failed to export, so the app could not be built or deployed at all.
+//
+// Isolating it means the header still prerenders: the fallback below emits the
+// same markup with an empty box, and the real one swaps in on hydration with
+// the query filled. Search is a client action either way, so nothing is lost.
+function SearchForm({ initialQuery, onSubmit }: {
+  initialQuery: string
+  onSubmit?: (query: string) => void
+}) {
+  const [q, setQ] = useState(initialQuery)
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSubmit?.(q)
+      }}
+      className="market-search"
+      role="search"
+    >
+      <label className="sr-only" htmlFor="market-search-input">Search products</label>
+      <Search size={19} />
+      <input
+        id="market-search-input"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="What are you looking for today?"
+      />
+      <button type="submit" aria-label="Search"><Search size={22} /></button>
+    </form>
+  )
+}
+
+function LiveSearchForm() {
   const router = useRouter()
   const params = useSearchParams()
-  const [q, setQ] = useState(params.get("q") ?? "")
+  return (
+    <SearchForm
+      initialQuery={params.get("q") ?? ""}
+      onSubmit={(q) => router.push(q.trim() ? `/?q=${encodeURIComponent(q.trim())}` : "/")}
+    />
+  )
+}
+
+export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
   const [userId, setUserId] = useState<string | null>(null)
   const { data: cart } = useCart()
   const count = cart?.ItemCount ?? 0
 
   useEffect(() => setUserId(getCurrentUserId()), [])
-
-  function onSearch(e: React.FormEvent) {
-    e.preventDefault()
-    router.push(q.trim() ? `/?q=${encodeURIComponent(q.trim())}` : "/")
-  }
 
   return (
     <header className="marketplace-header">
@@ -31,12 +69,9 @@ export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
         <Link href="/" className="shop-brand" aria-label="VChat Shop home">
           <span>V</span><strong>VChat</strong><small>MARKET</small>
         </Link>
-        <form onSubmit={onSearch} className="market-search" role="search">
-          <label className="sr-only" htmlFor="market-search-input">Search products</label>
-          <Search size={19} />
-          <input id="market-search-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="What are you looking for today?" />
-          <button type="submit" aria-label="Search"><Search size={22} /></button>
-        </form>
+        <Suspense fallback={<SearchForm initialQuery="" />}>
+          <LiveSearchForm />
+        </Suspense>
         <nav className="header-actions" aria-label="Account and shopping">
           <a href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action" aria-label={userId ? "Account" : "Sign in"}>
             <User size={20} /><span>{userId ? "Account" : "Sign in"}</span>

@@ -16,7 +16,7 @@ export function createZoneConfig({ basePath }) {
     assetPrefix: basePath,
     compress: true,
     poweredByHeader: false,
-    transpilePackages: ["@atpost/ui", "@atpost/api-client", "@atpost/types"],
+    transpilePackages: ["@atpost/ui", "@atpost/api-client", "@atpost/types", "@atpost/form"],
     experimental: {
       optimizePackageImports: ["@atpost/ui", "@atpost/types", "lucide-react"],
     },

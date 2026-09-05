@@ -14,6 +14,40 @@ export { EmailField } from "./EmailField"
 export type { EmailFieldProps } from "./EmailField"
 export { DatePicker } from "./DatePicker"
 export type { DatePickerProps } from "./DatePicker"
+
+// Field scaffolding — label, description, error and aria-describedby wiring
+// shared by every control below.
+export { FieldShell, useFieldIds, controlSurface, controlBorder } from "./Field"
+export type { FieldIds, FieldShellProps } from "./Field"
+
+// Form controls for the category-driven listing form.
+export { Select } from "./Select"
+export type { SelectProps, SelectOption } from "./Select"
+export { MultiSelect } from "./MultiSelect"
+export type { MultiSelectProps } from "./MultiSelect"
+export { Checkbox } from "./Checkbox"
+export type { CheckboxProps } from "./Checkbox"
+export { Switch } from "./Switch"
+export type { SwitchProps } from "./Switch"
+export { Textarea } from "./Textarea"
+export type { TextareaProps } from "./Textarea"
+export { NumberInput } from "./NumberInput"
+export type { NumberInputProps } from "./NumberInput"
+export { RadioGroup } from "./RadioGroup"
+export type { RadioGroupProps, RadioOption } from "./RadioGroup"
+
+// Layout and structure.
+export { Table, THead, TBody, TR, TH, TD } from "./Table"
+export type { TableProps } from "./Table"
+export { Tabs } from "./Tabs"
+export type { TabsProps, TabItem } from "./Tabs"
+export { Tree } from "./Tree"
+export type { TreeProps, TreeNode } from "./Tree"
+
+// Feedback.
+export { ToastProvider, useToast } from "./Toast"
+export type { Toast, ToastApi, ToastOptions, ToastProviderProps, ToastVariant } from "./Toast"
+
 // Additional primitives ported from postbook-ui src/components/ui (self-contained).
 export * from "./dob-picker"      // DobPicker + validateDob
 export * from "./StarRating"      // StarRating

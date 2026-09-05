@@ -5,7 +5,7 @@ import Link from "next/link"
 import { StoreHeader } from "@/components/StoreHeader"
 import { useOnboardingStatus, useStartOnboarding } from "@/hooks/useSellerOnboarding"
 import { useMyProducts, useSubmitProduct } from "@/hooks/useSellerDashboard"
-import { Button, Input } from "@atpost/ui"
+import { Button, Input, Table, TBody, TD, TH, THead, TR } from "@atpost/ui"
 import { getCurrentUserId } from "@atpost/api-client"
 
 function OnboardingForm() {
@@ -58,44 +58,40 @@ function MyProducts() {
           + Add product
         </Link>
       </div>
-      {isLoading ? (
-        <p className="text-gray-500">Loading…</p>
-      ) : !products || products.length === 0 ? (
-        <p className="text-gray-500">No products yet. Add your first one.</p>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-500">
-              <tr>
-                <th className="px-4 py-2">Title</th>
-                <th className="px-4 py-2">Approval</th>
-                <th className="px-4 py-2 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr key={p.id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 font-medium">{p.title}</td>
-                  <td className="px-4 py-3 text-gray-600">{p.approval_status}</td>
-                  <td className="px-4 py-3 text-right">
-                    {p.approval_status === "draft" ? (
-                      <button
-                        onClick={() => submit.mutate(p.id)}
-                        disabled={submit.isPending}
-                        className="rounded-lg border border-gray-300 px-3 py-1 hover:border-gray-400 disabled:opacity-50"
-                      >
-                        Submit for review
-                      </button>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <Table
+        loading={isLoading}
+        empty={!products || products.length === 0}
+        emptyMessage="No products yet. Add your first one."
+      >
+        <THead>
+          <TR>
+            <TH>Title</TH>
+            <TH>Approval</TH>
+            <TH className="text-right">Action</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {products?.map((p) => (
+            <TR key={p.id}>
+              <TD className="font-medium">{p.title}</TD>
+              <TD className="text-gray-600">{p.approval_status}</TD>
+              <TD className="text-right">
+                {p.approval_status === "draft" ? (
+                  <button
+                    onClick={() => submit.mutate(p.id)}
+                    disabled={submit.isPending}
+                    className="rounded-lg border border-gray-300 px-3 py-1 hover:border-gray-400 disabled:opacity-50"
+                  >
+                    Submit for review
+                  </button>
+                ) : (
+                  <span className="text-xs text-gray-400">—</span>
+                )}
+              </TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
     </div>
   )
 }
