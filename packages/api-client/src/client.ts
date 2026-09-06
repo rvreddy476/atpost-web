@@ -195,7 +195,18 @@ api.interceptors.response.use(
                 return api(originalRequest)
             }
 
-            clearExpiredTokens()
+            // The refresh was REFUSED, not merely unreachable — this session is
+            // dead and will never authenticate again. Clearing only the tokens
+            // and keeping the user record, as this did, leaves the app believing
+            // someone is signed in with nothing to sign in WITH: every request
+            // 401s, and any screen that refetches on error loops for ever. The
+            // shop's bag did exactly that, several times a second, indefinitely.
+            //
+            // `unavailable` still keeps the record: a server that is down is not
+            // a session that has ended, and signing someone out over a blip is
+            // the thing the old comment was rightly protecting against.
+            if (result === "invalid") clearStoredAuth()
+            else clearExpiredTokens()
         } else if (error.response?.status === 401) {
             clearExpiredTokens()
         }

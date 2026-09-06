@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import api from '@atpost/api-client'
+import api, { getCurrentUserId } from '@atpost/api-client'
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -449,10 +450,61 @@ export function useReturn(returnId: string | undefined) {
 
 // ── Cart ──────────────────────────────────────────────────────────────
 
+/**
+ * A 401 means the shopper is signed out, not that something broke.
+ *
+ * Worth telling apart everywhere it can happen: treated as an ordinary
+ * failure, a signed-out bag retries and then blames itself, when the honest
+ * answer is "sign in and it is still there".
+ */
+export function isSignedOut(error: unknown): boolean {
+  return (error as { response?: { status?: number } } | undefined)?.response?.status === 401
+}
+
+/**
+ * Is there a signed-in shopper at all?
+ *
+ * Read at call time rather than held in state: the session is written to
+ * storage by the login flow, which may live in a different zone.
+ */
+/**
+ * Whether a shopper is signed in, resolved AFTER mount.
+ *
+ * The session lives in localStorage, which the server cannot see. Reading it
+ * during render therefore gives one answer on the server and another in the
+ * browser, and React treats that as a hydration mismatch — which on the shop's
+ * landing page left the whole tree suspended on "Loading the store…" and
+ * nothing rendered at all. So it starts as "unknown" and settles in an effect,
+ * which is the only honest sequence.
+ */
+export function useSession(): { signedIn: boolean; known: boolean } {
+  const [signedIn, setSignedIn] = useState<boolean | null>(null)
+  useEffect(() => {
+    const read = () => setSignedIn(!!getCurrentUserId())
+    read()
+    // The client clears a dead session from inside an interceptor, so the
+    // change arrives as an event rather than a render. Without listening, a
+    // shopper whose session just expired keeps seeing a signed-in shell.
+    window.addEventListener('postbook:session-changed', read)
+    return () => window.removeEventListener('postbook:session-changed', read)
+  }, [])
+  return { signedIn: signedIn === true, known: signedIn !== null }
+}
+
 export function useCart() {
+  const { signedIn, known } = useSession()
   return useQuery<CartSummary>({
     queryKey: ['commerce', 'cart'],
     queryFn: async () => (await api.get('/v1/commerce/cart')).data.data,
+    // A signed-out shopper has no bag to fetch, so do not ask.
+    //
+    // Not an optimisation. An errored query is always stale, so it refetches
+    // on every mount — and the cart page's loading and error branches mount
+    // the header differently, so each 401 re-rendered the tree, remounted the
+    // header and fired another request. The page sat on "Preparing your bag…"
+    // for ever while calling the API about three times a second. Not asking
+    // breaks that at its source.
+    enabled: known && signedIn,
   })
 }
 
@@ -490,6 +542,17 @@ export function useAddToCart() {
     mutationFn: async (input: { variant_id: string; quantity: number }) =>
       (await api.post('/v1/commerce/cart/items', input)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['commerce', 'cart'] }),
+    // Without this the rejection was unhandled: a signed-out shopper pressed
+    // Add and NOTHING happened — no message, no sign-in, just a button that
+    // did not work. Adding to a bag is the one thing this page exists for, so
+    // it takes them where they can finish, and comes back to where they were.
+    onError: (error) => {
+      if (typeof window === 'undefined') return
+      if (isSignedOut(error)) {
+        const back = window.location.pathname + window.location.search
+        window.location.assign(`/login?redirect=${encodeURIComponent(back)}`)
+      }
+    },
   })
 }
 
@@ -1507,3 +1570,4 @@ export function useExecuteBulkImport() {
     },
   })
 }
+

@@ -8,10 +8,11 @@ import { StoreFooter } from '@/components/StoreFooter'
 import { ProductPhoto } from '@/components/commerce/ProductPhoto'
 import { inr } from '@/components/commerce/ProductGrid'
 import { productImage } from '@/lib/media'
-import { useCart, useCouponPreview, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
+import { isSignedOut, useCart, useCouponPreview, useRemoveFromCart, useSession, useUpdateCartItem } from '@/hooks/useCommerce'
 
 export default function CartPage() {
   const { data: cart, isLoading, error } = useCart()
+  const session = useSession()
   const remove = useRemoveFromCart()
   const update = useUpdateCartItem()
   const [couponDraft, setCouponDraft] = useState('')
@@ -19,7 +20,24 @@ export default function CartPage() {
   const couponPreview = useCouponPreview(appliedCoupon)
   const isChanging = remove.isPending || update.isPending
 
+  if ((session.known && !session.signedIn) || isSignedOut(error)) return (
+    <div className="flex min-h-screen flex-col">
+      <StoreHeader />
+      <main className="empty-vbag flex-1">
+        <div className="empty-vbag-mark"><ShoppingBag size={32} aria-hidden="true" /></div>
+        <span className="shop-eyebrow">Your bag</span>
+        <h1>Sign in to see<br />what you saved.</h1>
+        <p>Your bag is kept with your account, so it is waiting on the other side.</p>
+        <Link href="/login?redirect=/shop/cart" className="btn btn-gold btn-lg mt-8">
+          Sign in <ArrowRight size={17} aria-hidden="true" />
+        </Link>
+      </main>
+      <StoreFooter />
+    </div>
+  )
   if (isLoading) return <><StoreHeader /><div className="cart-state"><span className="cart-loader" />Preparing your bag…</div></>
+  // Signed out is not an error. The bag is still there; it just needs a
+  // session to read it, and saying so with a way in beats an apology.
   if (error) return <><StoreHeader /><div className="cart-state cart-state-error">Your bag could not be loaded. Please try again.</div></>
   if (!cart || cart.ItemCount === 0) return (
     <div className="flex min-h-screen flex-col">
