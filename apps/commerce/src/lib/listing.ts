@@ -6,6 +6,7 @@
 // mounting a form.
 
 import type { AttributeValueMap } from "@atpost/types/commerce"
+import type { VariationProblem } from "./variation"
 
 // ── The gateway's error envelope ────────────────────────────────
 
@@ -66,6 +67,38 @@ export function attributeErrorsFrom(
     }
   }
   return map
+}
+
+/**
+ * `422 VARIATION_INVALID` → every complaint about the matrix, in the order the
+ * server made them. Null for any other failure, so the caller keeps falling
+ * through its `catch` exactly as it does for the attribute 422 above.
+ *
+ * `details.problems` is `[{variant, code, reason}]` and carries EVERY problem,
+ * for the same reason the attribute errors do: a seller with a six-cell grid
+ * and three mistakes should not need three round trips to learn about all
+ * three. `variant` names the row by SKU where there is one and by position
+ * ("variant 3") on a create, where the variants have no ids yet;
+ * `problemsOntoRows` in ./variation is what turns that into a message under
+ * the row it belongs to.
+ */
+export function variationProblemsFrom(err: unknown): VariationProblem[] | null {
+  const { status, code, details } = envelope(err)
+  if (status !== 422 || code !== "VARIATION_INVALID") return null
+  const raw = details.problems
+  if (!Array.isArray(raw)) return []
+  const out: VariationProblem[] = []
+  for (const entry of raw) {
+    const row = entry as { variant?: unknown; code?: unknown; reason?: unknown }
+    const reason = typeof row.reason === "string" && row.reason !== "" ? row.reason : ""
+    if (reason === "") continue
+    out.push({
+      variant: typeof row.variant === "string" ? row.variant : undefined,
+      code: typeof row.code === "string" && row.code !== "" ? row.code : undefined,
+      reason,
+    })
+  }
+  return out
 }
 
 /**
@@ -194,4 +227,73 @@ export function clearScratch(categoryId: string): void {
   } catch {
     /* see writeScratch */
   }
+}
+
+// ── Seeding the form from an existing listing ───────────────────
+
+/**
+ * The product's own columns, as the built-in fields hold them.
+ *
+ * Only the four the form owns. Everything else on the product row is either
+ * not editable here or not patchable at all, and seeding a field the form
+ * cannot show would put it in the next PATCH body unchanged — which is how a
+ * form quietly starts writing values nobody looked at.
+ */
+export function basicsFromProduct(product: Record<string, unknown>): {
+  title: string
+  description: string
+  returnPolicy: string
+  taxClassId: string
+} {
+  const s = (v: unknown) => (typeof v === "string" ? v : "")
+  return {
+    title: s(product.title),
+    description: s(product.description),
+    returnPolicy: s(product.return_policy_type),
+    taxClassId: s(product.tax_class_id),
+  }
+}
+
+/**
+ * The stored answers, back into the form's tagged-union working state.
+ *
+ * The server sends `{code, data_type, value, unit_code}` — the same codes the
+ * schema served — so each answer is re-tagged with the type the definition
+ * declares rather than guessed from the value's JSON shape. An answer whose
+ * type this build does not know is carried as `unknown`, exactly as the
+ * renderer expects, so editing a listing never drops a field the seller
+ * cannot see.
+ */
+export function attributeValuesFromProduct(
+  rows: Array<{ code?: string; data_type?: string; value?: unknown; unit_code?: string }>,
+): AttributeValueMap {
+  const out: AttributeValueMap = {}
+  for (const row of rows) {
+    const code = typeof row.code === "string" ? row.code : ""
+    if (!code || row.value === null || row.value === undefined) continue
+    const type = typeof row.data_type === "string" ? row.data_type : ""
+    switch (type) {
+      case "measure":
+        out[code] = { type: "measure", value: String(row.value), unit: row.unit_code ?? "" }
+        break
+      case "decimal":
+        out[code] = { type: "decimal", value: String(row.value) }
+        break
+      case "text":
+      case "long_text":
+      case "integer":
+      case "money_minor":
+      case "boolean":
+      case "enum":
+      case "multi_enum":
+      case "date":
+      case "media":
+      case "gtin":
+        out[code] = { type, value: row.value } as AttributeValueMap[string]
+        break
+      default:
+        out[code] = { type: "unknown", data_type: type, value: row.value }
+    }
+  }
+  return out
 }

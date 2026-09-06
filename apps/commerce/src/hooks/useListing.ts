@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import api from "@atpost/api-client"
 import type { AttributeSchema, AttributeScope, Category } from "@atpost/types/commerce"
 import type { AttributeWireValue } from "@/lib/listing"
+import type { VariantCreateWire, VariantOptionsWire, VariationAxisWire } from "@/lib/variation"
 import type { CreateProductPayload } from "./useSellerDashboard"
 
 /** The public catalogue routes. A seller browsing categories is not yet authenticated. */
@@ -104,13 +105,38 @@ export function useTaxClasses() {
 
 // ── Create and patch ────────────────────────────────────────────
 
-export type ListingCreatePayload = CreateProductPayload & {
+export type ListingCreatePayload = Omit<CreateProductPayload, "variants"> & {
+  /**
+   * One entry per variant.
+   *
+   * A product with no axes sends exactly one, in the rupee shape it has always
+   * sent — unchanged, so nothing that lists today starts failing. A product
+   * with axes sends one per combination in integer paise. The same route takes
+   * both: `*_minor` wins wherever it is present, and rupee floats are the
+   * fallback the pre-minor clients still use.
+   */
+  variants: Array<CreateProductPayload["variants"][number] | VariantCreateWire>
   status?: "draft"
   /** `[{code, value, unit_code?}]` — the shape both write routes take. */
   attributes?: AttributeWireValue[]
+  /**
+   * `[{code}]` in axis order, and ONLY on a product that varies.
+   *
+   * The server reads `variants` as a matrix only when this key is present, so
+   * a listing with no axes must not send it at all — an empty array is a
+   * request to CLEAR the matrix, not a way of saying "no matrix here".
+   */
+  variation_axes?: VariationAxisWire[]
 }
 
 export type ListingPatchPayload = Partial<Omit<ListingCreatePayload, "variants">> & {
+  /**
+   * The matrix half of a patch: every existing variant, by id, with its value
+   * on each axis — and every one of them, because a matrix change replaces the
+   * whole picture. Travels only alongside `variation_axes`; on its own the
+   * server refuses it by name rather than guess which half was meant.
+   */
+  variants?: VariantOptionsWire[]
   /**
    * Only ever true on a SECOND attempt, after the seller has read what a
    * revalidation costs and said yes. Sending it on the first try would hide the
@@ -146,5 +172,41 @@ export function usePatchListing() {
       return unwrap<CreatedListing>(res.data)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["seller", "products"] }),
+  })
+}
+
+/**
+ * An existing listing, for the edit path.
+ *
+ * Without this the guided form opened `?product=<id>` with empty state and
+ * PATCHed it straight back — `{"title":"", "tax_class_id":"", …}` over a real
+ * seller's listing. The matrix was already seeded from the variants; the
+ * built-in fields and the attribute answers were not, so the edit silently
+ * erased everything the schema-driven half of the form owns.
+ *
+ * `GET /v1/commerce/products/:id` returns `{product, variants, attributes,
+ * media}` — the product's own columns and its answers side by side, which is
+ * exactly the two things that were missing.
+ */
+export function useExistingListing(productId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["listing", "existing", productId],
+    enabled: !!productId,
+    // The seller is editing: a cached copy from before their last save would
+    // seed the form with values they have already changed.
+    staleTime: 0,
+    queryFn: async () => {
+      const res = await api.get(`/v1/commerce/products/${productId}`)
+      const d = (res.data as { data?: unknown }).data as
+        | {
+            product?: Record<string, unknown>
+            attributes?: Array<{ code?: string; data_type?: string; value?: unknown; unit_code?: string }>
+          }
+        | undefined
+      return {
+        product: d?.product ?? {},
+        attributes: Array.isArray(d?.attributes) ? d.attributes : [],
+      }
+    },
   })
 }

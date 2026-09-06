@@ -43,8 +43,19 @@ export function basicsProgress(basics: ListingBasics): { filledRequired: number;
   return { filledRequired: required.filter(Boolean).length, totalRequired: required.length }
 }
 
-export function offerProgress(offer: ListingOfferDetails): { filledRequired: number; totalRequired: number } {
-  const required = [offer.sku.trim(), offer.mrp.trim(), offer.price.trim()]
+/**
+ * In "stem" mode only the SKU counts: the money is per row in the grid, and
+ * counting a price the seller is never asked for would leave the tab badge
+ * permanently short of its total.
+ */
+export function offerProgress(
+  offer: ListingOfferDetails,
+  mode: "single" | "stem" = "single",
+): { filledRequired: number; totalRequired: number } {
+  const required =
+    mode === "stem"
+      ? [offer.sku.trim()]
+      : [offer.sku.trim(), offer.mrp.trim(), offer.price.trim()]
   return { filledRequired: required.filter(Boolean).length, totalRequired: required.length }
 }
 
@@ -116,12 +127,26 @@ export function BasicsFields({
   )
 }
 
+/**
+ * The seller's own SKU, price and stock — in one of two modes, and the
+ * difference between them is the whole variation feature.
+ *
+ *   "single"  the four fields exactly as they have always been: one SKU, one
+ *             price, one stock count, for a product that comes one way.
+ *   "stem"    the SKU alone, as the stem each row of the variant grid is
+ *             suggested from. MRP, price and stock are gone because they now
+ *             live per row — a product-level price beside a grid of per-row
+ *             prices would leave the seller guessing which one a buyer is
+ *             charged, and only one of the two is ever sent.
+ */
 export function OfferFields({
   value,
   onChange,
+  mode = "single",
 }: {
   value: ListingOfferDetails
   onChange: (next: ListingOfferDetails) => void
+  mode?: "single" | "stem"
 }) {
   const set = <K extends keyof ListingOfferDetails>(key: K, next: ListingOfferDetails[K]) =>
     onChange({ ...value, [key]: next })
@@ -130,14 +155,22 @@ export function OfferFields({
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="flex flex-col gap-1 sm:col-span-2">
         <label htmlFor="listing-sku" className="text-sm font-medium text-brand-text">
-          SKU
+          {mode === "stem" ? "SKU stem" : "SKU"}
           <span aria-hidden="true" className="ml-0.5 text-red-500">
             *
           </span>
         </label>
         <Input id="listing-sku" value={value.sku} onChange={(e) => set("sku", e.target.value)} />
+        {mode === "stem" && (
+          <p className="text-xs text-gray-500">
+            Every row of the grid starts from this — TEE becomes TEE-M-BLUE — and each one stays
+            editable.
+          </p>
+        )}
       </div>
 
+      {mode === "stem" ? null : (
+        <>
       <div className="flex flex-col gap-1">
         <label htmlFor="listing-mrp" className="text-sm font-medium text-brand-text">
           MRP
@@ -179,6 +212,8 @@ export function OfferFields({
           onChange={(e) => set("stock", e.target.value)}
         />
       </div>
+        </>
+      )}
     </div>
   )
 }

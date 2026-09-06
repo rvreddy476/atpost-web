@@ -350,15 +350,13 @@ test('a 422 puts each refused answer under its own field', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Submit for review' }).click()
 
-  // Rupees went out as integer minor units.
   await expect.poll(() => state.createdBody()).not.toBeNull()
+  // Rupees went out as integer minor units.
   const body = state.createdBody() as {
     status?: string
-    attribute_schema_version?: number
-    attribute_values?: Record<string, { type: string; value: unknown }>
+    attributes?: Array<{ code: string; value: unknown; unit_code?: string }>
   }
-  expect(body.attribute_values?.list_price).toMatchObject({ type: 'money_minor', value: 129900 })
-  expect(body.attribute_schema_version).toBe(4)
+  expect(body.attributes?.find((a) => a.code === 'list_price')?.value).toBe(129900)
   expect(body.status).toBe('draft')
 
   // Each refusal lands under the control it belongs to, not in one banner.

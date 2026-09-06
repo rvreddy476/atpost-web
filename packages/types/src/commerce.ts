@@ -219,9 +219,20 @@ export type AttributeScope = 'item' | 'offer'
 
 export interface AttributeEnumValue {
   value: string
+  /**
+   * The same identity under the name the schema endpoint actually serves it
+   * by. `GET …/attribute-schema` sends an option as `{code, label,
+   * swatch_hex}`; this type has always called that field `value`. Both are
+   * declared so a reader can take `value || code` — which matters most on a
+   * variation axis, where what travels must be the option's own code and a
+   * server sent anything else refuses it by design.
+   */
+  code?: string
   label: string
   sort_order?: number
   is_active?: boolean
+  /** Hex swatch for a colour-like option list; absent or null everywhere else. */
+  swatch_hex?: string | null
 }
 
 export interface AttributeUnit {

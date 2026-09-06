@@ -55,7 +55,11 @@ function allowedOptions(def: AttributeDefinition): string[] | null {
   // No inline list means the options live behind `lookup_endpoint`; membership
   // is the server's call and guessing here would reject a legitimate choice.
   if (!def.values || def.values.length === 0) return null
-  return def.values.map((v) => v.value)
+  // `value || code`: the schema endpoint serves an option's identity as `code`
+  // and this type has always called it `value`. Reading only one of the two
+  // builds an allowed-list of `undefined`, and then refuses the seller's own
+  // pick with "a choice that is no longer offered".
+  return def.values.map((v) => v.value || v.code || '').filter((v) => v !== '')
 }
 
 function textError(def: AttributeDefinition, text: string): FieldError | null {

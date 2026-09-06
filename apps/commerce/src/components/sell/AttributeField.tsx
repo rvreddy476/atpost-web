@@ -55,10 +55,22 @@ export interface AttributeFieldProps {
   error: string | null
 }
 
+/**
+ * The option list, reading an option's identity under both the names the
+ * catalogue uses for it.
+ *
+ * `GET …/attribute-schema` serves an option as `{code, label, swatch_hex}`;
+ * this build's type has always called that field `value`. Reading only `value`
+ * against the real endpoint builds a <select> whose every option carries
+ * `undefined` — the control looks right, the seller picks "Blue", and nothing
+ * is sent. Same rule as lib/variation.ts's optionCode, and for the same
+ * reason: what travels has to be the option's own code.
+ */
 function optionsFor(def: AttributeDefinition) {
   return (def.values ?? [])
     .filter((v) => v.is_active !== false)
-    .map((v) => ({ value: v.value, label: v.label }))
+    .map((v) => ({ value: v.value || v.code || "", label: v.label }))
+    .filter((o) => o.value !== "")
 }
 
 /** One attribute definition → one control. */

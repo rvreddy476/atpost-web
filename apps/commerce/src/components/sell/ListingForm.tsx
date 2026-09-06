@@ -15,9 +15,29 @@ import type {
 import { emptyValueFor, fieldErrorMessage, groupProgress, zodForSchema } from "@atpost/form"
 import { Button, Tabs } from "@atpost/ui"
 import type { ListingCreatePayload } from "@/hooks/useListing"
-import { useTaxClasses } from "@/hooks/useListing"
-import { readScratch, toAttributePayload, writeScratch } from "@/lib/listing"
+import { useExistingListing, useTaxClasses } from "@/hooks/useListing"
+import { useProductVariants } from "@/hooks/useSellerDashboard"
+import {
+  attributeValuesFromProduct,
+  basicsFromProduct,
+  readScratch,
+  toAttributePayload,
+  writeScratch,
+} from "@/lib/listing"
+import {
+  axesPayload,
+  axisCandidates,
+  createVariantsPayload,
+  emptyMatrix,
+  localProblems,
+  matrixFromVariants,
+  matrixRows,
+  type MatrixRow,
+  type MatrixState,
+  type RowProblems,
+} from "@/lib/variation"
 import { AttributeField } from "./AttributeField"
+import { VariationMatrix } from "./VariationMatrix"
 import {
   BasicsFields,
   OfferFields,
@@ -103,12 +123,25 @@ function FallbackForm({
   )
   const [attempted, setAttempted] = useState(false)
 
+  // Same hazard as the schema form: ?product=<id> used to open empty and
+  // PATCH that emptiness over a real listing. Blocked until it arrives.
+  const existing = useExistingListing(initialProductId)
+  const [loadedExisting, setLoadedExisting] = useState(!initialProductId)
+  useEffect(() => {
+    if (loadedExisting || !existing.data) return
+    setBasics(basicsFromProduct(existing.data.product))
+    setLoadedExisting(true)
+  }, [loadedExisting, existing.data])
+
   useEffect(() => {
     if (draft.productId) return
     writeScratch(category.id, { basics, offer })
   }, [category.id, basics, offer, draft.productId])
 
-  const missing = builtInGaps(basics, offer)
+  // No schema means no attribute definitions, so nothing in this category can
+  // be a variation axis: the fallback stays exactly the single-variant form it
+  // has always been.
+  const missing = builtInGaps(basics, offer, null)
   const body = () => buildBody({ category, schema: null, basics, offer, attributes: {} })
 
   return (
@@ -143,6 +176,7 @@ function FallbackForm({
         draft={draft}
         missing={attempted ? missing : []}
         onSave={() => void draft.save(body())}
+        loading={!loadedExisting}
         onSubmit={() => {
           setAttempted(true)
           if (missing.length > 0) return
@@ -184,6 +218,49 @@ function SchemaListingForm({
   const [tab, setTab] = useState(BASICS_TAB)
   const [attempted, setAttempted] = useState(false)
 
+  // ── Editing an existing listing ───────────────────────────────
+  //
+  // Opened with ?product=<id> this form used to start empty and PATCH that
+  // emptiness straight back over the seller's listing. The grid was seeded
+  // from the variants; the built-in fields and the attribute answers were
+  // not, so an edit erased the title, the tax class and every answer the
+  // schema half of the form owns.
+  //
+  // Saving is blocked until this has arrived. A form that lets someone type
+  // into fields it is about to overwrite is worse than one that makes them
+  // wait a moment.
+  const existing = useExistingListing(initialProductId)
+  const [loadedExisting, setLoadedExisting] = useState(!initialProductId)
+  useEffect(() => {
+    if (loadedExisting || !existing.data) return
+    setBasics(basicsFromProduct(existing.data.product))
+    setLoadedExisting(true)
+  }, [loadedExisting, existing.data])
+
+  // ── The variant grid ──────────────────────────────────────────
+  const candidates = useMemo(() => axisCandidates(schema), [schema])
+  const [matrix, setMatrix] = useState<MatrixState>(
+    () => (scratch?.values.matrix as MatrixState | undefined) ?? emptyMatrix,
+  )
+  // An edit needs the product's current axes and variants. There is no read
+  // that returns axis CODES, so they are reconstructed from the variant rows —
+  // see matrixFromVariants for exactly what is being matched against what.
+  const existingVariants = useProductVariants(draft.productId ?? undefined)
+  const [seeded, setSeeded] = useState(false)
+  useEffect(() => {
+    if (seeded || !draft.productId || !existingVariants.data) return
+    const loaded = matrixFromVariants(candidates, existingVariants.data)
+    setSeeded(true)
+    if (loaded) setMatrix(loaded)
+  }, [seeded, draft.productId, existingVariants.data, candidates])
+
+  const rows = useMemo(() => matrixRows(matrix, offer.sku), [matrix, offer.sku])
+  const varying = matrix.axes.length > 0
+  const gridProblems: RowProblems = useMemo(
+    () => mergeRowProblems(varying ? localProblems(rows) : {}, draft.variantErrors),
+    [varying, rows, draft.variantErrors],
+  )
+
   const defaults = useMemo(
     () => initialAttributeValues(schema, scratch?.values.attributes as AttributeValueMap | undefined),
     [schema, scratch],
@@ -196,19 +273,30 @@ function SchemaListingForm({
     control,
     getValues,
     handleSubmit,
+    reset,
     watch,
     formState: { errors },
   } = useForm<Record<string, unknown>>({ resolver, defaultValues: defaults, mode: "onSubmit" })
+
+  // The stored answers, once. react-hook-form reads defaultValues only on
+  // first render, so an edit's values have to arrive through reset — and
+  // only once, or every keystroke would be undone by the next render.
+  const [seededAnswers, setSeededAnswers] = useState(!initialProductId)
+  useEffect(() => {
+    if (seededAnswers || !existing.data) return
+    setSeededAnswers(true)
+    reset({ ...defaults, ...attributeValuesFromProduct(existing.data.attributes) })
+  }, [seededAnswers, existing.data, defaults, reset])
 
   const values = watch() as AttributeValueMap
 
   useEffect(() => {
     if (draft.productId) return
-    writeScratch(category.id, { basics, offer, attributes: values })
+    writeScratch(category.id, { basics, offer, attributes: values, matrix })
     // `values` is a fresh object every render; keying on its JSON keeps this to
     // the keystrokes that actually changed something.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category.id, basics, offer, JSON.stringify(values), draft.productId])
+  }, [category.id, basics, offer, JSON.stringify(values), JSON.stringify(matrix), draft.productId])
 
   /** Local verdict first, the server's rejection on top of it — the server's wins. */
   function errorFor(def: AttributeDefinition): string | null {
@@ -223,9 +311,19 @@ function SchemaListingForm({
     return attributes.some((def) => !!errorFor(def))
   }
 
-  const missing = builtInGaps(basics, offer)
+  const missing = builtInGaps(basics, offer, varying ? { rows, problems: gridProblems } : null)
   const body = () =>
-    buildBody({ category, schema, basics, offer, attributes: getValues() as AttributeValueMap })
+    buildBody({
+      category,
+      schema,
+      basics,
+      offer,
+      attributes: getValues() as AttributeValueMap,
+      axes: matrix.axes,
+      rows,
+    })
+  /** The grid as the save path needs it — every row, ids and all. See MatrixSave. */
+  const matrixArg = () => (varying ? { axes: matrix.axes, rows } : undefined)
 
   const tabs = [
     {
@@ -245,7 +343,12 @@ function SchemaListingForm({
     {
       id: OFFER_TAB,
       label: "Offer",
-      badge: badge(combine(offerProgress(offer), groupProgress(asGroup(offerAttributes), values))),
+      badge: badge(
+        combine(
+          offerProgress(offer, varying ? "stem" : "single"),
+          groupProgress(asGroup(offerAttributes), values),
+        ),
+      ),
       invalid:
         (attempted && missing.some((m) => m.tab === OFFER_TAB)) || groupIsInvalid(offerAttributes),
     },
@@ -255,7 +358,10 @@ function SchemaListingForm({
     tab === BASICS_TAB
       ? basicsProgress(basics)
       : tab === OFFER_TAB
-        ? combine(offerProgress(offer), groupProgress(asGroup(offerAttributes), values))
+        ? combine(
+            offerProgress(offer, varying ? "stem" : "single"),
+            groupProgress(asGroup(offerAttributes), values),
+          )
         : groupProgress(itemGroups.find((g) => g.name === tab) ?? asGroup([]), values)
 
   const activeGroup = itemGroups.find((group) => group.name === tab)
@@ -274,7 +380,7 @@ function SchemaListingForm({
             setTab(missing[0].tab)
             return
           }
-          void draft.submitForReview(body())
+          void draft.submitForReview(body(), matrixArg())
         },
         () => {
           setAttempted(true)
@@ -325,7 +431,19 @@ function SchemaListingForm({
           {tab === OFFER_TAB && (
             <div className="flex flex-col gap-4">
               <p className="text-xs text-gray-500">{OFFER_LINE}</p>
-              <OfferFields value={offer} onChange={setOffer} />
+              {/* The SKU/price block narrows to a stem the moment the grid is
+                  on: the money is per row from then on, and one product-level
+                  price beside twelve row prices is a question nobody can
+                  answer. */}
+              <OfferFields value={offer} onChange={setOffer} mode={varying ? "stem" : "single"} />
+              <VariationMatrix
+                candidates={candidates}
+                value={matrix}
+                onChange={setMatrix}
+                stem={offer.sku}
+                problems={attempted || Object.keys(draft.variantErrors).length > 0 ? gridProblems : {}}
+                editing={!!draft.productId}
+              />
               {offerAttributes.map((def) => (
                 <AttributeControl
                   key={def.code}
@@ -343,7 +461,8 @@ function SchemaListingForm({
       <SaveBar
         draft={draft}
         missing={attempted ? missing : []}
-        onSave={() => void draft.save(body())}
+        onSave={() => void draft.save(body(), matrixArg())}
+        loading={!loadedExisting || !seededAnswers}
         // Submit is the form's own event so the resolver runs first.
         submitIsFormEvent
       />
@@ -396,12 +515,16 @@ function SaveBar({
   onSave,
   onSubmit,
   submitIsFormEvent,
+  loading,
 }: {
   draft: ListingDraft
   missing: BuiltInGap[]
   onSave: () => void
   onSubmit?: () => void
   submitIsFormEvent?: boolean
+  /** An edit whose current values have not arrived yet. Saving now would
+   * write the empty form over them. */
+  loading?: boolean
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -420,12 +543,12 @@ function SaveBar({
       {draft.revalidation && <RevalidationPanel prompt={draft.revalidation} />}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" disabled={draft.saving} onClick={onSave}>
-          {draft.saving ? "Saving…" : "Save draft"}
+        <Button type="button" variant="outline" disabled={draft.saving || loading} onClick={onSave}>
+          {draft.saving ? "Saving…" : loading ? "Loading…" : "Save draft"}
         </Button>
         <Button
           type={submitIsFormEvent ? "submit" : "button"}
-          disabled={draft.saving}
+          disabled={draft.saving || loading}
           onClick={submitIsFormEvent ? undefined : onSubmit}
         >
           Submit for review
@@ -490,14 +613,43 @@ interface BuiltInGap {
   label: string
 }
 
-function builtInGaps(basics: ListingBasics, offer: ListingOfferDetails): BuiltInGap[] {
+/**
+ * What is still missing, per tab.
+ *
+ * `grid` is null for a listing that does not vary, and then this asks exactly
+ * what it always has. When there IS a grid the product-level MRP and price are
+ * not asked for at all — they are per row — and what is checked instead is
+ * that the grid has a row to sell and that no row is missing a SKU or a price.
+ */
+function builtInGaps(
+  basics: ListingBasics,
+  offer: ListingOfferDetails,
+  grid: { rows: MatrixRow[]; problems: RowProblems } | null,
+): BuiltInGap[] {
   const gaps: BuiltInGap[] = []
   if (!basics.title.trim()) gaps.push({ tab: BASICS_TAB, label: "a title" })
   if (!basics.taxClassId.trim()) gaps.push({ tab: BASICS_TAB, label: "a tax class" })
-  if (!offer.sku.trim()) gaps.push({ tab: OFFER_TAB, label: "a SKU" })
-  if (!offer.mrp.trim()) gaps.push({ tab: OFFER_TAB, label: "an MRP" })
-  if (!offer.price.trim()) gaps.push({ tab: OFFER_TAB, label: "a selling price" })
+  if (!offer.sku.trim()) gaps.push({ tab: OFFER_TAB, label: grid ? "a SKU stem" : "a SKU" })
+  if (!grid) {
+    if (!offer.mrp.trim()) gaps.push({ tab: OFFER_TAB, label: "an MRP" })
+    if (!offer.price.trim()) gaps.push({ tab: OFFER_TAB, label: "a selling price" })
+    return gaps
+  }
+  if (grid.rows.filter((row) => row.included && !row.stranded).length === 0)
+    gaps.push({ tab: OFFER_TAB, label: "at least one combination to sell" })
+  if (Object.keys(grid.problems).length > 0)
+    gaps.push({ tab: OFFER_TAB, label: "the rows marked in the grid" })
   return gaps
+}
+
+/** Two verdicts about the same row, kept as one list. The server's go last. */
+function mergeRowProblems(local: RowProblems, fromServer: RowProblems): RowProblems {
+  const out: RowProblems = {}
+  for (const [key, messages] of Object.entries(local)) out[key] = [...messages]
+  for (const [key, messages] of Object.entries(fromServer)) {
+    out[key] = [...(out[key] ?? []), ...messages.filter((m) => !(out[key] ?? []).includes(m))]
+  }
+  return out
 }
 
 function badge(progress: { filledRequired: number; totalRequired: number }): string {
@@ -572,12 +724,17 @@ function buildBody({
   basics,
   offer,
   attributes,
+  axes = [],
+  rows = [],
 }: {
   category: Category
   schema: AttributeSchema | null
   basics: ListingBasics
   offer: ListingOfferDetails
   attributes: AttributeValueMap
+  /** Axis codes in order. Empty for a listing that does not vary. */
+  axes?: string[]
+  rows?: MatrixRow[]
 }): ListingCreatePayload {
   const days = basics.returnPolicy === "no_return" ? 0 : Number(basics.returnPolicy.split("_")[0])
   return {
@@ -589,14 +746,26 @@ function buildBody({
     condition: "new",
     return_policy_type: basics.returnPolicy,
     return_policy_days: Number.isFinite(days) ? days : 0,
-    variants: [
-      {
-        sku: offer.sku.trim(),
-        mrp: Number(offer.mrp || 0),
-        selling_price: Number(offer.price || 0),
-        stock_qty: Number(offer.stock || 0),
-      },
-    ],
+    // A product with no axes sends what it has always sent: one variant, in
+    // rupees, and NO `variation_axes` key at all — the server reads the matrix
+    // only when that key is present, and an empty array would ask it to clear
+    // a matrix the listing never had.
+    //
+    // A product with axes sends one variant per combination in integer paise,
+    // each carrying its options as {code, value} where the value is the enum
+    // option's own code.
+    variants:
+      axes.length > 0
+        ? createVariantsPayload(axes, rows)
+        : [
+            {
+              sku: offer.sku.trim(),
+              mrp: Number(offer.mrp || 0),
+              selling_price: Number(offer.price || 0),
+              stock_qty: Number(offer.stock || 0),
+            },
+          ],
+    ...(axes.length > 0 ? { variation_axes: axesPayload(axes) } : {}),
     // The schema version is deliberately NOT sent. PATCH refuses any body key
     // outside its column allowlist plus attributes/revalidate/variation_axes/
     // variants, so an extra key fails the whole save with a 400 — and the
