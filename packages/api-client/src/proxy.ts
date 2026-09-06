@@ -11,6 +11,11 @@ const FORWARDED_HEADERS = [
     "content-type",
     "accept",
     "cookie",
+    // Conditional GETs. The category attribute-schema route is ETagged and the
+    // seller's listing form revalidates it on every category switch; without
+    // this the validator never reaches the gateway and every hit is a full
+    // payload the client already holds.
+    "if-none-match",
 ]
 
 export async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
@@ -58,6 +63,20 @@ export async function proxyRequest(req: NextRequest, { params }: { params: Promi
             { error: { code: timeout.aborted ? "UPSTREAM_TIMEOUT" : "UPSTREAM_UNAVAILABLE", message: "The service is temporarily unavailable." } },
             { status, headers: { "cache-control": "no-store", "x-request-id": requestId } },
         )
+    }
+
+    // 304 is a success for the caller, not an error: the client's cached copy is
+    // still good. It must also go back with no body at all — a null-body status
+    // carrying one is a TypeError, which is what made the old error branch turn
+    // a perfectly good revalidation into a 500.
+    if (upstream.status === 304) {
+        const notModified = new Headers({ "x-request-id": requestId })
+        const etag = upstream.headers.get("etag")
+        if (etag) notModified.set("etag", etag)
+        const cacheControl = upstream.headers.get("cache-control")
+        if (cacheControl) notModified.set("cache-control", cacheControl)
+        forwardSetCookies(upstream, notModified)
+        return new NextResponse(null, { status: 304, headers: notModified })
     }
 
     if (!upstream.ok) {

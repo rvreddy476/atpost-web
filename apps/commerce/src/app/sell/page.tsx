@@ -52,11 +52,22 @@ function MyProducts() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">My products</h1>
-        <Link href="/sell/products/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black">
-          + Add product
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The guided route asks the category first and then only what that
+              category needs. The plain one below it is unchanged and still the
+              fastest path for a seller who knows exactly what they are doing. */}
+          <Link
+            href="/sell/products/guided"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:border-gray-900"
+          >
+            Start from a category
+          </Link>
+          <Link href="/sell/products/new" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white hover:bg-black">
+            + Add product
+          </Link>
+        </div>
       </div>
       <Table
         loading={isLoading}
