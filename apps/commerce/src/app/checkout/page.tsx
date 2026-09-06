@@ -13,8 +13,11 @@ import {
   useMyOrganizations,
   useCheckoutQuote,
 } from '@/hooks/useCommerce'
+import { Building2, CreditCard, Lock, MapPin, Plus, ShieldCheck, ShoppingBag, Tag } from 'lucide-react'
 import { AddressForm } from '@/components/commerce/AddressForm'
 import { StoreHeader } from '@/components/StoreHeader'
+import { StoreFooter } from '@/components/StoreFooter'
+import { inr } from '@/components/commerce/ProductGrid'
 import { getCheckoutBlockReason } from '@/lib/checkout'
 import { completeOrderPayment } from '@/lib/orderPayment'
 
@@ -128,215 +131,225 @@ function CheckoutContent() {
   }
 
   if (!cart || cart.ItemCount === 0)
-    return <><StoreHeader /><div className="p-8 text-center">Your cart is empty. <Link href="/" className="text-indigo-600">Continue shopping</Link>.</div></>
+    return (
+      <div className="flex min-h-screen flex-col">
+        <StoreHeader />
+        <main className="empty-vbag flex-1">
+          <div className="empty-vbag-mark"><ShoppingBag size={32} aria-hidden="true" /></div>
+          <span className="shop-eyebrow">Checkout</span>
+          <h1>Your bag is empty.</h1>
+          <p>Add something you want before checking out.</p>
+          <Link href="/" className="btn btn-gold btn-lg mt-8">Continue shopping</Link>
+        </main>
+        <StoreFooter />
+      </div>
+    )
 
   return (
-    <><StoreHeader /><main className="mx-auto grid max-w-5xl grid-cols-1 gap-6 p-4 sm:p-6 lg:grid-cols-3">
-      <div className="lg:col-span-2 space-y-6">
-        <section className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="text-lg font-semibold mb-4">Shipping Address</h2>
-          {addrList.length > 0 ? (
-            <div className="space-y-2">
-              {addrList.map((a) => (
-                <label
-                  key={a.id}
-                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer ${
-                    selectedAddr === a.id ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200'
-                  }`}
+    <div className="flex min-h-screen flex-col">
+      <StoreHeader />
+      <main className="shop-page flex-1">
+        <nav aria-label="Breadcrumb" className="text-xs text-shop-faint">
+          <Link href="/" className="hover:text-shop-gold">Shop</Link>
+          <span aria-hidden="true"> / </span>
+          <Link href="/cart" className="hover:text-shop-gold">Bag</Link>
+          <span aria-hidden="true"> / </span>
+          <span className="text-shop-muted">Checkout</span>
+        </nav>
+        <h1 className="shop-display mt-4 text-3xl sm:text-[40px]">Checkout</h1>
+
+        <div className="mt-9 grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+          <div className="flex flex-col gap-6 lg:col-span-2">
+            <section className="panel panel-pad">
+              <h2 className="panel-heading"><MapPin size={19} className="text-shop-gold" aria-hidden="true" /> Delivery address</h2>
+              {addrList.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {addrList.map((a) => (
+                    <label key={a.id} className={`choice-row items-start ${selectedAddr === a.id ? 'is-selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="addr"
+                        className="mt-0.5"
+                        checked={selectedAddr === a.id}
+                        onChange={() => setSelectedAddr(a.id)}
+                      />
+                      <span className="flex-1 text-sm">
+                        <span className="block font-semibold text-shop-ink">{a.contact_name} · {a.phone}</span>
+                        <span className="mt-1 block text-shop-muted">
+                          {a.address_line_1}
+                          {a.address_line_2 ? `, ${a.address_line_2}` : ''}, {a.city}, {a.state} {a.postal_code}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+
+              {!showAddForm ? (
+                <button type="button" onClick={() => setShowAddForm(true)} className="gold-link mt-4">
+                  <Plus size={15} aria-hidden="true" /> Add a new address
+                </button>
+              ) : (
+                <div className="mt-5">
+                  <AddressForm
+                    onSubmit={async (v) => {
+                      const created = await addAddress.mutateAsync(v)
+                      if (created?.id) setSelectedAddr(created.id)
+                      setShowAddForm(false)
+                    }}
+                    onCancel={() => setShowAddForm(false)}
+                  />
+                </div>
+              )}
+            </section>
+
+            {myOrgs.length > 0 && (
+              <section className="panel panel-pad">
+                <h2 className="panel-heading"><Building2 size={19} className="text-shop-gold" aria-hidden="true" /> Buying for</h2>
+                <p className="-mt-2 mb-4 text-xs text-shop-faint">
+                  Select an organization to bill the company, add PO / cost-center, or use credit terms.
+                </p>
+                <select
+                  value={selectedOrgId}
+                  onChange={(e) => setSelectedOrgId(e.target.value)}
+                  className="field"
+                  aria-label="Organization"
                 >
-                  <input
-                    type="radio"
-                    name="addr"
-                    checked={selectedAddr === a.id}
-                    onChange={() => setSelectedAddr(a.id)}
-                  />
-                  <div className="flex-1 text-sm">
-                    <div className="font-medium">
-                      {a.contact_name} · {a.phone}
-                    </div>
-                    <div className="text-gray-600">
-                      {a.address_line_1}
-                      {a.address_line_2 ? `, ${a.address_line_2}` : ''}, {a.city}, {a.state} {a.postal_code}
-                    </div>
+                  <option value="">Personal (no organization)</option>
+                  {myOrgs.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                      {o.gstin ? ` · GSTIN ${o.gstin}` : ''}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedOrg && (
+                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="field-label">PO number</span>
+                      <input value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="Purchase order ref" className="field" />
+                    </label>
+                    <label className="block">
+                      <span className="field-label">Cost center</span>
+                      <input value={costCenter} onChange={(e) => setCostCenter(e.target.value)} placeholder="Department or project" className="field" />
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="field-label">Invoice email (override)</span>
+                      <input
+                        type="email"
+                        value={invoiceEmail}
+                        onChange={(e) => setInvoiceEmail(e.target.value)}
+                        placeholder={selectedOrg.billing_email ?? 'finance@company.com'}
+                        className="field"
+                      />
+                    </label>
+                    {selectedOrg.approval_threshold && (
+                      <p className="notice notice-info sm:col-span-2">
+                        Orders of {inr(selectedOrg.approval_threshold)} or more require an approver sign-off before payment.
+                      </p>
+                    )}
+                    {creditAvailable && (
+                      <p className="notice notice-info sm:col-span-2">
+                        Credit terms: Net {selectedOrg.credit_terms_days} days available.
+                      </p>
+                    )}
                   </div>
-                </label>
-              ))}
-            </div>
-          ) : null}
-
-          {!showAddForm ? (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="mt-3 text-indigo-600 text-sm hover:underline"
-            >
-              + Add new address
-            </button>
-          ) : (
-            <div className="mt-4">
-              <AddressForm
-                onSubmit={async (v) => {
-                  const created = await addAddress.mutateAsync(v)
-                  if (created?.id) setSelectedAddr(created.id)
-                  setShowAddForm(false)
-                }}
-                onCancel={() => setShowAddForm(false)}
-              />
-            </div>
-          )}
-        </section>
-
-        {myOrgs.length > 0 && (
-          <section className="rounded-xl border border-gray-200 bg-white p-6">
-            <h2 className="text-lg font-semibold mb-1">Buying for</h2>
-            <p className="text-xs text-gray-500 mb-3">
-              Select an organization to bill the company, add PO / cost-center, or use credit terms.
-            </p>
-            <select
-              value={selectedOrgId}
-              onChange={(e) => setSelectedOrgId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            >
-              <option value="">Personal (no organization)</option>
-              {myOrgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                  {o.gstin ? ` · GSTIN ${o.gstin}` : ''}
-                </option>
-              ))}
-            </select>
-
-            {selectedOrg && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="block text-xs font-medium text-gray-600 mb-1">PO Number</span>
-                  <input
-                    value={poNumber}
-                    onChange={(e) => setPoNumber(e.target.value)}
-                    placeholder="Purchase order ref"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs font-medium text-gray-600 mb-1">Cost Center</span>
-                  <input
-                    value={costCenter}
-                    onChange={(e) => setCostCenter(e.target.value)}
-                    placeholder="Department or project"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="block sm:col-span-2">
-                  <span className="block text-xs font-medium text-gray-600 mb-1">
-                    Invoice Email (override)
-                  </span>
-                  <input
-                    type="email"
-                    value={invoiceEmail}
-                    onChange={(e) => setInvoiceEmail(e.target.value)}
-                    placeholder={selectedOrg.billing_email ?? 'finance@company.com'}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  />
-                </label>
-                {selectedOrg.approval_threshold && (
-                  <p className="text-xs text-amber-700 sm:col-span-2">
-                    ⚠ Orders ≥ ₹{selectedOrg.approval_threshold.toFixed(2)} require an approver
-                    sign-off before payment.
-                  </p>
                 )}
+              </section>
+            )}
+
+            <section className="panel panel-pad">
+              <h2 className="panel-heading"><CreditCard size={19} className="text-shop-gold" aria-hidden="true" /> Payment method</h2>
+              <div className="flex flex-col gap-2">
+                <label className={`choice-row ${paymentMethod === 'prepaid' ? 'is-selected' : ''}`}>
+                  <input type="radio" checked={paymentMethod === 'prepaid'} onChange={() => setPaymentMethod('prepaid')} />
+                  <span>Pay online <span className="text-shop-faint">— UPI, card or net banking</span></span>
+                </label>
+                <label className={`choice-row ${paymentMethod === 'cod' ? 'is-selected' : ''}`}>
+                  <input type="radio" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} />
+                  <span>Cash on delivery</span>
+                </label>
                 {creditAvailable && (
-                  <p className="text-xs text-blue-700 sm:col-span-2">
-                    Credit terms: Net {selectedOrg.credit_terms_days} days available.
-                  </p>
+                  <label className={`choice-row ${paymentMethod === 'credit' ? 'is-selected' : ''}`}>
+                    <input type="radio" checked={paymentMethod === 'credit'} onChange={() => setPaymentMethod('credit')} />
+                    <span>Pay on invoice <span className="text-shop-faint">— Net {selectedOrg!.credit_terms_days} days</span></span>
+                  </label>
                 )}
               </div>
-            )}
-          </section>
-        )}
-
-        <section className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="text-lg font-semibold mb-4">Payment Method</h2>
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer">
-            <input type="radio" checked={paymentMethod === 'prepaid'}
-              onChange={() => setPaymentMethod('prepaid')} />
-            <span>Pay online (UPI / Card / Net Banking)</span>
-          </label>
-          <label className="mt-2 flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer">
-            <input type="radio" checked={paymentMethod === 'cod'}
-              onChange={() => setPaymentMethod('cod')} />
-            <span>Cash on Delivery</span>
-          </label>
-          {creditAvailable && (
-            <label className="mt-2 flex items-center gap-3 p-3 rounded-lg border border-blue-200 bg-blue-50 cursor-pointer">
-              <input type="radio" checked={paymentMethod === 'credit'}
-                onChange={() => setPaymentMethod('credit')} />
-              <span>
-                Pay on invoice (Net {selectedOrg!.credit_terms_days} days)
-              </span>
-            </label>
-          )}
-        </section>
-      </div>
-
-      <aside className="rounded-xl border border-gray-200 bg-white p-6 h-fit sticky top-6">
-        <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
-        <div className="space-y-1 text-sm">
-          {cart.Items.map((ci) => (
-            <div key={ci.Item.id} className="flex justify-between">
-              <span>{ci.Product?.title ?? 'Product'} × {ci.Item.quantity}</span>
-              <span>₹{(ci.Item.price_snapshot * ci.Item.quantity).toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4">
-          <input placeholder="Coupon code" value={couponCode}
-            onChange={(e) => setCouponCode(e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm" />
-        </div>
-
-        <div className="mt-4 space-y-2 border-t pt-3 text-sm">
-          <div className="flex justify-between"><span>Subtotal</span><span>₹{(quote.data?.subtotal ?? cart.Subtotal).toFixed(2)}</span></div>
-          {!!quote.data?.coupon_discount && <div className="flex justify-between text-emerald-700"><span>Discount</span><span>−₹{quote.data.coupon_discount.toFixed(2)}</span></div>}
-          {!!quote.data?.shipping && <div className="flex justify-between"><span>Delivery</span><span>₹{quote.data.shipping.toFixed(2)}</span></div>}
-          {!!quote.data?.tax && <div className="flex justify-between"><span>Tax</span><span>₹{quote.data.tax.toFixed(2)}</span></div>}
-          <div className="flex justify-between border-t pt-2 text-base font-semibold"><span>Order total</span><span>₹{(quote.data?.grand_total ?? cart.Subtotal).toFixed(2)}</span></div>
-        </div>
-        {quote.isFetching && <p className="mt-2 text-xs text-gray-500">Updating price and delivery eligibility…</p>}
-        {quote.isError && <p className="mt-2 text-sm text-red-600">We could not validate the latest price and availability. Retry before placing your order.</p>}
-        {quote.data && !quote.data.serviceable && <p className="mt-2 text-sm text-red-600">Some items cannot be delivered to this address.</p>}
-        {quote.data && paymentMethod === 'cod' && !quote.data.cod_eligible && <p className="mt-2 text-sm text-red-600">Cash on delivery is not available for this order.</p>}
-        <button
-          disabled={checkoutBlockReason !== null}
-          onClick={place}
-          className="mt-4 w-full rounded-lg bg-indigo-600 text-white py-3 font-medium disabled:bg-gray-300 hover:bg-indigo-700"
-        >
-          {isProcessing
-            ? 'Processing…'
-            : paymentMethod === 'cod'
-              ? 'Place COD Order'
-              : paymentMethod === 'credit'
-                ? 'Place Credit Order'
-                : 'Pay & Place Order'}
-        </button>
-        {checkoutBlockReason && !isProcessing ? (
-          <p className="mt-2 text-xs text-gray-500">{checkoutBlockReason}</p>
-        ) : null}
-        {paymentError ? (
-          <div className="mt-2 text-sm text-red-600">{paymentError}</div>
-        ) : null}
-        {checkout.error && !paymentError ? (
-          <div className="mt-2 text-sm text-red-600">
-            {(checkout.error as Error).message}
+            </section>
           </div>
-        ) : null}
-      </aside>
-    </main></>
+
+          <aside className="vbag-summary lg:sticky lg:top-[150px]">
+            <span className="shop-eyebrow">Order summary</span>
+            <h2>{cart.ItemCount} {cart.ItemCount === 1 ? 'item' : 'items'}</h2>
+
+            <div className="mt-6 flex flex-col gap-2.5">
+              {cart.Items.map((ci) => (
+                <div key={ci.Item.id} className="flex justify-between gap-3 text-sm text-shop-muted">
+                  <span className="min-w-0 truncate">{ci.Product?.title ?? 'Product'} × {ci.Item.quantity}</span>
+                  <span className="whitespace-nowrap font-semibold text-shop-ink">{inr(ci.Item.price_snapshot * ci.Item.quantity)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="coupon-field">
+              <Tag size={16} aria-hidden="true" />
+              {/* Value passes through untouched — the quote endpoint sees the
+                  same string it did before this restyle. */}
+              <input placeholder="Coupon code" aria-label="Coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} />
+            </div>
+
+            <div className="summary-lines">
+              <div><span>Subtotal</span><strong>{inr(quote.data?.subtotal ?? cart.Subtotal)}</strong></div>
+              {!!quote.data?.coupon_discount && <div><span>Discount</span><strong className="is-saving">−{inr(quote.data.coupon_discount)}</strong></div>}
+              {!!quote.data?.shipping && <div><span>Delivery</span><strong>{inr(quote.data.shipping)}</strong></div>}
+              {!!quote.data?.tax && <div><span>Tax</span><strong>{inr(quote.data.tax)}</strong></div>}
+              <div className="summary-total">
+                <span>Order total<small>Inclusive of all taxes</small></span>
+                <strong>{inr(quote.data?.grand_total ?? cart.Subtotal)}</strong>
+              </div>
+            </div>
+
+            {quote.isFetching && <p className="mt-3 text-xs text-shop-faint">Updating price and delivery eligibility…</p>}
+            {quote.isError && <p className="notice notice-error mt-3">We could not validate the latest price and availability. Retry before placing your order.</p>}
+            {quote.data && !quote.data.serviceable && <p className="notice notice-error mt-3">Some items cannot be delivered to this address.</p>}
+            {quote.data && paymentMethod === 'cod' && !quote.data.cod_eligible && <p className="notice notice-error mt-3">Cash on delivery is not available for this order.</p>}
+
+            <button
+              type="button"
+              disabled={checkoutBlockReason !== null}
+              onClick={place}
+              className="btn btn-gold btn-block btn-lg mt-6"
+            >
+              <Lock size={16} aria-hidden="true" />
+              {isProcessing
+                ? 'Processing…'
+                : paymentMethod === 'cod'
+                  ? 'Place COD order'
+                  : paymentMethod === 'credit'
+                    ? 'Place credit order'
+                    : 'Pay & place order'}
+            </button>
+            {checkoutBlockReason && !isProcessing ? (
+              <p className="mt-3 text-xs text-shop-faint">{checkoutBlockReason}</p>
+            ) : null}
+            {paymentError ? <div className="notice notice-error mt-3">{paymentError}</div> : null}
+            {checkout.error && !paymentError ? (
+              <div className="notice notice-error mt-3">{(checkout.error as Error).message}</div>
+            ) : null}
+            <div className="summary-trust"><ShieldCheck size={15} aria-hidden="true" /> Payments are processed on a protected gateway</div>
+          </aside>
+        </div>
+      </main>
+      <StoreFooter />
+    </div>
   )
 }
 
 export default function CheckoutPage() {
   return (
-    <Suspense fallback={<div className="mx-auto max-w-5xl p-8 text-gray-500">Preparing secure checkout…</div>}>
+    <Suspense fallback={<div className="cart-state"><span className="cart-loader" />Preparing secure checkout…</div>}>
       <CheckoutContent />
     </Suspense>
   )

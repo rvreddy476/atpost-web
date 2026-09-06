@@ -140,7 +140,12 @@ export type Product = {
   weight_grams?: number | null
   primary_image_media_id?: string | null
   source_image_url?: string | null
+  // Presigned absolute renditions the catalogue read model returns alongside
+  // the media id — fallbacks for productImage(), never the first choice.
+  image_url?: string | null
+  thumbnail_url?: string | null
   retailer_name?: string | null
+  category_name?: string | null
   brand_name?: string | null
   warranty_info?: string | null
   return_policy_type?: string
@@ -172,6 +177,14 @@ export type Category = {
   slug: string
   description?: string | null
   parent_id?: string | null
+  // Catalogue metadata the storefront browses by: the tile shows the
+  // description and the live product count, and hides a count of zero behind
+  // "coming soon" rather than advertising an empty shelf.
+  display_order?: number
+  is_active?: boolean
+  is_featured?: boolean
+  image_media_id?: string | null
+  product_count?: number
 }
 
 export type ReturnRequest = {
@@ -319,8 +332,23 @@ export function useInfiniteProducts(opts: InfiniteProductsOpts = {}) {
   })
 }
 
+/**
+ * One resolved attribute on a published product, as the catalogue returns it.
+ * `display_group` is the server's own grouping (e.g. "Product Details") and is
+ * what the product page renders its spec sections from — the storefront never
+ * invents a grouping of its own.
+ */
+export type ProductAttribute = {
+  code: string
+  label: string
+  data_type: string
+  value: string | number | boolean | string[] | null
+  unit?: string | null
+  display_group?: string | null
+}
+
 export function useProduct(productId: string | undefined) {
-  return useQuery<{ product: Product; variants: ProductVariant[] }>({
+  return useQuery<{ product: Product; variants: ProductVariant[]; attributes?: ProductAttribute[] }>({
     queryKey: ['commerce', 'product', productId],
     queryFn: async () => (await api.get(`/v1/commerce/products/${productId}`)).data.data,
     enabled: !!productId,

@@ -47,25 +47,25 @@ export function AddressForm({ initialValues, submitLabel = 'Save', showDefault =
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3">
       <input required placeholder="Full name" value={form.full_name} onChange={update('full_name')}
-        className="border rounded px-3 py-2 col-span-2" />
+        className="field col-span-2" />
       <input required placeholder="Phone" value={form.phone} onChange={update('phone')}
-        className="border rounded px-3 py-2 col-span-2" />
+        className="field col-span-2" />
       <input required placeholder="Address line 1" value={form.address_line_1} onChange={update('address_line_1')}
-        className="border rounded px-3 py-2 col-span-2" />
+        className="field col-span-2" />
       <input placeholder="Address line 2" value={form.address_line_2} onChange={update('address_line_2')}
-        className="border rounded px-3 py-2 col-span-2" />
+        className="field col-span-2" />
       <input required placeholder="City" value={form.city} onChange={update('city')}
-        className="border rounded px-3 py-2" />
+        className="field" />
       <input required placeholder="State" value={form.state} onChange={update('state')}
-        className="border rounded px-3 py-2" />
+        className="field" />
       <input required placeholder="Postal code" value={form.postal_code} onChange={update('postal_code')}
-        className="border rounded px-3 py-2" />
+        className="field" />
       <select value={form.address_type} onChange={(e) => setForm({ ...form, address_type: e.target.value as AddressFormValues['address_type'] })}
-        aria-label="Address type" className="border rounded px-3 py-2">
+        aria-label="Address type" className="field">
         <option value="home">Home</option><option value="work">Work</option><option value="other">Other</option>
       </select>
       {showDefault ? (
-        <label className="col-span-2 flex items-center gap-2 text-sm text-gray-700">
+        <label className="choice-row col-span-2">
           <input type="checkbox" checked={!!form.is_default}
             onChange={(e) => setForm({ ...form, is_default: e.target.checked })} />
           Set as default address
@@ -73,11 +73,11 @@ export function AddressForm({ initialValues, submitLabel = 'Save', showDefault =
       ) : null}
       <div className="col-span-2 flex gap-2">
         <button type="submit" disabled={submitting}
-          className="bg-indigo-600 text-white px-4 py-2 rounded disabled:bg-gray-300">
+          className="btn btn-gold">
           {submitting ? 'Saving…' : submitLabel}
         </button>
         {onCancel ? (
-          <button type="button" onClick={onCancel} className="px-4 py-2 rounded border">
+          <button type="button" onClick={onCancel} className="btn btn-outline">
             Cancel
           </button>
         ) : null}

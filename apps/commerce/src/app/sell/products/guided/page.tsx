@@ -20,15 +20,15 @@ import { apiMessage } from "@/lib/listing"
  */
 export default function GuidedListingPage() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-shop-bg">
       <StoreHeader />
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <Link href="/sell" className="text-sm text-gray-500 hover:text-gray-900">
+      <main className="mx-auto max-w-3xl px-5 py-10">
+        <Link href="/sell" className="text-sm text-shop-faint hover:text-shop-gold">
           ← Back to my products
         </Link>
         {/* useSearchParams opts its whole subtree out of prerendering; the
             boundary is what keeps the rest of this zone statically built. */}
-        <Suspense fallback={<p className="mt-6 text-sm text-gray-500">Loading…</p>}>
+        <Suspense fallback={<p className="mt-6 text-sm text-shop-faint">Loading…</p>}>
           <GuidedListing />
         </Suspense>
       </main>
@@ -63,17 +63,17 @@ function GuidedListing() {
   const schema = useAttributeSchema(category ? category.id : null, "all")
 
   if (authed !== true) {
-    return <p className="mt-6 text-sm text-gray-500">Redirecting to sign in…</p>
+    return <p className="mt-6 text-sm text-shop-faint">Redirecting to sign in…</p>
   }
 
   if (!categoryId) {
     return (
       <>
-        <h1 className="mt-2 text-xl font-semibold">What are you listing?</h1>
-        <p className="mb-4 mt-1 text-sm text-gray-600">
+        <h1 className="shop-display mt-3 text-2xl">What are you listing?</h1>
+        <p className="mb-4 mt-1 text-sm text-shop-muted">
           Pick the category first — the form after it asks only what that category needs.
         </p>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="panel p-5">
           <CategoryPicker
             categories={tree.data ?? []}
             isLoading={tree.isLoading}
@@ -86,13 +86,13 @@ function GuidedListing() {
   }
 
   if (tree.isLoading) {
-    return <p className="mt-6 text-sm text-gray-500">Loading categories…</p>
+    return <p className="mt-6 text-sm text-shop-faint">Loading categories…</p>
   }
 
   if (!category) {
     return (
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-6">
-        <p className="text-sm text-gray-700">That category is no longer in the catalogue.</p>
+      <div className="mt-6 rounded-xl border border-line bg-shop-surface p-6">
+        <p className="text-sm text-shop-muted">That category is no longer in the catalogue.</p>
         <Link href="/sell/products/guided" className="mt-2 inline-block text-sm underline">
           Pick another one
         </Link>
@@ -103,8 +103,8 @@ function GuidedListing() {
   return (
     <>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-xl font-semibold">List in {category.name}</h1>
-        <Link href="/sell/products/guided" className="text-sm text-gray-500 underline hover:text-gray-900">
+        <h1 className="shop-display text-2xl">List in {category.name}</h1>
+        <Link href="/sell/products/guided" className="text-sm text-shop-faint underline hover:text-shop-gold">
           Change category
         </Link>
       </div>

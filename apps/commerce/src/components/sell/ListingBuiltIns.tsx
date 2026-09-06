@@ -162,7 +162,7 @@ export function OfferFields({
         </label>
         <Input id="listing-sku" value={value.sku} onChange={(e) => set("sku", e.target.value)} />
         {mode === "stem" && (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-shop-faint">
             Every row of the grid starts from this — TEE becomes TEE-M-BLUE — and each one stays
             editable.
           </p>

@@ -2,8 +2,10 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Minus, Plus, ShoppingBag } from 'lucide-react'
+import { Minus, Plus, Store } from 'lucide-react'
 import { useAddToCart, useCart, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
+import { ProductPhoto } from './ProductPhoto'
+import { productImage } from '@/lib/media'
 
 export type ProductCardData = {
   id: string
@@ -11,8 +13,14 @@ export type ProductCardData = {
   slug?: string
   short_description?: string | null
   primary_image_media_id?: string | null
+  // The catalogue read model returns presigned absolute URLs alongside the
+  // media id; kept as fallbacks so a product still shows a photograph if the
+  // media service has not minted a rendition for it yet.
+  image_url?: string | null
+  thumbnail_url?: string | null
   source_image_url?: string | null
   retailer_name?: string | null
+  category_name?: string | null
   min_selling_price?: number | null
   min_mrp?: number | null
   avg_rating?: number
@@ -25,9 +33,14 @@ type Props = {
   products: ProductCardData[]
   isLoading?: boolean
   emptyLabel?: string
+  /** Rendered after the last card — the seller invite on a sparse landing. */
+  tail?: React.ReactNode
 }
 
-export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }: Props) {
+export const inr = (value: number) =>
+  `₹${value.toLocaleString('en-IN', { maximumFractionDigits: value % 1 === 0 ? 0 : 2 })}`
+
+export function ProductGrid({ products, isLoading, emptyLabel = 'No products', tail }: Props) {
   const addToCart = useAddToCart()
   const updateCart = useUpdateCartItem()
   const removeFromCart = useRemoveFromCart()
@@ -61,71 +74,111 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products' }:
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="product-grid">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="animate-pulse">
-            <div className="aspect-square rounded-xl bg-gray-200" />
-            <div className="h-4 mt-2 rounded bg-gray-200" />
-            <div className="h-3 mt-1 w-1/2 rounded bg-gray-200" />
+          <div key={i} className="product-skeleton" aria-hidden="true">
+            <div className="skeleton-block aspect-square" />
+            <div className="skeleton-block mt-4 h-3 w-1/3" />
+            <div className="skeleton-block mt-3 h-4" />
+            <div className="skeleton-block mt-2 h-4 w-2/3" />
+            <div className="skeleton-block mt-5 h-6 w-1/2" />
           </div>
         ))}
       </div>
     )
   }
   if (!products || products.length === 0) {
-    return <div className="py-12 text-center text-gray-500">{emptyLabel}</div>
+    return (
+      <div className="panel panel-pad py-16 text-center">
+        <p className="text-shop-muted">{emptyLabel}</p>
+      </div>
+    )
   }
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="product-grid">
       {products.map((p) => {
         const cartItem = cart?.Items.find((item) => item.Item.variant_id === p.default_variant_id)
         const quantity = cartItem?.Item.quantity ?? (addedId === p.id ? 1 : 0)
         const isPending = addingId === p.id
+        const outOfStock = p.total_stock === 0
+        const lowStock = !outOfStock && p.total_stock != null && p.total_stock <= 5
+        const off = p.min_mrp && p.min_selling_price && p.min_mrp > p.min_selling_price
+          ? Math.round((1 - p.min_selling_price / p.min_mrp) * 100)
+          : 0
         return (
-        <article key={p.id} className="group relative flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-colors hover:border-gray-900">
-          <Link href={`/products/${p.id}`} className="flex min-w-0 flex-1 flex-col">
-            <div className="aspect-square bg-gray-100 flex items-center justify-center text-gray-400">
-              {p.primary_image_media_id || p.source_image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.primary_image_media_id ? `/v1/media/${p.primary_image_media_id}/serve?w=480&q=80` : p.source_image_url!} alt={p.title} loading="lazy" className="w-full h-full object-contain p-5 transition-transform duration-300 group-hover:scale-105" />
-              ) : <span className="text-xs">No image</span>}
-            </div>
-            <div className="min-h-[10.5rem] p-3 pb-16">
-              <div className="text-sm font-medium line-clamp-2 group-hover:text-black">{p.title}</div>
-            {p.retailer_name ? <div className="mt-1 text-xs text-gray-500">Sold by {p.retailer_name}</div> : null}
-            {p.avg_rating ? <div className="mt-1 text-xs text-gray-700">★ {p.avg_rating.toFixed(1)} <span className="text-gray-400">({p.review_count ?? 0})</span></div> : null}
-            {p.min_selling_price != null ? (
-              <div className="mt-1 flex items-baseline gap-1.5 text-sm text-gray-700">
-                <span className="font-semibold">₹{p.min_selling_price.toFixed(2)}</span>
-                {p.min_mrp && p.min_mrp > p.min_selling_price ? <span className="text-xs text-gray-400 line-through">₹{p.min_mrp.toFixed(2)}</span> : null}
+          <article key={p.id} className="product-card">
+            <Link href={`/products/${p.id}`} className="flex min-w-0 flex-1 flex-col">
+              <ProductPhoto
+                src={productImage(p, { width: 520 })}
+                alt={p.title}
+                badge={
+                  outOfStock
+                    ? <span className="plate-badge plate-badge--out">SOLD OUT</span>
+                    : off > 0 ? <span className="plate-badge">{off}% OFF</span> : null
+                }
+              />
+              <div className="product-card-body">
+                {p.retailer_name ? <div className="product-card-seller">{p.retailer_name}</div> : null}
+                <h3 className="product-card-title">{p.title}</h3>
+                {p.avg_rating ? (
+                  <div className="product-card-rating">
+                    ★ {p.avg_rating.toFixed(1)} <span>({p.review_count ?? 0})</span>
+                  </div>
+                ) : null}
+                {p.min_selling_price != null ? (
+                  <div className="product-card-price">
+                    <b>{inr(p.min_selling_price)}</b>
+                    {p.min_mrp && p.min_mrp > p.min_selling_price ? <s>{inr(p.min_mrp)}</s> : null}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </Link>
+            <div className="product-card-foot">
+              <span className={`product-card-stock${lowStock ? ' is-low' : ''}`}>
+                {outOfStock ? 'Unavailable' : lowStock ? `Only ${p.total_stock} left` : 'In stock'}
+              </span>
+              {quantity > 0 ? (
+                <div className="bag-stepper" aria-label={`${p.title} quantity in bag`}>
+                  <button type="button" onClick={() => changeQuantity(p, quantity - 1)} disabled={isPending} aria-label={`Decrease ${p.title} quantity`}><Minus size={15} /></button>
+                  <span>{isPending ? '·' : quantity}</span>
+                  <button type="button" onClick={() => changeQuantity(p, quantity + 1)} disabled={isPending || quantity >= (p.total_stock ?? 99)} aria-label={`Increase ${p.title} quantity`}><Plus size={15} /></button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => add(p)}
+                  disabled={!p.default_variant_id || outOfStock || isPending}
+                  className="bag-add"
+                  aria-label={`Add ${p.title} to bag`}
+                  title={outOfStock ? 'Out of stock' : 'Add to bag'}
+                >
+                  {isPending
+                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-shop-bg border-t-transparent" />
+                    : <Plus size={15} aria-hidden="true" />}
+                  Add
+                </button>
+              )}
             </div>
-          </Link>
-          <div className="absolute bottom-3 right-3">
-            {quantity > 0 ? (
-              <div className="vbag-stepper" aria-label={`${p.title} quantity in bag`}>
-                <button type="button" onClick={() => changeQuantity(p, quantity - 1)} disabled={isPending} aria-label={`Decrease ${p.title} quantity`}><Minus size={16} /></button>
-                <span><small>IN BAG</small><strong>{isPending ? '·' : quantity}</strong></span>
-                <button type="button" onClick={() => changeQuantity(p, quantity + 1)} disabled={isPending || quantity >= (p.total_stock ?? 99)} aria-label={`Increase ${p.title} quantity`}><Plus size={16} /></button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => add(p)}
-                disabled={!p.default_variant_id || p.total_stock === 0 || isPending}
-                className="vbag-action"
-                aria-label={`Add ${p.title} to bag`}
-                title={p.total_stock === 0 ? 'Out of stock' : 'Add to bag'}
-              >
-                <span className="vbag-action-icon">{isPending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <Plus size={17} />}</span>
-                <span className="vbag-action-copy"><small>QUICK ADD</small><strong>V-Bag <ShoppingBag size={13} /></strong></span>
-              </button>
-            )}
-          </div>
-        </article>
+          </article>
         )
       })}
+      {tail}
     </div>
+  )
+}
+
+/**
+ * Fills the tail of a short grid. Eight products across four columns leaves a
+ * ragged second row; a gold-outlined invitation there turns the gap into the
+ * one thing the shop most wants from a visitor with nothing left to browse.
+ */
+export function SellerInvite() {
+  return (
+    <Link href="/sell" className="seller-invite">
+      <Store size={26} className="text-shop-gold" aria-hidden="true" />
+      <strong>Sell on atPost</strong>
+      <p>List your first product in minutes. Your catalogue, your prices, our buyers.</p>
+      <span className="gold-link mt-5">Open your shop →</span>
+    </Link>
   )
 }

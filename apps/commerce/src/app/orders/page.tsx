@@ -1,61 +1,75 @@
 'use client'
 
 import Link from 'next/link'
+import { ArrowRight, Package } from 'lucide-react'
 import { useOrders } from '@/hooks/useCommerce'
 import { StoreHeader } from '@/components/StoreHeader'
+import { StoreFooter } from '@/components/StoreFooter'
 
+/**
+ * Status colour on navy. Each state gets a translucent tint of its own hue
+ * with the same hue as the text, so the pill reads at a glance without any of
+ * them turning into a solid block that competes with the gold actions.
+ */
 const statusColor: Record<string, string> = {
-  payment_pending: 'bg-yellow-100 text-yellow-800',
-  confirmed: 'bg-blue-100 text-blue-800',
-  packed: 'bg-indigo-100 text-indigo-800',
-  shipped: 'bg-purple-100 text-purple-800',
-  delivered: 'bg-green-100 text-green-800',
-  cancelled: 'bg-red-100 text-red-800',
-  return_requested: 'bg-orange-100 text-orange-800',
+  payment_pending: 'text-shop-warn',
+  confirmed: 'text-shop-gold',
+  packed: 'text-shop-gold',
+  shipped: 'text-sky-300',
+  delivered: 'text-shop-good',
+  cancelled: 'text-shop-bad',
+  return_requested: 'text-orange-300',
 }
 
 export default function OrdersPage() {
   const { data: orders, isLoading } = useOrders()
 
-  if (isLoading) return <><StoreHeader /><div className="mx-auto max-w-4xl p-8">Loading orders…</div></>
-  if (!orders || orders.length === 0)
-    return (
-      <><StoreHeader /><div className="mx-auto max-w-3xl p-8 text-center">
-        <h1 className="text-2xl font-semibold mb-4">No orders yet</h1>
-        <Link href="/" className="text-indigo-600 hover:underline">
-          Start shopping
-        </Link>
-      </div></>
-    )
+  if (isLoading) return <><StoreHeader /><div className="cart-state"><span className="cart-loader" />Loading your orders…</div></>
 
   return (
-    <><StoreHeader /><main className="mx-auto max-w-4xl p-4 sm:p-6">
-      <h1 className="text-2xl font-semibold mb-6">Your Orders</h1>
-      <div className="space-y-3">
-        {orders.map((o) => (
-          <Link
-            key={o.id}
-            href={`/orders/${o.id}`}
-            className="block rounded-xl border border-gray-200 bg-white p-4 hover:border-indigo-300"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">Order {o.order_number}</div>
-                <div className="text-sm text-gray-500">
-                  {new Date(o.created_at).toLocaleDateString()} · {o.currency} {o.final_amount.toFixed(2)}
-                </div>
-              </div>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  statusColor[o.status] ?? 'bg-gray-100 text-gray-700'
-                }`}
+    <div className="flex min-h-screen flex-col">
+      <StoreHeader />
+      <main className="shop-page-narrow flex-1">
+        <span className="shop-eyebrow">Your account</span>
+        <h1 className="shop-display mt-3 text-3xl sm:text-[40px]">Your orders</h1>
+
+        {!orders || orders.length === 0 ? (
+          <div className="panel panel-pad mt-8 flex flex-col items-center py-16 text-center">
+            <div className="empty-vbag-mark"><Package size={30} aria-hidden="true" /></div>
+            <p className="text-shop-muted">Nothing ordered yet. Your purchases will appear here.</p>
+            <Link href="/" className="btn btn-gold mt-7">Start shopping <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+        ) : (
+          <div className="mt-8 flex flex-col gap-3">
+            {orders.map((o) => (
+              <Link
+                key={o.id}
+                href={`/orders/${o.id}`}
+                className="panel flex flex-wrap items-center justify-between gap-4 p-5 transition-colors hover:border-shop-gold"
               >
-                {o.status.replace(/_/g, ' ')}
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
-    </main></>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-shop-faint">
+                    Order {o.order_number}
+                  </div>
+                  <div className="mt-1.5 truncate font-semibold">
+                    {o.first_product_title ?? 'Order'}
+                    {o.item_count > 1 ? <span className="text-shop-muted"> +{o.item_count - 1} more</span> : null}
+                  </div>
+                  <div className="mt-1.5 text-sm text-shop-muted">
+                    {new Date(o.created_at).toLocaleDateString()}
+                    <span className="mx-2 text-shop-faint" aria-hidden="true">·</span>
+                    <span className="font-semibold text-shop-gold">{o.currency} {o.final_amount.toFixed(2)}</span>
+                  </div>
+                </div>
+                <span className={`status-pill ${statusColor[o.status] ?? 'text-shop-muted'}`}>
+                  {o.status.replace(/_/g, ' ')}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </main>
+      <StoreFooter />
+    </div>
   )
 }

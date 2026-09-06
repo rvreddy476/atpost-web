@@ -139,11 +139,11 @@ export function VariationMatrix({
     <section className="flex flex-col gap-4" data-testid="variation-matrix">
       <div>
         <h3 className="text-sm font-semibold text-brand-text">Sizes, colours and other versions</h3>
-        <p className="mt-1 text-xs text-gray-500">{AXIS_EXPLAINER}</p>
+        <p className="mt-1 text-xs text-shop-faint">{AXIS_EXPLAINER}</p>
       </div>
 
       {pickable.length === 0 && (
-        <p className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+        <p className="rounded-xl border border-line bg-shop-sunken p-3 text-xs text-shop-muted">
           This category does not have an attribute a product can vary on yet, so this listing is one
           version with one price.
           {blocked.length > 0 && <span className="mt-1 block">{blocked[0].unavailable}</span>}
@@ -251,7 +251,7 @@ export function VariationMatrix({
                   return (
                     <li
                       key={code}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-700"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-xs text-shop-muted"
                     >
                       <span
                         aria-hidden="true"
@@ -270,7 +270,7 @@ export function VariationMatrix({
       })}
 
       {on && rows.length === 0 && (
-        <p className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+        <p className="flex items-start gap-2 rounded-xl border border-line bg-shop-sunken p-3 text-xs text-shop-muted">
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           Pick a value on every axis and the grid appears here, one row per combination.
         </p>
@@ -278,7 +278,7 @@ export function VariationMatrix({
 
       {rows.length > 0 && (
         <>
-          <p className="text-xs text-gray-500" data-testid="combination-count">
+          <p className="text-xs text-shop-faint" data-testid="combination-count">
             {rows.filter((r) => !r.stranded).length} combinations · {MAX_COMBINATIONS} is the most a
             listing may have
           </p>
@@ -300,10 +300,10 @@ export function VariationMatrix({
               {/* Apply-to-all. It is a row of the table rather than a panel
                   above it so the control sits in the column it fills. */}
               <TR data-testid="apply-to-all">
-                <TD colSpan={value.axes.length} className="text-xs text-gray-500">
+                <TD colSpan={value.axes.length} className="text-xs text-shop-faint">
                   Fill every row
                 </TD>
-                <TD className="text-xs text-gray-400">Each row needs its own</TD>
+                <TD className="text-xs text-shop-faint">Each row needs its own</TD>
                 {(
                   [
                     ["mrp", "MRP"],
@@ -410,7 +410,7 @@ export function VariationMatrix({
                         onChange={(next) => updateRow(row, { included: next })}
                       />
                       {locked && (
-                        <span className="mt-1 block text-[11px] text-gray-400">
+                        <span className="mt-1 block text-[11px] text-shop-faint">
                           Already listed
                         </span>
                       )}
@@ -425,7 +425,7 @@ export function VariationMatrix({
                           <TD colSpan={value.axes.length + 5} className="py-2">
                             <ul className="flex flex-col gap-1">
                               {rowProblems.map((message) => (
-                                <li key={message} className="text-xs text-red-600">
+                                <li key={message} className="text-xs text-shop-bad">
                                   {describe(row)}: {message}
                                 </li>
                               ))}
@@ -439,7 +439,7 @@ export function VariationMatrix({
             </TBody>
           </Table>
 
-          <p aria-live="polite" className="text-xs text-gray-500">
+          <p aria-live="polite" className="text-xs text-shop-faint">
             {announcement}
           </p>
         </>

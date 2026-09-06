@@ -50,15 +50,15 @@ export default function NewProductPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-shop-bg">
       <StoreHeader />
-      <main className="mx-auto max-w-xl px-4 py-8">
-        <Link href="/sell" className="text-sm text-gray-500 hover:text-gray-900">
+      <main className="mx-auto max-w-xl px-5 py-10">
+        <Link href="/sell" className="text-sm text-shop-faint hover:text-shop-gold">
           ← Back to my products
         </Link>
-        <h1 className="mt-2 text-xl font-semibold">Add product</h1>
+        <h1 className="shop-display mt-3 text-2xl">Add product</h1>
 
-        <form onSubmit={submit} className="mt-4 flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-6">
+        <form onSubmit={submit} className="mt-4 flex flex-col gap-4 rounded-xl border border-line bg-shop-surface p-6">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Title</span>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -70,7 +70,7 @@ export default function NewProductPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-gray-900"
+              className="field"
             />
           </label>
 
@@ -79,7 +79,7 @@ export default function NewProductPage() {
             <select
               value={returnPolicy}
               onChange={(e) => setReturnPolicy(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 outline-none focus:border-gray-900"
+              className="field"
             >
               {RETURN_POLICIES.map((p) => (
                 <option key={p} value={p}>
@@ -89,7 +89,7 @@ export default function NewProductPage() {
             </select>
           </label>
 
-          <fieldset className="rounded-lg border border-gray-200 p-4">
+          <fieldset className="panel-quiet p-5">
             <legend className="px-1 text-sm font-medium">Variant</legend>
             <div className="grid grid-cols-2 gap-3">
               <label className="col-span-2 flex flex-col gap-1 text-sm">
@@ -111,11 +111,11 @@ export default function NewProductPage() {
             </div>
           </fieldset>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-shop-bad">{error}</p>}
           <Button type="submit" disabled={create.isPending}>
             {create.isPending ? "Creating…" : "Create product"}
           </Button>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-shop-faint">
             Created as a draft — submit it for review from “My products”, then an admin approves it before it appears in the shop.
           </p>
         </form>

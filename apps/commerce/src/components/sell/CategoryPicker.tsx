@@ -34,7 +34,7 @@ export function CategoryPicker({
   // so the top level is readable at a glance.
   const expandedIds = query.trim() ? Array.from(byId.keys()) : expanded
 
-  if (error) return <p className="text-sm text-red-600">{error}</p>
+  if (error) return <p className="text-sm text-shop-bad">{error}</p>
 
   return (
     <div className="flex flex-col gap-3">
@@ -51,7 +51,7 @@ export function CategoryPicker({
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-gray-500">Loading categories…</p>
+        <p className="text-sm text-shop-faint">Loading categories…</p>
       ) : (
         <Tree
           aria-label="Categories"

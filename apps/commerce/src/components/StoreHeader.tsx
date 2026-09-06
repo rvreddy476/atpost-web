@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useEffect, useState } from "react"
-import { Search, ShoppingBag, Package, User, Store, Menu, Sparkles } from "lucide-react"
+import { Search, ShoppingBag, Package, User, Store, LayoutGrid, ShieldCheck } from "lucide-react"
 import { useCart } from "@/hooks/useCommerce"
 import { getCurrentUserId } from "@atpost/api-client"
 
@@ -32,14 +32,14 @@ function SearchForm({ initialQuery, onSubmit }: {
       role="search"
     >
       <label className="sr-only" htmlFor="market-search-input">Search products</label>
-      <Search size={19} />
+      <Search size={18} aria-hidden="true" />
       <input
         id="market-search-input"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="What are you looking for today?"
+        placeholder="Search the store"
       />
-      <button type="submit" aria-label="Search"><Search size={22} /></button>
+      <button type="submit" aria-label="Search"><Search size={18} /></button>
     </form>
   )
 }
@@ -55,39 +55,81 @@ function LiveSearchForm() {
   )
 }
 
+function CategoryRailView({ categories, active }: { categories: Category[]; active?: string | null }) {
+  return (
+    <nav className="category-menu" aria-label="Product categories">
+      <Link href="/?stock=true" className="all-categories">
+        <LayoutGrid size={16} aria-hidden="true" /> All products
+      </Link>
+      {categories.map((category) => (
+        <Link
+          key={category.id}
+          href={`/?category=${encodeURIComponent(category.id)}`}
+          aria-current={active === category.id ? "true" : undefined}
+        >
+          {category.name}
+        </Link>
+      ))}
+      <Link href="/sell" className="sell-link">
+        <Store size={15} aria-hidden="true" /> Sell on atPost
+      </Link>
+    </nav>
+  )
+}
+
+// Same reasoning as the search box: reading `category` from the URL to mark the
+// active chip must not drag the header out of the prerender.
+function CategoryRail({ categories }: { categories: Category[] }) {
+  const params = useSearchParams()
+  return <CategoryRailView categories={categories} active={params.get("category")} />
+}
+
+/** Shown until the live categories arrive, so the rail never collapses. */
+const FALLBACK_CATEGORIES: Category[] = [
+  { id: "electronics", name: "Electronics" },
+  { id: "fashion", name: "Fashion" },
+  { id: "home", name: "Home & Kitchen" },
+  { id: "beauty", name: "Beauty & Personal Care" },
+  { id: "books", name: "Books & Stationery" },
+  { id: "sports", name: "Sports & Fitness" },
+]
+
 export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
   const [userId, setUserId] = useState<string | null>(null)
   const { data: cart } = useCart()
   const count = cart?.ItemCount ?? 0
+  const rail = categories.length ? categories.slice(0, 10) : FALLBACK_CATEGORIES
 
   useEffect(() => setUserId(getCurrentUserId()), [])
 
   return (
     <header className="marketplace-header">
-      <div className="market-note"><Sparkles size={14} /> Curated finds, independent sellers, one VChat experience</div>
+      <div className="market-note">
+        <ShieldCheck size={13} aria-hidden="true" /> Verified sellers · Protected payments · Easy returns
+      </div>
       <div className="header-main">
-        <Link href="/" className="shop-brand" aria-label="VChat Shop home">
-          <span>V</span><strong>VChat</strong><small>MARKET</small>
+        <Link href="/" className="shop-brand" aria-label="atPost Shop home">
+          <span aria-hidden="true">a</span><strong>atPost</strong><small>SHOP</small>
         </Link>
         <Suspense fallback={<SearchForm initialQuery="" />}>
           <LiveSearchForm />
         </Suspense>
         <nav className="header-actions" aria-label="Account and shopping">
           <a href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action" aria-label={userId ? "Account" : "Sign in"}>
-            <User size={20} /><span>{userId ? "Account" : "Sign in"}</span>
+            <User size={19} aria-hidden="true" /><span>{userId ? "Account" : "Sign in"}</span>
           </a>
-          <Link href="/orders" className="header-action" aria-label="Orders"><Package size={20} /><span>Orders</span></Link>
-          <Link href="/cart" className="cart-action" aria-label={`Shopping bag with ${count} items`}><span><ShoppingBag size={22} />{count > 0 && <b>{count}</b>}</span><strong>Bag</strong></Link>
+          <Link href="/orders" className="header-action" aria-label="Orders">
+            <Package size={19} aria-hidden="true" /><span>Orders</span>
+          </Link>
+          <Link href="/cart" className="cart-action" aria-label={`Shopping bag with ${count} ${count === 1 ? "item" : "items"}`}>
+            <span><ShoppingBag size={20} aria-hidden="true" />{count > 0 && <b>{count}</b>}</span>
+            <strong>Bag</strong>
+          </Link>
         </nav>
       </div>
-      <nav className="category-menu" aria-label="Product categories">
-        <Link href="/?stock=true" className="all-categories"><Menu size={18} /> Explore all</Link>
-        {(categories.length ? categories.slice(0, 9) : [
-          { id: "fashion", name: "Fashion" }, { id: "electronics", name: "Electronics" }, { id: "grocery", name: "Grocery & Food" },
-          { id: "home", name: "Home & Kitchen" }, { id: "books", name: "Books" }, { id: "beauty", name: "Beauty" }, { id: "sports", name: "Sports" },
-        ]).map((category) => <Link key={category.id} href={`/?category=${encodeURIComponent(category.id)}`}>{category.name}</Link>)}
-        <Link href="/sell" className="sell-link"><Store size={17} /> Open your shop</Link>
-      </nav>
+      <Suspense fallback={<CategoryRailView categories={rail} />}>
+        <CategoryRail categories={rail} />
+      </Suspense>
     </header>
   )
 }

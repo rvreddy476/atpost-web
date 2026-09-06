@@ -85,7 +85,7 @@ export function ListingForm({
     !!schema && schema.groups.some((group) => group.attributes && group.attributes.length > 0)
 
   if (schemaLoading) {
-    return <p className="text-sm text-gray-500">Loading this category’s form…</p>
+    return <p className="text-sm text-shop-faint">Loading this category’s form…</p>
   }
 
   return hasAuthoredForm ? (
@@ -156,7 +156,7 @@ function FallbackForm({
         </p>
       </div>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
+      <section className="panel panel-pad">
         <h2 className="mb-4 text-sm font-semibold text-brand-text">Product</h2>
         <BasicsFields
           value={basics}
@@ -166,9 +166,9 @@ function FallbackForm({
         />
       </section>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
+      <section className="panel panel-pad">
         <h2 className="text-sm font-semibold text-brand-text">Your offer</h2>
-        <p className="mb-4 mt-1 text-xs text-gray-500">{OFFER_LINE}</p>
+        <p className="mb-4 mt-1 text-xs text-shop-faint">{OFFER_LINE}</p>
         <OfferFields value={offer} onChange={setOffer} />
       </section>
 
@@ -391,15 +391,15 @@ function SchemaListingForm({
         },
       )}
     >
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-shop-faint">
         {schema.category_path.length > 0 ? schema.category_path.join(" › ") : category.name} · form
         version {schema.schema_version}
         {schema.variation_axes.length > 0 && <> · variants split on {schema.variation_axes.join(", ")}</>}
       </p>
 
       <Tabs aria-label="Listing sections" value={tab} onChange={setTab} items={tabs}>
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <p className="mb-4 text-xs text-gray-500">
+        <div className="panel panel-pad">
+          <p className="mb-4 text-xs text-shop-faint">
             {activeProgress.totalRequired > 0
               ? `${activeProgress.filledRequired} of ${activeProgress.totalRequired} ready`
               : "Nothing required in this section"}
@@ -430,7 +430,7 @@ function SchemaListingForm({
 
           {tab === OFFER_TAB && (
             <div className="flex flex-col gap-4">
-              <p className="text-xs text-gray-500">{OFFER_LINE}</p>
+              <p className="text-xs text-shop-faint">{OFFER_LINE}</p>
               {/* The SKU/price block narrows to a stem the moment the grid is
                   on: the money is per row from then on, and one product-level
                   price beside twelve row prices is a question nobody can
@@ -529,7 +529,7 @@ function SaveBar({
   return (
     <div className="flex flex-col gap-3">
       {missing.length > 0 && (
-        <p className="text-sm text-red-600">
+        <p className="text-sm text-shop-bad">
           Still needed: {missing.map((m) => m.label).join(", ")}.
         </p>
       )}
@@ -554,14 +554,14 @@ function SaveBar({
           Submit for review
         </Button>
         {draft.savedAt && (
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-shop-faint">
             Draft saved{draft.productId ? "" : " locally"} ·{" "}
             {new Date(draft.savedAt).toLocaleTimeString()}
           </span>
         )}
       </div>
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-shop-faint">
         Saving keeps this as a draft on your account. Nothing reaches the shop until a reviewer
         approves it.
       </p>
