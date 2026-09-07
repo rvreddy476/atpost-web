@@ -123,12 +123,19 @@ api.interceptors.request.use((config) => {
         config.headers["X-CSRF-Token"] = ensureCsrfToken()
     }
 
-    // Mopedu admin: every request to /v1/rider/admin/* carries the rider:admin
-    // role header. Backend stubs this for now; production gateway will replace.
-    const rawUrl = typeof config.url === "string" ? config.url : ""
-    if (rawUrl.includes("/v1/rider/admin/")) {
-        config.headers["X-Admin-Role"] = "rider:admin"
-    }
+    // No X-Admin-Role here, deliberately.
+    //
+    // This used to attach `X-Admin-Role: rider:admin` to every
+    // /v1/rider/admin/* request, and rider-service authorised its entire
+    // admin group on that header alone — approve, reject, suspend, block a
+    // delivery partner. The gateway stripped X-Scopes but not this, so the
+    // header was doing real authorisation work while being fully
+    // client-controlled: anyone with a browser and any account had it.
+    //
+    // As of 2026-09-07 the gateway strips X-Admin-Role and re-stamps it from
+    // the verified token, and rider-service reads the scopes claim instead.
+    // Sending it from here would now be ignored at best. Authorisation comes
+    // from the token; the client asserts nothing.
 
     return config
 })
