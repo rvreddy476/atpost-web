@@ -6,6 +6,8 @@ import { Suspense, useEffect, useState } from "react"
 import { Search, ShoppingBag, Package, User, Store, LayoutGrid, ShieldCheck } from "lucide-react"
 import { useCart } from "@/hooks/useCommerce"
 import { getCurrentUserId } from "@atpost/api-client"
+import { useCapabilities } from "@atpost/api-client/capabilities"
+import { RoleSwitcher } from "@atpost/ui"
 
 type Category = { id: string; name: string }
 
@@ -97,6 +99,9 @@ const FALLBACK_CATEGORIES: Category[] = [
 export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
   const [userId, setUserId] = useState<string | null>(null)
   const { data: cart } = useCart()
+  // Renders nothing at all for a shopper with no other hat, which is almost
+  // everyone — and nothing while signed out, because the query never runs.
+  const { destinations } = useCapabilities()
   const count = cart?.ItemCount ?? 0
   const rail = categories.length ? categories.slice(0, 10) : FALLBACK_CATEGORIES
 
@@ -115,6 +120,7 @@ export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
           <LiveSearchForm />
         </Suspense>
         <nav className="header-actions" aria-label="Account and shopping">
+          <RoleSwitcher destinations={destinations} label="Switch" className="mr-1" />
           <a href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action" aria-label={userId ? "Account" : "Sign in"}>
             <User size={19} aria-hidden="true" /><span>{userId ? "Account" : "Sign in"}</span>
           </a>

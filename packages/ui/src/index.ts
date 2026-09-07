@@ -36,6 +36,12 @@ export type { NumberInputProps } from "./NumberInput"
 export { RadioGroup } from "./RadioGroup"
 export type { RadioGroupProps, RadioOption } from "./RadioGroup"
 
+// Cross-zone navigation. One definition, mounted in both the shop header and
+// the admin header; see the comment at the top of the component for why
+// choosing an entry navigates and does nothing else.
+export { RoleSwitcher } from "./RoleSwitcher"
+export type { RoleSwitcherProps } from "./RoleSwitcher"
+
 // Layout and structure.
 export { Table, THead, TBody, TR, TH, TD } from "./Table"
 export type { TableProps } from "./Table"

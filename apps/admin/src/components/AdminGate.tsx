@@ -1,13 +1,10 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
 import { ShieldAlert, ShieldQuestion, TriangleAlert } from "lucide-react"
-import api from "@atpost/api-client"
-import { isForbidden, isUnauthenticated } from "@/lib/catalogue"
-import { CATALOGUE, catalogueKeys } from "@/hooks/useCatalogue"
+import { hasAdminConsoleAccess, useCapabilities } from "@atpost/api-client/capabilities"
 
 /**
- * Renders the console only for a caller the API is willing to answer.
+ * Renders the console only for someone who actually holds an admin role.
  *
  * THIS IS A UX GATE, NOT A SECURITY BOUNDARY. Every route behind it is still
  * enforced by admin-service on every request; the server remains the authority
@@ -15,21 +12,26 @@ import { CATALOGUE, catalogueKeys } from "@/hooks/useCatalogue"
  * buys is that someone without the scope sees one honest sentence instead of a
  * taxonomy editor whose every button fails.
  *
- * The probe is the API's own answer, deliberately: the access token carries no
- * `scopes` claim for any current user, and there is no "am I an admin"
- * endpoint, so there is nothing to decode and nothing to ask. A 2xx on the
- * catalogue's own read route is the only truthful signal available.
+ * It used to *probe*: fire a read at the catalogue and take a 2xx to mean
+ * "allowed", because at the time there was genuinely nothing to ask — the
+ * access token carried no usable `scopes` claim and no endpoint answered "am I
+ * an admin". There is one now. `GET /v1/auth/me/capabilities` names every role
+ * in the vocabulary and answers each yes or no, read live from identity's own
+ * tables, so a role granted a minute ago shows here without a token refresh.
+ * The probe's own failure mode is gone with it: a catalogue route that 500s no
+ * longer reads as an access problem, and a catalogue route that happens to be
+ * public no longer reads as admin.
  *
- * Four verdicts, because the probe genuinely comes back four ways:
+ * The four verdicts survive the change, because the question still has four
+ * honest answers — they are just no longer inferred from an unrelated
+ * request's status code:
  *
- *   allowed      2xx. Render the console.
- *   signed-out   401. Nobody is signed in, so nothing can be said about
- *                anyone's permissions yet — offer the way in instead.
- *   denied       403. A named account, refused. The scope sentence is true
- *                here and only here.
- *   unknown      everything else. See the note above the banner below.
+ *   allowed      moderator, admin or superadmin. Render the console.
+ *   signed-out   nobody is signed in, so nothing can be said about anyone's
+ *                permissions yet — offer the way in instead.
+ *   denied       a named account holding none of the three.
+ *   unknown      the capabilities call itself failed. See the banner below.
  */
-type Verdict = "allowed" | "signed-out" | "denied" | "unknown"
 
 /**
  * Where a signed-out visitor is sent.
@@ -43,23 +45,9 @@ type Verdict = "allowed" | "signed-out" | "denied" | "unknown"
 const SIGN_IN_HREF = "/login?redirect=/admin"
 
 export function AdminGate({ children }: { children: React.ReactNode }) {
-  const probe = useQuery<Verdict>({
-    queryKey: catalogueKeys.gate,
-    retry: false,
-    staleTime: 60_000,
-    queryFn: async () => {
-      try {
-        await api.get(`${CATALOGUE}/attribute-schema`)
-        return "allowed"
-      } catch (error) {
-        if (isUnauthenticated(error)) return "signed-out"
-        if (isForbidden(error)) return "denied"
-        return "unknown"
-      }
-    },
-  })
+  const { capabilities, signedOut, isLoading, isError, refetch } = useCapabilities()
 
-  if (probe.isLoading) {
+  if (isLoading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-16 text-center text-sm text-gray-500">
         <ShieldQuestion className="mx-auto mb-3 h-6 w-6 text-gray-400" aria-hidden="true" />
@@ -68,14 +56,14 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (probe.data === "signed-out") {
+  if (signedOut) {
     return (
       <main className="mx-auto max-w-lg px-4 py-20 text-center">
         <ShieldQuestion className="mx-auto mb-4 h-10 w-10 text-gray-400" aria-hidden="true" />
         <h1 className="text-xl font-semibold text-gray-900">You are not signed in</h1>
         <p className="mt-2 text-sm text-gray-600">
           Sign in to continue to the admin console. If the account you use does not hold an admin
-          scope, you will be told that after signing in.
+          role, you will be told that after signing in.
         </p>
         <a
           href={SIGN_IN_HREF}
@@ -87,14 +75,18 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (probe.data === "denied") {
+  // A definite "no" requires a definite answer to have come back. `capabilities`
+  // is non-null only when the server actually replied, so a failed call can
+  // never be mistaken for a refusal.
+  if (capabilities && !hasAdminConsoleAccess(capabilities)) {
     return (
       <main className="mx-auto max-w-lg px-4 py-20 text-center">
         <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-gray-400" aria-hidden="true" />
         <h1 className="text-xl font-semibold text-gray-900">You do not have admin access</h1>
         <p className="mt-2 text-sm text-gray-600">
-          This console is limited to accounts holding the moderator, admin or superadmin scope. Ask
-          an existing administrator to grant yours, then sign in again.
+          This console is limited to accounts holding the moderator, admin or superadmin role. Ask
+          an existing administrator to grant yours — a new role takes effect immediately, so reload
+          this page once they have.
         </p>
         <a href={SIGN_IN_HREF} className="mt-6 inline-block text-sm font-semibold text-gray-900 underline">
           Sign in as someone else
@@ -102,6 +94,9 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
       </main>
     )
   }
+
+  // Whatever is left is either "allowed" or "we could not find out".
+  const unknown = !capabilities
 
   return (
     <>
@@ -118,7 +113,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
         happened. The banner is the fix: the gate says out loud that it does not
         know, and offers to ask again.
       */}
-      {probe.data === "unknown" ? (
+      {unknown ? (
         <div
           role="status"
           className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -126,15 +121,11 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
           <div className="mx-auto flex max-w-6xl items-start gap-2">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <p className="flex-1">
-              We could not check your admin access — the check itself failed, which says nothing
-              about your permissions. The console is open, but the server may still refuse anything
-              you try.
+              We could not check your admin access — the check itself
+              {isError ? " failed" : " returned nothing"}, which says nothing about your
+              permissions. The console is open, but the server may still refuse anything you try.
             </p>
-            <button
-              type="button"
-              onClick={() => probe.refetch()}
-              className="shrink-0 font-semibold underline"
-            >
+            <button type="button" onClick={refetch} className="shrink-0 font-semibold underline">
               Check again
             </button>
           </div>

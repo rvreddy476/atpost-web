@@ -30,7 +30,8 @@ export const PUBLIC_COMMERCE = "/v1/commerce"
 
 export const catalogueKeys = {
   all: ["catalogue"] as const,
-  gate: ["catalogue", "gate"] as const,
+  // `gate` used to key AdminGate's access probe. The gate now reads
+  // /v1/auth/me/capabilities, whose cache key lives with the hook that owns it.
   categories: ["catalogue", "categories"] as const,
   schemaState: ["catalogue", "schema-state"] as const,
   definitions: ["catalogue", "definitions"] as const,

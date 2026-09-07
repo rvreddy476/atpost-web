@@ -1,13 +1,14 @@
 {
   "name": "@atpost/api-client",
   "version": "0.1.0",
-  "description": "atPost shared gateway client — axios client + same-origin proxy + token refresh (httpOnly-cookie aware).",
+  "description": "atPost shared gateway client — axios client + same-origin proxy + token refresh (httpOnly-cookie aware) + the session's capabilities.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./proxy": "./src/proxy.ts",
     "./refresh": "./src/refresh.ts",
-    "./health": "./src/health.ts"
+    "./health": "./src/health.ts",
+    "./capabilities": "./src/capabilities.ts"
   },
   "sideEffects": false,
   "scripts": {
@@ -15,19 +16,33 @@
     "lint": "eslint src --ext .ts --max-warnings=0",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@atpost/types": "workspace:*"
+  },
   "peerDependencies": {
+    "@tanstack/react-query": ">=5",
     "axios": ">=1",
-    "next": ">=14"
+    "next": ">=14",
+    "react": ">=18"
   },
   "peerDependenciesMeta": {
     "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
       "optional": true
     }
   },
   "devDependencies": {
     "@atpost/config": "workspace:*",
+    "@tanstack/react-query": "^5.90.21",
+    "@types/react": "^19.2.2",
     "axios": "^1.7.0",
     "next": "^15.0.0",
+    "react": "^19.0.0",
     "typescript": "^5.8.2",
     "vitest": "2.1.9"
   },

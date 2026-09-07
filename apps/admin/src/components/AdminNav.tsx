@@ -3,6 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutDashboard, Store, Package, Banknote, ListTree } from "lucide-react"
+import { useCapabilities } from "@atpost/api-client/capabilities"
+import { RoleSwitcher } from "@atpost/ui"
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -14,6 +16,10 @@ const links = [
 
 export function AdminNav() {
   const pathname = usePathname()
+  // The same component the shop header mounts. Anyone standing in the console
+  // holds at least the admin hat and the customer one, so it is always offered
+  // here — which is also the only way back to the storefront from inside.
+  const { destinations } = useCapabilities()
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
@@ -38,6 +44,9 @@ export function AdminNav() {
             )
           })}
         </nav>
+        <div className="ml-auto">
+          <RoleSwitcher destinations={destinations} label="Switch" />
+        </div>
       </div>
     </header>
   )

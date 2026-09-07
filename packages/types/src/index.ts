@@ -4,6 +4,7 @@
 //   import { ContentType } from "@atpost/types/analytics"  // subpath (preferred)
 export * as ai from "./ai"
 export * as analytics from "./analytics"
+export * as auth from "./auth"
 export * as call from "./call"
 export * as channels from "./channels"
 export * as chat from "./chat"

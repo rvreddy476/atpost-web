@@ -357,24 +357,10 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
   return message || fallback
 }
 
-/**
- * 401 and 403 are two different answers and the gate has to tell them apart.
- *
- * They used to be folded into one predicate, which is why a signed-out visitor
- * was told they lacked admin scope: a claim about their account, made about
- * someone the server had not identified at all. 401 is "I do not know who you
- * are" — go and sign in. 403 is "I know exactly who you are, and no."
- */
-
-/** 401 — nobody is signed in. Not a statement about anyone's permissions. */
-export function isUnauthenticated(error: unknown): boolean {
-  return (error as AxiosError | undefined)?.response?.status === 401
-}
-
-/** 403 — signed in, and refused. */
-export function isForbidden(error: unknown): boolean {
-  return (error as AxiosError | undefined)?.response?.status === 403
-}
+// `isUnauthenticated` / `isForbidden` used to live here. Their only caller was
+// AdminGate's probe, which inferred admin access from the status code of an
+// unrelated catalogue read; it now asks /v1/auth/me/capabilities instead, and
+// nothing else in the console needed to tell 401 from 403.
 
 // ── Impact, in words ────────────────────────────────────────────
 
