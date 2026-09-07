@@ -1,9 +1,9 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { ShieldAlert, ShieldQuestion } from "lucide-react"
+import { ShieldAlert, ShieldQuestion, TriangleAlert } from "lucide-react"
 import api from "@atpost/api-client"
-import { isForbidden } from "@/lib/catalogue"
+import { isForbidden, isUnauthenticated } from "@/lib/catalogue"
 import { CATALOGUE, catalogueKeys } from "@/hooks/useCatalogue"
 
 /**
@@ -20,14 +20,30 @@ import { CATALOGUE, catalogueKeys } from "@/hooks/useCatalogue"
  * endpoint, so there is nothing to decode and nothing to ask. A 2xx on the
  * catalogue's own read route is the only truthful signal available.
  *
- * Anything that is not an explicit 401/403 — a 404 from an older gateway, a
- * dropped connection, a 500 — opens the gate rather than closing it. A gate
- * that locks the founder out of three read-only queues because a proxy hiccuped
- * would be worse than the thing it is guarding against, and the server is still
- * the one saying no.
+ * Four verdicts, because the probe genuinely comes back four ways:
+ *
+ *   allowed      2xx. Render the console.
+ *   signed-out   401. Nobody is signed in, so nothing can be said about
+ *                anyone's permissions yet — offer the way in instead.
+ *   denied       403. A named account, refused. The scope sentence is true
+ *                here and only here.
+ *   unknown      everything else. See the note above the banner below.
  */
+type Verdict = "allowed" | "signed-out" | "denied" | "unknown"
+
+/**
+ * Where a signed-out visitor is sent.
+ *
+ * A plain <a>, not next/link: this app is served under basePath "/admin", so
+ * <Link href="/login"> would render "/admin/login". The shell rewrites /admin
+ * rather than redirecting to it, so the browser is already on the shell's
+ * origin and this resolves to the one real auth page — which then honours
+ * ?redirect and comes back here.
+ */
+const SIGN_IN_HREF = "/login?redirect=/admin"
+
 export function AdminGate({ children }: { children: React.ReactNode }) {
-  const probe = useQuery<"allowed" | "denied">({
+  const probe = useQuery<Verdict>({
     queryKey: catalogueKeys.gate,
     retry: false,
     staleTime: 60_000,
@@ -36,8 +52,9 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
         await api.get(`${CATALOGUE}/attribute-schema`)
         return "allowed"
       } catch (error) {
+        if (isUnauthenticated(error)) return "signed-out"
         if (isForbidden(error)) return "denied"
-        return "allowed"
+        return "unknown"
       }
     },
   })
@@ -51,6 +68,25 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     )
   }
 
+  if (probe.data === "signed-out") {
+    return (
+      <main className="mx-auto max-w-lg px-4 py-20 text-center">
+        <ShieldQuestion className="mx-auto mb-4 h-10 w-10 text-gray-400" aria-hidden="true" />
+        <h1 className="text-xl font-semibold text-gray-900">You are not signed in</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Sign in to continue to the admin console. If the account you use does not hold an admin
+          scope, you will be told that after signing in.
+        </p>
+        <a
+          href={SIGN_IN_HREF}
+          className="mt-6 inline-block rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-700"
+        >
+          Sign in
+        </a>
+      </main>
+    )
+  }
+
   if (probe.data === "denied") {
     return (
       <main className="mx-auto max-w-lg px-4 py-20 text-center">
@@ -60,9 +96,51 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
           This console is limited to accounts holding the moderator, admin or superadmin scope. Ask
           an existing administrator to grant yours, then sign in again.
         </p>
+        <a href={SIGN_IN_HREF} className="mt-6 inline-block text-sm font-semibold text-gray-900 underline">
+          Sign in as someone else
+        </a>
       </main>
     )
   }
 
-  return <>{children}</>
+  return (
+    <>
+      {/*
+        "unknown" still opens the gate — a 500, a dropped connection, a 404 from
+        an older gateway. That much is kept on purpose: a UX gate that locks the
+        founder out of three read-only queues because a proxy hiccuped is worse
+        than the thing it guards against, and the server is still the one saying
+        no to every request behind it.
+
+        Failing open in SILENCE was the actual defect. The console then looks
+        exactly like a working one, so each button that fails afterwards reads
+        as a bug in that button rather than as an access check that never
+        happened. The banner is the fix: the gate says out loud that it does not
+        know, and offers to ask again.
+      */}
+      {probe.data === "unknown" ? (
+        <div
+          role="status"
+          className="border-b border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div className="mx-auto flex max-w-6xl items-start gap-2">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <p className="flex-1">
+              We could not check your admin access — the check itself failed, which says nothing
+              about your permissions. The console is open, but the server may still refuse anything
+              you try.
+            </p>
+            <button
+              type="button"
+              onClick={() => probe.refetch()}
+              className="shrink-0 font-semibold underline"
+            >
+              Check again
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {children}
+    </>
+  )
 }

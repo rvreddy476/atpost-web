@@ -12,20 +12,115 @@ h1 { margin: 16px 0; font-size: clamp(40px, 7vw, 72px); line-height: 1.02; lette
 .card strong { font-size: 22px; }
 .card span { color: #64748b; line-height: 1.5; }
 .card .action { margin-top: auto; color: #111827; font-weight: 700; }
-.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #e0e7ff, #f8fafc 45%); }
-.auth-card { width: min(100%, 440px); padding: 32px; border: 1px solid #e2e8f0; border-radius: 24px; background: rgba(255,255,255,.96); box-shadow: 0 24px 70px rgba(15,23,42,.12); }
-.auth-brand { color: #111827; font-size: 18px; font-weight: 900; text-decoration: none; }
-.auth-kicker { margin: 24px 0 6px; color: #6366f1; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.auth-card h1 { margin: 0 0 24px; font-size: 32px; }
+
+/* ─────────────────────────────────────────────────────────────────── prose */
+.doc { max-width: 720px; }
+.doc h2 { margin: 40px 0 12px; font-size: 22px; letter-spacing: -.01em; }
+.doc p { color: #475569; font-size: 16px; line-height: 1.75; }
+.doc a { color: #111827; font-weight: 700; }
+
+/* ═══════════════════════════════════════════════════════════════════ AUTH
+
+   The platform's single sign-in surface, for every zone.
+
+   It wears the shop's palette — #041122 ground, #0B1B2E card, #D4AF37 gold —
+   deliberately, and the tokens below are copied from
+   apps/commerce/src/app/globals.css rather than reinvented. Everyone who signs
+   in lands on the shop (apps/shell/src/lib/moduleRedirect.ts), so this page is
+   the first half of that screen; handing a visitor a pale indigo form and then
+   dropping them onto a navy storefront reads as two different products.
+
+   Contrast, measured, same figures as the commerce sheet:
+     #FFFFFF on #0B1B2E surface ......... 17.35:1  AAA
+     #B2C3D6 muted  on #0B1B2E ..........  9.64:1  AAA
+     #8FA5BE faint  on #0B1B2E ..........  6.85:1  AA
+     #D4AF37 gold   on #041122 ..........  9.01:1  AAA  (gold as text)
+     #041122 navy   on #D4AF37 gold .....  9.01:1  AAA  (gold as button)
+     #FFFFFF white  on #D4AF37 gold .....   2.10:1 FAILS — appears nowhere
+     #FCA5A5 error  on #0B1B2E ..........  9.14:1  AAA
+   The primary button is gold and therefore carries NAVY type, never white.
+
+   Zone awareness is one token deep, on purpose. `data-zone` on the card swaps
+   the accent so continuing into the admin console does not look identical to
+   continuing into the shop, and that is the whole of it: same component, same
+   skeleton, no fork, nothing to drift.
+   ═══════════════════════════════════════════════════════════════════════ */
+.auth-page {
+  --auth-bg: #041122;
+  --auth-surface: #0B1B2E;
+  --auth-sunken: #020B17;
+  --auth-ink: #FFFFFF;
+  --auth-muted: #B2C3D6;
+  --auth-faint: #8FA5BE;
+  --auth-accent: #D4AF37;
+  --auth-accent-deep: #C9A227;
+  --auth-bad: #FCA5A5;
+  --auth-line: rgba(255, 255, 255, .10);
+  --auth-line-strong: rgba(255, 255, 255, .20);
+  --auth-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
+
+  /* Full-bleed: the shared `main` rule above is a 1120px reading column, which
+     would leave this gradient floating in a box. */
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  /* Tells the browser to render the native date picker and its icon dark. */
+  color-scheme: dark;
+  background: radial-gradient(120% 90% at 50% -10%, var(--auth-surface) 0%, var(--auth-bg) 55%);
+  color: var(--auth-ink);
+}
+
+/* Steel rather than gold when the destination is the console: a different
+   errand, plainly, without being a different page. */
+.auth-card[data-zone="/admin"] { --auth-accent: #9FC1E8; --auth-accent-deep: #7FA8D6; }
+
+.auth-card {
+  width: min(100%, 460px);
+  padding: 36px;
+  border: 1px solid var(--auth-line);
+  border-radius: 24px;
+  background: var(--auth-surface);
+  box-shadow: 0 26px 54px -20px rgba(0, 0, 0, .9);
+}
+.auth-brand { display: inline-block; color: var(--auth-ink); font-family: var(--auth-display); font-size: 22px; font-weight: 600; letter-spacing: -.01em; text-decoration: none; }
+.auth-kicker { margin: 22px 0 6px; color: var(--auth-accent); font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
+.auth-card h1 { margin: 0 0 10px; font-family: var(--auth-display); font-size: 30px; font-weight: 600; line-height: 1.15; letter-spacing: -.02em; }
+.auth-lede { margin: 0 0 18px; color: var(--auth-muted); font-size: 14px; line-height: 1.65; }
+.auth-lede strong { color: var(--auth-ink); }
+.auth-note { margin: 18px 0 0; color: var(--auth-faint); font-size: 13px; line-height: 1.6; }
+
 .auth-form, .auth-form label { display: flex; flex-direction: column; gap: 8px; }
-.auth-form { gap: 16px; }
-.auth-form label { color: #334155; font-size: 13px; font-weight: 700; }
-.auth-form input { min-width: 0; border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px 14px; font: inherit; }
-.auth-form input:focus { border-color: #4f46e5; outline: 3px solid #e0e7ff; }
+.auth-form { gap: 16px; margin-top: 6px; }
+.auth-form label { color: var(--auth-muted); font-size: 13px; font-weight: 700; }
+.auth-form input { min-width: 0; border: 1px solid var(--auth-line-strong); border-radius: 12px; padding: 12px 14px; background: var(--auth-sunken); color: var(--auth-ink); font: inherit; }
+.auth-form input::placeholder { color: var(--auth-faint); }
+.auth-form input:focus-visible { border-color: var(--auth-accent); outline: 2px solid var(--auth-accent); outline-offset: 1px; }
+.auth-form input[aria-invalid="true"] { border-color: var(--auth-bad); }
+.auth-hint { color: var(--auth-faint); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .auth-name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.auth-form button { border: 0; border-radius: 12px; padding: 13px; background: #111827; color: white; font: inherit; font-weight: 800; cursor: pointer; }
+
+/* The terms row is the one label that reads left-to-right: box, then sentence. */
+.auth-form label.auth-terms { flex-direction: row; align-items: flex-start; gap: 10px; color: var(--auth-muted); font-size: 13px; font-weight: 400; line-height: 1.55; cursor: pointer; }
+.auth-form label.auth-terms input { flex: none; width: 18px; height: 18px; margin-top: 1px; padding: 0; accent-color: var(--auth-accent); }
+.auth-terms a { color: var(--auth-accent); font-weight: 700; }
+
+.auth-form button { border: 0; border-radius: 12px; padding: 14px; background: var(--auth-accent); color: var(--auth-bg); font: inherit; font-weight: 800; cursor: pointer; }
+.auth-form button:hover:not(:disabled) { background: var(--auth-accent-deep); }
 .auth-form button:disabled { cursor: wait; opacity: .6; }
-.auth-error { margin: 0; color: #b91c1c; font-size: 14px; }
-.auth-switch { margin: 20px 0 0; color: #64748b; font-size: 14px; text-align: center; }
-.auth-switch a { color: #111827; font-weight: 800; }
+
+.auth-field-error { margin: 0; color: var(--auth-bad); font-size: 12px; font-weight: 600; line-height: 1.45; }
+.auth-error { margin: 0; padding: 10px 12px; border: 1px solid rgba(252, 165, 165, .4); border-radius: 10px; background: rgba(252, 165, 165, .08); color: var(--auth-bad); font-size: 14px; line-height: 1.5; }
+
+.auth-dev { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--auth-line); color: var(--auth-faint); font-size: 12px; }
+.auth-dev summary { color: var(--auth-muted); font-weight: 700; cursor: pointer; }
+.auth-dev p { margin: 10px 0; line-height: 1.6; }
+.auth-dev code { display: block; padding: 10px; border-radius: 8px; background: var(--auth-sunken); color: var(--auth-muted); font-size: 11px; word-break: break-all; }
+
+.auth-switch { margin: 22px 0 0; color: var(--auth-faint); font-size: 14px; text-align: center; }
+.auth-switch a { color: var(--auth-accent); font-weight: 700; }
+
 @media (max-width: 480px) { .auth-card { padding: 24px; } .auth-name-row { grid-template-columns: 1fr; } }

@@ -9,11 +9,11 @@ export default function Home() {
   return (
     <main>
       <section className="hero">
-        <span className="eyebrow">VChat</span>
+        <span className="eyebrow">Momentum</span>
         <h1>Everything you need, in one connected platform.</h1>
         <p>Each experience is independently deployed and optimized while your navigation remains consistent.</p>
       </section>
-      <section className="grid" aria-label="VChat destinations">
+      <section className="grid" aria-label="Momentum destinations">
         {destinations.map(([label, href, description]) => (
           <a className="card" href={href} key={href}>
             <strong>{label}</strong>

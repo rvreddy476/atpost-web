@@ -2,8 +2,8 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "VChat",
-  description: "VChat modular web platform",
+  title: "Momentum",
+  description: "Momentum modular web platform",
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
