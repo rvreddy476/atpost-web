@@ -60,6 +60,29 @@ export interface PostMediaProps {
    * cannot play HLS without it.
    */
   resolveUrl?: (url: string) => string
+  /**
+   * Override the frame's shape.
+   *
+   * A carousel needs ONE frame for the whole post — five pages that each took
+   * their own aspect ratio would change the card's height on every swipe and
+   * shove the action bar up and down under the reader's cursor. PostCarousel
+   * decides the post's ratio once and hands the same number to every page.
+   * Omitted everywhere else, where the media's own shape is the right one.
+   */
+  frameRatio?: number
+  /**
+   * Fetch the picture now rather than when the browser thinks it is near the
+   * viewport.
+   *
+   * `loading="lazy"` is the right default in a vertical feed and the wrong one
+   * inside a carousel: a page one swipe away is clipped by the scroller, which
+   * the browser reads as "nowhere near the viewport", so it would not start
+   * fetching until the swipe was already under way and the reader would watch
+   * a blurhash resolve. PostCarousel decides what is worth loading — it mounts
+   * only the current page and its neighbours — so for those pages MOUNTING is
+   * the decision, and the browser should not second-guess it.
+   */
+  preloadImage?: boolean
 }
 
 /**
@@ -73,6 +96,31 @@ export interface PostMediaProps {
  * so nothing is cropped, it is only bounded.
  */
 const FRAME = "relative mx-auto w-full max-h-[75vh] overflow-hidden rounded-mo bg-mo-sunken"
+
+/**
+ * The frame itself, with the blurhash already behind it.
+ *
+ * Exported because a carousel page that has not been mounted yet still has to
+ * occupy exactly this much space — otherwise the scroller's width is a lie and
+ * `pageFromScroll` reads the wrong page — and because that placeholder should
+ * hold the same blurhash the real page will paint over.
+ */
+export function MediaFrame({
+  ratio,
+  blurhash,
+  children,
+}: {
+  ratio: number
+  blurhash?: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div className={FRAME} style={{ aspectRatio: ratio }}>
+      <BlurhashCanvas hash={blurhash} />
+      {children}
+    </div>
+  )
+}
 
 /** A short line over the blurhash. Body colour: this is small text. */
 function Notice({ children }: { children: React.ReactNode }) {
@@ -95,9 +143,13 @@ export function PostMedia({
   onWatchEvent,
   onStale,
   resolveUrl,
+  frameRatio,
+  preloadImage = false,
 }: PostMediaProps) {
   const [imageFailed, setImageFailed] = useState(false)
-  const ratio = aspectRatio(media)
+  // The post's shared frame wins when there is one; otherwise this media's own
+  // shape. See `frameRatio` above for why a carousel has to impose one.
+  const ratio = frameRatio ?? aspectRatio(media)
   const expired = isExpired(media)
 
   const source = useMemo(
@@ -132,10 +184,9 @@ export function PostMedia({
   )
 
   const frame = (children: React.ReactNode) => (
-    <div className={FRAME} style={{ aspectRatio: ratio }}>
-      <BlurhashCanvas hash={media.blurhash} />
+    <MediaFrame ratio={ratio} blurhash={media.blurhash}>
       {children}
-    </div>
+    </MediaFrame>
   )
 
   /* ── Not showable ─────────────────────────────────────────────────────── */
@@ -170,8 +221,7 @@ export function PostMedia({
 
   if (media.kind === "video") {
     return (
-      <div className={FRAME} style={{ aspectRatio: ratio }}>
-        <BlurhashCanvas hash={media.blurhash} />
+      <MediaFrame ratio={ratio} blurhash={media.blurhash}>
         <MomentumVideo
           source={source}
           active={active}
@@ -190,7 +240,7 @@ export function PostMedia({
           onUnplayable={() => onStale?.(item.id)}
           resolveUrl={resolveUrl}
         />
-      </div>
+      </MediaFrame>
     )
   }
 
@@ -210,7 +260,7 @@ export function PostMedia({
       // — including falling back to the post's text — would put a caption in
       // front of a screen reader that the author chose not to write.
       alt={media.alt_decorative ? "" : media.alt_text || ""}
-      loading="lazy"
+      loading={preloadImage ? "eager" : "lazy"}
       decoding="async"
       width={media.width}
       height={media.height}

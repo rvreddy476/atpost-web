@@ -16,6 +16,14 @@
  * posts and quietly lose the title and the channel. So the kind comes from
  * `content_type` and the media is treated as an attachment that may be absent.
  *
+ * ── Several attachments are a carousel, not a column ──────────────────────
+ * A post with five photographs used to render five stacked frames: five
+ * screens of scrolling for one post, the caption and the action bar pushed
+ * below the fold, and the last picture given the same weight as the first.
+ * Two or more attachments now go to `PostCarousel`, which is also where the
+ * question of WHICH page may play is answered — see its header, and the note
+ * on `active` at the call site.
+ *
  * ── reason_text is already written ────────────────────────────────────────
  * "Suggested for you" comes from the server. The card shows it rather than
  * composing its own sentence, because the ranking service is the only thing
@@ -32,6 +40,7 @@ import { primaryVideo } from "@momentum/player"
 import { ActionBar } from "@momentum/interactions"
 import type { ToggleResult } from "@momentum/interactions"
 import { Avatar } from "./Avatar"
+import { PostCarousel } from "./PostCarousel"
 import { PostMedia } from "./PostMedia"
 import { absoluteTime, formatDuration, relativeTime } from "./relativeTime"
 
@@ -142,24 +151,47 @@ export function PostCard({
           </ul>
         )}
 
-        {attachments.length > 0 && (
-          <div className="relative space-y-2">
-            {attachments.map((media) => (
-              <PostMedia
-                key={media.media_id}
-                item={item}
-                media={media}
-                // Only the primary video of an active card plays. A carousel
-                // with two videos must not start both.
-                active={active && media.media_id === video?.media_id}
-                muted={muted}
-                onToggleMuted={onToggleMuted}
-                session={media.media_id === video?.media_id ? session : undefined}
-                onWatchEvent={media.media_id === video?.media_id ? onWatchEvent : undefined}
-                onStale={onStale}
-                resolveUrl={resolveUrl}
-              />
-            ))}
+        {/*
+          Two or more attachments are ONE frame you swipe through, not a
+          column. PostCarousel owns which page is in view and therefore which
+          page may play; the single-attachment branch below is untouched by it.
+
+          The single branch stays for the same reason it stays on Android: not
+          every attachment is a carousel, and rewriting the one-picture path to
+          go through a scroller would put a scroll container, a pill and a row
+          of pips around every photograph on the platform to no purpose.
+        */}
+        {attachments.length > 1 && (
+          <PostCarousel
+            item={item}
+            media={attachments}
+            // The POST's activeness. The carousel intersects it with the page
+            // in view before any media is told it may play.
+            active={active}
+            muted={muted}
+            onToggleMuted={onToggleMuted}
+            session={session}
+            onWatchEvent={onWatchEvent}
+            sessionPageId={video?.media_id}
+            onStale={onStale}
+            resolveUrl={resolveUrl}
+          />
+        )}
+
+        {attachments.length === 1 && (
+          <div className="relative">
+            <PostMedia
+              item={item}
+              media={attachments[0]}
+              // Only a video plays, and only on an active card.
+              active={active && attachments[0].media_id === video?.media_id}
+              muted={muted}
+              onToggleMuted={onToggleMuted}
+              session={attachments[0].media_id === video?.media_id ? session : undefined}
+              onWatchEvent={attachments[0].media_id === video?.media_id ? onWatchEvent : undefined}
+              onStale={onStale}
+              resolveUrl={resolveUrl}
+            />
             {duration && (
               <span className="pointer-events-none absolute bottom-2 right-2 rounded-mo-sm bg-mo-bg/80 px-1.5 py-0.5 text-xs tabular-nums text-mo-ink">
                 {duration}

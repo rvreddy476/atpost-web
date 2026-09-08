@@ -13,8 +13,28 @@
 export { PostCard } from "./PostCard"
 export type { PostCardHandlers, PostCardProps } from "./PostCard"
 
-export { PostMedia } from "./PostMedia"
+export { MediaFrame, PostMedia } from "./PostMedia"
 export type { PostMediaProps } from "./PostMedia"
+
+/**
+ * The multi-page media frame, and its arithmetic.
+ *
+ * Exported on its own so reels, tube and a profile grid get a carousel without
+ * inheriting the feed card around it — which is why it lives in this package
+ * rather than in apps/social.
+ */
+export { PostCarousel } from "./PostCarousel"
+export type { PostCarouselProps } from "./PostCarousel"
+export {
+  carouselLabel,
+  dragTarget,
+  isPageActive,
+  isPageRendered,
+  keyTarget,
+  pageFromScroll,
+  pillLabel,
+  slideLabel,
+} from "./carousel"
 
 export { InfiniteFeed } from "./InfiniteFeed"
 export type { InfiniteFeedProps } from "./InfiniteFeed"
