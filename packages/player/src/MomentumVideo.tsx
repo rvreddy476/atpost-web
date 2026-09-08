@@ -40,6 +40,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type Hls from "hls.js"
+import type { MediaSessionInfo } from "./mediaSession"
+import { useMediaSession } from "./useMediaSession"
 import { HEARTBEAT_INTERVAL_MS, SAMPLE_INTERVAL_MS, WatchSession, type WatchEvent, type WatchSessionInfo } from "./watchTracker"
 
 export interface VideoSource {
@@ -70,6 +72,23 @@ export interface MomentumVideoProps {
   /** Watch measurement. Omit and nothing is tracked. */
   session?: WatchSessionInfo
   onWatchEvent?: (event: WatchEvent) => void
+  /**
+   * What the OS should say this is — the lock screen, the headset button, the
+   * media keys. Omit and no media session is claimed at all.
+   *
+   * Only claimed while `active`, so the one item the coordinator chose is the
+   * one the operating system describes. Read the header of `mediaSession.ts`
+   * before building a feature on this: it does NOT give the page background
+   * audio, and never will.
+   */
+  mediaSession?: MediaSessionInfo | null
+  /**
+   * Lock-screen skip buttons. Wired ONLY when supplied, and a feed must not
+   * supply them — see the long note at the registration site in
+   * `useMediaSession`. A surface with a real ordered queue should.
+   */
+  onPreviousTrack?: () => void
+  onNextTrack?: () => void
   /** Fired when neither HLS nor the progressive fallback would load. */
   onUnplayable?: () => void
   onToggleMuted?: () => void
@@ -102,6 +121,9 @@ export function MomentumVideo({
   ariaLabel,
   session,
   onWatchEvent,
+  mediaSession,
+  onPreviousTrack,
+  onNextTrack,
   onUnplayable,
   onToggleMuted,
   resolveUrl,
@@ -421,6 +443,22 @@ export function MomentumVideo({
 
     return () => window.clearInterval(id)
   }, [sessionId, attach])
+
+  /* ── The OS's copy of all this ────────────────────────────────────────── */
+
+  /**
+   * Deliberately passed `active` — the coordinator's answer — rather than
+   * anything this component works out for itself. That is the whole ownership
+   * rule: the one item the feed decided is playing is the one item the lock
+   * screen describes, and there is no second place for that decision to be made.
+   */
+  useMediaSession({
+    videoRef,
+    active,
+    info: mediaSession,
+    onPreviousTrack,
+    onNextTrack,
+  })
 
   const handlePlaying = useCallback(() => {
     bufferingRef.current = false

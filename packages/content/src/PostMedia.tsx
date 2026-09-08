@@ -34,6 +34,7 @@ import {
   MomentumVideo,
   isModerationCleared,
   isTranscodeReady,
+  metadataForPost,
   pickPoster,
   pickProgressive,
   type WatchEvent,
@@ -112,6 +113,24 @@ export function PostMedia({
     [media, expired]
   )
 
+  /**
+   * What the lock screen should say, if this card turns out to be the active
+   * one. Built here rather than in the player because it is a reading of a
+   * POST — a title, an author, an artwork ladder — and the player is
+   * deliberately ignorant of the feed's wire shape.
+   *
+   * It is built for every video card, active or not, and that costs nothing:
+   * `MomentumVideo` only claims the session while `active`, so twenty of these
+   * exist and one of them is ever used. Memoised anyway because the object
+   * feeds an effect dependency downstream — though note that the effect there
+   * keys off `metadataKey()`, a string, precisely so that a like or a save
+   * rebuilding `item` cannot churn the session.
+   */
+  const mediaSession = useMemo(
+    () => (media.kind === "video" ? metadataForPost(item, media) : null),
+    [item, media]
+  )
+
   const frame = (children: React.ReactNode) => (
     <div className={FRAME} style={{ aspectRatio: ratio }}>
       <BlurhashCanvas hash={media.blurhash} />
@@ -164,6 +183,9 @@ export function PostMedia({
           ariaLabel={media.alt_text || item.text || "Video"}
           session={session}
           onWatchEvent={onWatchEvent}
+          // No `onPreviousTrack` / `onNextTrack`: a feed's "next" is a scroll,
+          // not a track change. See the registration note in useMediaSession.
+          mediaSession={mediaSession}
           onToggleMuted={onToggleMuted}
           onUnplayable={() => onStale?.(item.id)}
           resolveUrl={resolveUrl}
