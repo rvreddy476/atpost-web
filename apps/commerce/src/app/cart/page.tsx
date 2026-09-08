@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { BRAND } from '@momentum/brand'
 import { useState } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowRight, Minus, Plus, ShieldCheck, ShoppingBag, Store, Tag, Trash2 } from 'lucide-react'
 import { StoreHeader } from '@/components/StoreHeader'
@@ -65,7 +66,7 @@ export default function CartPage() {
       <main className="vbag-page flex-1">
         <div className="vbag-heading">
           <div>
-            <span className="shop-eyebrow">atPost Shop</span>
+            <span className="shop-eyebrow">{BRAND.shop}</span>
             <h1>Your bag</h1>
           </div>
           <p><strong>{cart.item_count}</strong> {cart.item_count === 1 ? 'item' : 'items'} selected</p>
@@ -100,7 +101,7 @@ export default function CartPage() {
                     <ProductPhoto src={image} alt={line.title} tight />
                   </Link>
                   <div className="vbag-item-copy">
-                    <span>{line.seller_name || 'atPost seller'}</span>
+                    <span>{line.seller_name || BRAND.sellerFallback}</span>
                     <Link href={`/products/${line.product_id}`}>{line.title}</Link>
                     <small>SKU / {line.sku || 'STANDARD'}</small>
                     <div className="vbag-item-unit">

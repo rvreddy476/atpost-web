@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { BRAND } from "@momentum/brand"
 import { readServerSession } from "@atpost/api-client/server"
 
 /**
@@ -16,7 +17,7 @@ import { readServerSession } from "@atpost/api-client/server"
 const destinations = [
   ["Shop", "/shop", "Browse the marketplace, track orders, sell your own"],
   ["Feed", "/social", "What the people you follow are posting"],
-  ["Mini apps", "/apps", "Small tools that run inside Momentum"],
+  ["Mini apps", "/apps", `Small tools that run inside ${BRAND.name}`],
 ] as const
 
 export default async function Home() {
@@ -27,8 +28,8 @@ export default async function Home() {
   return (
     <main className="shell-page">
       <header className="shell-top">
-        <Link href="/" className="brand" aria-label="Momentum home">
-          <i aria-hidden="true">M</i>Momentum
+        <Link href="/" className="brand" aria-label={`${BRAND.name} home`}>
+          <i aria-hidden="true">{BRAND.initial}</i>{BRAND.name}
         </Link>
         <nav aria-label="Account">
           {signedIn ? (
@@ -43,7 +44,7 @@ export default async function Home() {
       </header>
 
       <section className="hero">
-        <span className="eyebrow">Momentum</span>
+        <span className="eyebrow">{BRAND.name}</span>
         <h1>Everything you need, in one connected platform.</h1>
         <p>
           Each experience is deployed and scaled on its own, and one account signs you in to all of
@@ -57,7 +58,7 @@ export default async function Home() {
         ) : null}
       </section>
 
-      <section className="grid" aria-label="Momentum destinations">
+      <section className="grid" aria-label={`${BRAND.name} destinations`}>
         {destinations.map(([label, href, description]) => (
           // A plain <a>, not next/link: these are separate Next apps behind a
           // rewrite, so a client-side navigation would look for a route this
@@ -71,7 +72,7 @@ export default async function Home() {
       </section>
 
       <footer className="shell-foot">
-        <p>One Momentum account, every part of the platform.</p>
+        <p>One {BRAND.name} account, every part of the platform.</p>
       </footer>
     </main>
   )

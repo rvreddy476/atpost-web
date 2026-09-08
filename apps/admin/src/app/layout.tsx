@@ -1,13 +1,14 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import { BRAND, zoneTitle } from "@momentum/brand"
 import { readServerSession } from "@atpost/api-client/server"
 import { Providers } from "./providers"
 import { AdminNav } from "@/components/AdminNav"
 import { AdminGate } from "@/components/AdminGate"
 
 export const metadata: Metadata = {
-  title: "atPost — Admin",
-  description: "atPost admin zone",
+  title: zoneTitle("Admin"),
+  description: `${BRAND.name} admin zone`,
 }
 
 /**

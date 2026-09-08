@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { Minus, Plus, Store } from 'lucide-react'
+import { BRAND } from '@momentum/brand'
 import { useAddToCart, useCart, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
 import { ProductPhoto } from './ProductPhoto'
 import { productImage } from '@/lib/media'
@@ -166,7 +167,7 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
                   title={outOfStock ? 'Out of stock' : 'Add to bag'}
                 >
                   {isPending
-                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-shop-bg border-t-transparent" />
+                    ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-shop-on-gold border-t-transparent" />
                     : <Plus size={15} aria-hidden="true" />}
                   Add
                 </button>
@@ -182,16 +183,23 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
 
 /**
  * Fills the tail of a short grid. Eight products across four columns leaves a
- * ragged second row; a gold-outlined invitation there turns the gap into the
- * one thing the shop most wants from a visitor with nothing left to browse.
+ * ragged second row; an invitation there turns the gap into the one thing the
+ * shop most wants from a visitor with nothing left to browse.
+ *
+ * Its edge and its glyph are EMBER, not gold. Becoming a seller is a
+ * platform-level act rather than a purchase, and ember is the brand's colour —
+ * this and the header wordmark are the only two places it appears in the shop.
+ * The glyph is a 26px icon, a non-text mark, so the ember red's 4.03 against
+ * the ground clears the 3.0 bar that applies to it; the words beside it stay
+ * ink and body, because ember at 13px would not.
  */
 export function SellerInvite() {
   return (
     <Link href="/sell" className="seller-invite">
-      <Store size={26} className="text-shop-gold" aria-hidden="true" />
-      <strong>Sell on atPost</strong>
+      <Store size={26} className="text-mo-primary" aria-hidden="true" />
+      <strong>Sell on {BRAND.name}</strong>
       <p>List your first product in minutes. Your catalogue, your prices, our buyers.</p>
-      <span className="gold-link mt-5">Open your shop →</span>
+      <span className="shop-link mt-5">Open your shop →</span>
     </Link>
   )
 }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { BRAND } from '@momentum/brand'
 import api, { markSignedIn } from '@atpost/api-client'
 import { moduleHome, moduleLabel, requestedModule } from '@/lib/moduleRedirect'
 import { fieldError, readAuthFailure, type AuthFailure } from '@/lib/authErrors'
@@ -15,8 +16,6 @@ import {
   readSession,
   validateDob,
 } from '@/lib/registration'
-
-const BRAND = 'Momentum'
 
 interface Verification {
   email: string
@@ -72,7 +71,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       const dobProblem = validateDob(dob)
       if (dobProblem) problems.dob = dobProblem
       if (!acceptedTerms) {
-        problems.accepted_terms = `Please accept the terms to create a ${BRAND} account.`
+        problems.accepted_terms = `Please accept the terms to create a ${BRAND.name} account.`
       }
       if (Object.keys(problems).length > 0) {
         setLocalErrors(problems)
@@ -152,11 +151,11 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
     return (
       <main className="auth-page">
         <section className="auth-card" data-zone={zone ?? 'platform'}>
-          <Link href="/" className="auth-brand"><i aria-hidden="true">M</i>{BRAND}</Link>
+          <Link href="/" className="auth-brand"><i aria-hidden="true">{BRAND.initial}</i>{BRAND.name}</Link>
           <p className="auth-kicker">Almost there</p>
           <h1>Confirm your email</h1>
           <p className="auth-lede">
-            Your {BRAND} account for <strong>{verification.email}</strong> exists, but it is not
+            Your {BRAND.name} account for <strong>{verification.email}</strong> exists, but it is not
             usable yet. The address has to be confirmed before you can sign in.
           </p>
           <p className="auth-lede">
@@ -202,13 +201,13 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   return (
     <main className="auth-page">
       <section className="auth-card" data-zone={zone ?? 'platform'}>
-        <Link href="/" className="auth-brand"><i aria-hidden="true">M</i>{BRAND}</Link>
+        <Link href="/" className="auth-brand"><i aria-hidden="true">{BRAND.initial}</i>{BRAND.name}</Link>
         <p className="auth-kicker">{kicker}</p>
         <h1>{isRegister ? 'Create your account' : 'Welcome back'}</h1>
         <p className="auth-lede">
           {zoneLabel
-            ? `One ${BRAND} account signs you in to ${zoneLabel} and everything else on the platform.`
-            : `One ${BRAND} account signs you in everywhere on the platform.`}
+            ? `One ${BRAND.name} account signs you in to ${zoneLabel} and everything else on the platform.`
+            : `One ${BRAND.name} account signs you in everywhere on the platform.`}
         </p>
         <form onSubmit={submit} className="auth-form" noValidate>
           {isRegister ? (
@@ -262,7 +261,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
                 required
               />
               <span className="auth-hint">
-                {BRAND} is for people aged {MINIMUM_AGE} and over. We use this to check that and
+                {BRAND.name} is for people aged {MINIMUM_AGE} and over. We use this to check that and
                 nothing else.
               </span>
               {dobError ? <span className="auth-field-error">{dobError}</span> : null}
@@ -296,7 +295,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
                 <span>
                   I agree to the{' '}
                   <Link href={TERMS_HREF} target="_blank" rel="noreferrer">
-                    {BRAND} Terms of Service
+                    {BRAND.name} Terms of Service
                   </Link>{' '}
                   (version {TERMS_VERSION}).
                 </span>
@@ -311,7 +310,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
           </button>
         </form>
         <p className="auth-switch">
-          {isRegister ? 'Already registered?' : `New to ${BRAND}?`}{' '}
+          {isRegister ? 'Already registered?' : `New to ${BRAND.name}?`}{' '}
           <Link href={switchHref}>{isRegister ? 'Sign in' : 'Create account'}</Link>
         </p>
       </section>

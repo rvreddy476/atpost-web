@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { ChevronDown, Smartphone } from "lucide-react"
 import type { RoleDestination } from "@atpost/types/auth"
+import { BRAND } from "@momentum/brand"
 import { cn } from "./cn"
 
 /**
@@ -37,10 +38,16 @@ import { cn } from "./cn"
  *   working, which a menu of "places" should.
  *
  * • Colours come from the shared `brand-*` tokens, so the one component reads
- *   correctly in both zones with no fork: in commerce those tokens resolve to
- *   the navy/gold shop palette, in admin to the light console palette. The
- *   accent chip is `bg-brand-accent text-brand-bg` — which is navy-on-gold in
- *   the shop (9.01:1), never white-on-gold (2.10:1, fails).
+ *   correctly in every zone with no fork. The accent chip is
+ *   `bg-brand-accent text-brand-bg`.
+ *
+ *   Since the shop moved onto @momentum/tokens, `--brand-accent` resolves to
+ *   Momentum's CYAN in the shop and in the feed, and to the light console's own
+ *   accent in admin. The chip is therefore #0D0C14 on #06B6D4 — 8.01:1 — and it
+ *   is the SAME chip in the shop as in the feed, which is the point: a shopper
+ *   who switches to the seller console does not watch the control change
+ *   colour. It is deliberately no longer gold: gold in this product means
+ *   money, and a count of the hats you wear is not money.
  *
  * • The menu stays mounted and is closed with the `hidden` attribute rather
  *   than unmounted. `hidden` takes it out of the accessibility tree, out of
@@ -177,7 +184,7 @@ export function RoleSwitcher({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
-        aria-label={props["aria-label"] ?? "Switch between your atPost roles"}
+        aria-label={props["aria-label"] ?? `Switch between your ${BRAND.name} roles`}
         onClick={() => (open ? close(false) : openAt(0))}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown") {
@@ -197,8 +204,9 @@ export function RoleSwitcher({
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-text/50",
         )}
       >
-        {/* Gold in the shop, near-black in the console — and the glyph on it is
-            always the page ground colour, so it is navy on gold, never white. */}
+        {/* Cyan on the Momentum zones, the console's own accent in admin — and
+            the glyph on it is always `text-brand-bg`, the page ground, so the
+            pair is whatever that zone measured rather than a guessed white. */}
         <span
           aria-hidden="true"
           className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-brand-accent text-[11px] font-bold text-brand-bg"
@@ -297,8 +305,8 @@ export function RoleSwitcher({
             className="border-t border-brand-text/10 px-3 pb-2 pt-2 text-xs text-brand-text/50"
           >
             {appOnlyCount === 1
-              ? "You still hold that role — it is managed in the atPost app, not on the web."
-              : "You still hold those roles — they are managed in the atPost app, not on the web."}
+              ? `You still hold that role — it is managed in the ${BRAND.mobileApp}, not on the web.`
+              : `You still hold those roles — they are managed in the ${BRAND.mobileApp}, not on the web.`}
           </p>
         )}
       </div>

@@ -14,6 +14,7 @@
     "@atpost/types": "workspace:*",
     "@atpost/ui": "workspace:*",
     "@momentum/analytics": "workspace:*",
+    "@momentum/brand": "workspace:*",
     "@momentum/content": "workspace:*",
     "@momentum/interactions": "workspace:*",
     "@momentum/player": "workspace:*",

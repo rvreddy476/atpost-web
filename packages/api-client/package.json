@@ -21,6 +21,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@momentum/brand": "workspace:*",
     "@atpost/types": "workspace:*"
   },
   "peerDependencies": {

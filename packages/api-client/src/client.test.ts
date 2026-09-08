@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { InternalAxiosRequestConfig } from "axios"
+import { STORAGE_KEYS } from "@momentum/brand"
 import api, {
   SESSION_BROADCAST_KEY,
   SESSION_CHANGE_EVENT,
@@ -167,8 +168,11 @@ describe("telling the other tabs", () => {
 describe("the localStorage migration", () => {
   it("deletes the old session slots rather than leaving them to rot", () => {
     const store = installStorage({
-      postbook_session: JSON.stringify({ id: "u-1" }),
-      postbook_auth_tokens: JSON.stringify({ accessToken: "eyJhbGciOi...", refreshToken: "r" }),
+      [STORAGE_KEYS.legacySession]: JSON.stringify({ id: "u-1" }),
+      [STORAGE_KEYS.legacyAuthTokens]: JSON.stringify({
+        accessToken: "eyJhbGciOi...",
+        refreshToken: "r",
+      }),
       "unrelated:key": "keep me",
     })
 
@@ -177,8 +181,8 @@ describe("the localStorage migration", () => {
     // A dead access token in localStorage is still a bearer credential to
     // anything that can run script on the origin. "We stopped reading it" is
     // not the same as "it is gone".
-    expect(store.has("postbook_session")).toBe(false)
-    expect(store.has("postbook_auth_tokens")).toBe(false)
+    expect(store.has(STORAGE_KEYS.legacySession)).toBe(false)
+    expect(store.has(STORAGE_KEYS.legacyAuthTokens)).toBe(false)
     expect(store.get("unrelated:key")).toBe("keep me")
   })
 })

@@ -128,13 +128,13 @@ export default function ProductDetailPage() {
         ) : (
           <>
             <nav aria-label="Breadcrumb" className="mb-8 text-xs text-shop-faint">
-              <Link href="/" className="hover:text-shop-gold">Shop</Link>
+              <Link href="/" className="hover:text-shop-interactive">Shop</Link>
               <span aria-hidden="true"> / </span>
               {categoryName ? (
                 <>
                   <Link
                     href={category ? `/?category=${encodeURIComponent(category.id)}` : `/?q=${encodeURIComponent(categoryName)}`}
-                    className="hover:text-shop-gold"
+                    className="hover:text-shop-interactive"
                   >
                     {categoryName}
                   </Link>

@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react"
 import Link from "next/link"
+import { BRAND } from "@momentum/brand"
 import { useSearchParams } from "next/navigation"
 import {
   ArrowRight, ShieldCheck, Truck, RotateCcw, BadgePercent, Tag, Sparkles, Star, Package,
@@ -13,18 +14,23 @@ import { ProductPhoto } from "@/components/commerce/ProductPhoto"
 import { productImage, mediaUrl } from "@/lib/media"
 import { useProducts, useCategories, type Category } from "@/hooks/useCommerce"
 
+/**
+ * A filter chip. Cyan, not gold: narrowing a list is navigation, and gold in
+ * this zone means money. `text-shop-bg` on the filled state is the page ground
+ * on cyan — 8.01, the same pair the token sheet measures for every cyan fill.
+ */
 function chip(active: boolean) {
   return [
     "inline-flex min-h-[38px] items-center whitespace-nowrap rounded-full border px-4 text-sm font-semibold transition-colors",
     active
-      ? "border-shop-gold bg-shop-gold text-shop-bg"
-      : "border-line text-shop-muted hover:border-shop-gold hover:text-shop-gold",
+      ? "border-shop-interactive bg-shop-interactive text-shop-bg"
+      : "border-line text-shop-muted hover:border-shop-interactive hover:text-shop-interactive",
   ].join(" ")
 }
 
 /**
- * The hero. Deliberately not a stock-photo wall: a navy editorial panel with
- * the shop's real numbers, and one real product on its plate beside it. With
+ * The hero. Deliberately not a stock-photo wall: an editorial panel with the
+ * shop's real numbers, and one real product on its plate beside it. With
  * eight products in the catalogue that reads as a considered storefront,
  * where a five-slot carousel would read as a half-finished one.
  */
@@ -37,7 +43,7 @@ function Hero({ categories, featured, isLoading }: {
   return (
     <section className="hero" aria-labelledby="hero-title">
       <div className="hero-copy">
-        <span className="shop-eyebrow">The atPost Marketplace</span>
+        <span className="shop-eyebrow">The {BRAND.name} Marketplace</span>
         <h1 id="hero-title">Things worth <em>owning</em>, from sellers worth trusting.</h1>
         <p>
           A curated marketplace of independent Indian sellers. Every listing is reviewed before it
@@ -47,7 +53,7 @@ function Hero({ categories, featured, isLoading }: {
           <Link href="/?stock=true" className="btn btn-gold btn-lg">
             Shop everything <ArrowRight size={17} aria-hidden="true" />
           </Link>
-          <Link href="/sell" className="btn btn-outline btn-lg">Sell on atPost</Link>
+          <Link href="/sell" className="btn btn-outline btn-lg">Sell on {BRAND.name}</Link>
         </div>
         <div className="hero-stats">
           <div><strong>{categories.length || 12}</strong><span>Categories</span></div>
@@ -73,7 +79,7 @@ function Hero({ categories, featured, isLoading }: {
           <ProductPhoto src={productImage(featured, { width: 720 })} alt={featured.title} priority tight
             badge={<span className="plate-badge">Featured</span>} />
           <div className="hero-feature-body">
-            <span>{featured.retailer_name ?? "atPost seller"}</span>
+            <span>{featured.retailer_name ?? BRAND.sellerFallback}</span>
             <strong>{featured.title}</strong>
             {featured.min_selling_price != null ? (
               <div className="hero-feature-price">
@@ -82,7 +88,7 @@ function Hero({ categories, featured, isLoading }: {
                   ? <s>{inr(featured.min_mrp)}</s> : null}
               </div>
             ) : null}
-            <span className="gold-link mt-4">View product <ArrowRight size={15} aria-hidden="true" /></span>
+            <span className="shop-link mt-4">View product <ArrowRight size={15} aria-hidden="true" /></span>
           </div>
         </Link>
       ) : null}
@@ -93,7 +99,7 @@ function Hero({ categories, featured, isLoading }: {
 function CategoryTile({ category }: { category: Category }) {
   const count = category.product_count ?? 0
   // Several seeded categories point at media ids the media service never
-  // received, so the artwork 404s. Falling back to the gold glyph on error
+  // received, so the artwork 404s. Falling back to the tag glyph on error
   // keeps the row of tiles even instead of leaving broken-image squares.
   const [artFailed, setArtFailed] = useState(false)
   const showArt = !!category.image_media_id && !artFailed
@@ -141,7 +147,7 @@ function MarketplaceLanding({
       <Hero categories={categories} featured={featured} isLoading={isLoading} />
 
       <div className="landing-section landing-section--tight">
-        <section className="trust-strip" aria-label="Why shop with atPost">
+        <section className="trust-strip" aria-label={`Why shop with ${BRAND.name}`}>
           <div><Truck size={22} aria-hidden="true" /><span><strong>Delivered across India</strong><small>Tracked on every order</small></span></div>
           <div><ShieldCheck size={22} aria-hidden="true" /><span><strong>Protected payments</strong><small>UPI, cards and net banking</small></span></div>
           <div><RotateCcw size={22} aria-hidden="true" /><span><strong>Easy returns</strong><small>Return window on every item</small></span></div>
@@ -156,7 +162,7 @@ function MarketplaceLanding({
             <h2 id="browse-title">Shop by category</h2>
             <p>Every department in the catalogue, with what is actually stocked in each.</p>
           </div>
-          <Link href="/?stock=true" className="gold-link">See everything <ArrowRight size={16} aria-hidden="true" /></Link>
+          <Link href="/?stock=true" className="shop-link">See everything <ArrowRight size={16} aria-hidden="true" /></Link>
         </div>
         {ordered.length ? (
           <div className="category-grid">
@@ -176,7 +182,7 @@ function MarketplaceLanding({
             <h2 id="featured-title">Fresh on the shelf</h2>
             <p>Everything currently listed and ready to ship.</p>
           </div>
-          <Link href="/?stock=true" className="gold-link">Shop all <ArrowRight size={16} aria-hidden="true" /></Link>
+          <Link href="/?stock=true" className="shop-link">Shop all <ArrowRight size={16} aria-hidden="true" /></Link>
         </div>
         {isError ? (
           <div className="notice notice-error mb-4">Products could not be loaded. Please refresh and try again.</div>
@@ -193,7 +199,7 @@ function MarketplaceLanding({
       <section className="landing-section landing-section--last" aria-labelledby="promise-title">
         <div className="panel flex flex-wrap items-center justify-between gap-6 p-8">
           <div className="min-w-[260px] flex-1">
-            <span className="shop-eyebrow">The atPost promise</span>
+            <span className="shop-eyebrow">The {BRAND.name} promise</span>
             <h2 id="promise-title" className="shop-display mt-3 text-2xl">Bought here, backed here.</h2>
             <p className="mt-3 max-w-[54ch] text-sm leading-relaxed text-shop-muted">
               Listings are reviewed before publication, payments settle through a protected gateway,
@@ -252,7 +258,7 @@ function ShopContent() {
         ) : (
           <div className="shop-page">
             <nav aria-label="Breadcrumb" className="text-xs text-shop-faint">
-              <Link href="/" className="hover:text-shop-gold">Shop</Link>
+              <Link href="/" className="hover:text-shop-interactive">Shop</Link>
               <span aria-hidden="true"> / </span>
               <span className="text-shop-muted">{q ? "Search" : listTitle}</span>
             </nav>

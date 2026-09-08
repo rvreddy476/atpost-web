@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import type { Capabilities, CapabilitiesResponse, RoleName } from "@atpost/types/auth"
+import { BRAND } from "@momentum/brand"
 import {
   destinationsFor,
   hasAdminConsoleAccess,
@@ -92,7 +93,9 @@ describe("destinationsFor", () => {
       expect(entry).toBeDefined()
       // Not actionable, and it says why.
       expect(entry?.href).toBeNull()
-      expect(entry?.unavailableReason).toMatch(/atPost (mobile )?app/i)
+      // Asserted against the brand constant, not a literal: a rename should
+      // move this copy without failing a test that has nothing to do with it.
+      expect(entry?.unavailableReason).toContain(BRAND.mobileApp)
       // And it counts: the switcher opens so the person can SEE the row.
       expect(shouldShowSwitcher(destinations)).toBe(true)
     }

@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   compress: true,
-  transpilePackages: ['@atpost/api-client'],
+  transpilePackages: ['@atpost/api-client', '@momentum/brand'],
   async headers() {
     return [{ source: '/:path*', headers: [
       { key: 'X-Content-Type-Options', value: 'nosniff' },

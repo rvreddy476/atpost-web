@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios"
+import { STORAGE_KEYS } from "@momentum/brand"
 
 /* ═══════════════════════════════════════════════════════════════════════════
    The session lives in cookies, not in this file.
@@ -54,8 +55,14 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || ""
  * The name is unchanged from the localStorage era on purpose — `useCapabilities`
  * and the shop's header already listen for it, and renaming it would have been
  * a second, unrelated change riding along with this one.
+ *
+ * It now reads from @momentum/brand's STORAGE_KEYS rather than being spelled
+ * out here. That does NOT make it derived from the product name: the value in
+ * that module is a frozen literal, and the reason it may never be rebuilt from
+ * BRAND.name is written next to it. Routing it through there gives a rename a
+ * single inventory of the strings it must leave alone.
  */
-export const SESSION_CHANGE_EVENT = "postbook:session-changed"
+export const SESSION_CHANGE_EVENT = STORAGE_KEYS.sessionChangedEvent
 
 /**
  * The one auth cookie JS is allowed to see. Set at login, cleared at logout.
@@ -72,8 +79,12 @@ const CSRF_COOKIE = "csrf_token"
  * information anyone reads — its value is a timestamp and nothing consults it.
  * It exists because there is no "a cookie changed" event, and waiting for the
  * next focus to notice a sign-out in another tab is a second too slow.
+ *
+ * Frozen, and for a harder reason than the event above: a browser that already
+ * holds the old key keeps holding it, so a rename does not migrate tabs, it
+ * splits them across two keys and a sign-out stops propagating.
  */
-const BROADCAST_KEY = "momentum:session-epoch"
+const BROADCAST_KEY = STORAGE_KEYS.sessionBroadcast
 
 /**
  * The two slots the old localStorage session used.
@@ -82,7 +93,7 @@ const BROADCAST_KEY = "momentum:session-epoch"
  * localStorage is still a bearer credential to anything that can run script on
  * the origin, and "we stopped reading it" is not the same as "it is gone".
  */
-const LEGACY_KEYS = ["postbook_session", "postbook_auth_tokens"] as const
+const LEGACY_KEYS = [STORAGE_KEYS.legacySession, STORAGE_KEYS.legacyAuthTokens] as const
 
 const canUseStorage = () =>
     typeof window !== "undefined" && typeof localStorage !== "undefined"

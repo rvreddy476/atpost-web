@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { RoleDestination } from "@atpost/types/auth"
+import { BRAND } from "@momentum/brand"
 import { RoleSwitcher } from "./RoleSwitcher"
 
 /**
@@ -15,7 +16,7 @@ import { RoleSwitcher } from "./RoleSwitcher"
 const customer: RoleDestination = {
   id: "customer",
   label: "Customer",
-  description: "Browse and buy on atPost Shop",
+  description: `Browse and buy on ${BRAND.shop}`,
   href: "/shop",
   unavailableReason: null,
 }
@@ -41,7 +42,7 @@ const deliveryPartner: RoleDestination = {
   label: "Delivery partner",
   description: "Manage deliveries from your phone",
   href: null,
-  unavailableReason: "Only in the atPost mobile app — there is no web console for this yet.",
+  unavailableReason: `Only in the ${BRAND.mobileApp} — there is no web console for this yet.`,
 }
 
 const render = (destinations: RoleDestination[]) =>
@@ -79,7 +80,7 @@ describe("RoleSwitcher", () => {
   it("shows a mobile-only hat as present, named, and not actionable", () => {
     const html = render([customer, deliveryPartner])
     expect(html).toContain("Delivery partner")
-    expect(html).toContain("Only in the atPost mobile app")
+    expect(html).toContain(`Only in the ${BRAND.mobileApp}`)
     // Announced and arrow-key reachable, but not a link.
     expect(html).toContain('aria-disabled="true"')
     expect(html).not.toContain('href="null"')

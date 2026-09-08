@@ -23,7 +23,7 @@ export default function GuidedListingPage() {
     <div className="min-h-screen bg-shop-bg">
       <StoreHeader />
       <main className="mx-auto max-w-3xl px-5 py-10">
-        <Link href="/sell" className="text-sm text-shop-faint hover:text-shop-gold">
+        <Link href="/sell" className="text-sm text-shop-faint hover:text-shop-interactive">
           ← Back to my products
         </Link>
         {/* useSearchParams opts its whole subtree out of prerendering; the
@@ -106,7 +106,7 @@ function GuidedListing() {
     <>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="shop-display text-2xl">List in {category.name}</h1>
-        <Link href="/sell/products/guided" className="text-sm text-shop-faint underline hover:text-shop-gold">
+        <Link href="/sell/products/guided" className="text-sm text-shop-faint underline hover:text-shop-interactive">
           Change category
         </Link>
       </div>

@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { BRAND } from '@momentum/brand'
 import { TERMS_VERSION } from '@/lib/registration'
 
 export const metadata: Metadata = {
-  title: `Terms of Service — Momentum`,
-  description: `The Momentum terms of service, version ${TERMS_VERSION}.`,
+  title: `Terms of Service — ${BRAND.name}`,
+  description: `The ${BRAND.name} terms of service, version ${TERMS_VERSION}.`,
 }
 
 /**
@@ -25,14 +26,14 @@ export default function TermsPage() {
   return (
     <main className="shell-page">
       <section className="hero">
-        <span className="eyebrow">Momentum</span>
+        <span className="eyebrow">{BRAND.name}</span>
         <h1>Terms of Service</h1>
         <p>Version {TERMS_VERSION}</p>
       </section>
       <section className="doc">
         <h2>The full text is not published here yet</h2>
         <p>
-          Creating a Momentum account records that you accepted version {TERMS_VERSION} of these
+          Creating a {BRAND.name} account records that you accepted version {TERMS_VERSION} of these
           terms. That record is real, and this page is where the text belongs — but the published
           wording has not been added to this build, so there is nothing here to read yet.
         </p>

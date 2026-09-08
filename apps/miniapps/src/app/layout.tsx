@@ -1,9 +1,10 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import { BRAND, zoneTitle } from "@momentum/brand"
 
 export const metadata: Metadata = {
-  title: "atPost — Miniapps",
-  description: "atPost miniapps zone",
+  title: zoneTitle("Miniapps"),
+  description: `${BRAND.name} miniapps zone`,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

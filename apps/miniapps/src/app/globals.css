@@ -2,9 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* atPost brand tokens (light). Mirrors postbook-ui src/ui/theme.css; the shared
-   Tailwind preset maps brand-* colors onto these vars. Add a `.dark` block with
-   the dark values when the theme switcher is ported. */
+/* The miniapps palette — the LIGHT set of --brand-* values, declared per zone.
+
+   The shared Tailwind preset maps brand-* classes onto these variables, and
+   @momentum/tokens points the same variables at the dark theme. Whichever of
+   the two a zone loads is the theme it wears; that seam is how the shop moved
+   onto the dark theme without this file changing at all. Add a `.dark` block
+   with the dark values when the theme switcher is ported.
+
+   These values name no brand deliberately. Renaming the product does not
+   repaint this zone, and a comment claiming they are "the <product> tokens"
+   would send the next rename looking for colours to change here. The product's
+   name lives in @momentum/brand and nowhere else. */
 :root {
   --brand-bg: 255 255 255;
   --brand-text: 15 20 25;

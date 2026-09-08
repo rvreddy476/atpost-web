@@ -16,7 +16,16 @@ export function createZoneConfig({ basePath }) {
     assetPrefix: basePath,
     compress: true,
     poweredByHeader: false,
-    transpilePackages: ["@atpost/ui", "@atpost/api-client", "@atpost/types", "@atpost/form"],
+    transpilePackages: [
+      "@atpost/ui",
+      "@atpost/api-client",
+      "@atpost/types",
+      "@atpost/form",
+      // Ships raw TypeScript from src/ like its siblings above, so every zone
+      // that reads the product name has to compile it rather than resolve a
+      // build output that does not exist.
+      "@momentum/brand",
+    ],
     experimental: {
       optimizePackageImports: ["@atpost/ui", "@atpost/types", "lucide-react"],
     },

@@ -7,18 +7,28 @@ import { StoreHeader } from '@/components/StoreHeader'
 import { StoreFooter } from '@/components/StoreFooter'
 
 /**
- * Status colour on navy. Each state gets a translucent tint of its own hue
- * with the same hue as the text, so the pill reads at a glance without any of
- * them turning into a solid block that competes with the gold actions.
+ * Status colour. Each state gets a tint of its own hue so the pill reads at a
+ * glance without turning into a solid block that competes with the one gold
+ * action on the row.
+ *
+ * Every value is now a token. `text-sky-300` and `text-orange-300` used to sit
+ * in this map — two colours from Tailwind's stock palette that belong to no
+ * theme, so they would have survived the re-skin unchanged and been the only
+ * two hues on the page that nobody had measured. They map onto what they
+ * always meant: an order in motion is the interactive colour, and a return
+ * waiting on someone is a pending state.
+ *
+ * `confirmed` keeps gold because confirmation is the moment the money is
+ * taken. `packed` does not: a parcel being wrapped is progress, not payment.
  */
 const statusColor: Record<string, string> = {
   payment_pending: 'text-shop-warn',
   confirmed: 'text-shop-gold',
-  packed: 'text-shop-gold',
-  shipped: 'text-sky-300',
+  packed: 'text-shop-interactive',
+  shipped: 'text-shop-interactive',
   delivered: 'text-shop-good',
   cancelled: 'text-shop-bad',
-  return_requested: 'text-orange-300',
+  return_requested: 'text-shop-warn',
 }
 
 export default function OrdersPage() {
@@ -45,7 +55,7 @@ export default function OrdersPage() {
               <Link
                 key={o.id}
                 href={`/orders/${o.id}`}
-                className="panel flex flex-wrap items-center justify-between gap-4 p-5 transition-colors hover:border-shop-gold"
+                className="panel flex flex-wrap items-center justify-between gap-4 p-5 transition-colors hover:border-shop-interactive"
               >
                 <div className="min-w-0">
                   <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-shop-faint">

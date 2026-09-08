@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
 import { Search, ShoppingBag, Package, User, Store, LayoutGrid, ShieldCheck } from "lucide-react"
+import { BRAND } from "@momentum/brand"
 import { useCart, useSession } from "@/hooks/useCommerce"
 import { useCapabilities } from "@atpost/api-client/capabilities"
 import { RoleSwitcher } from "@atpost/ui"
@@ -72,7 +73,7 @@ function CategoryRailView({ categories, active }: { categories: Category[]; acti
         </Link>
       ))}
       <Link href="/sell" className="sell-link">
-        <Store size={15} aria-hidden="true" /> Sell on atPost
+        <Store size={15} aria-hidden="true" /> Sell on {BRAND.name}
       </Link>
     </nav>
   )
@@ -116,8 +117,16 @@ export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
         <ShieldCheck size={13} aria-hidden="true" /> Verified sellers · Protected payments · Easy returns
       </div>
       <div className="header-main">
-        <Link href="/" className="shop-brand" aria-label="atPost Shop home">
-          <span aria-hidden="true">a</span><strong>atPost</strong><small>SHOP</small>
+        {/* The lockup, and the whole re-skin in one element: an EMBER tile
+            carrying the product's initial, the product name in Outfit, and a
+            gold SHOP suffix beneath it. Ember says which product this is; gold
+            says which part of it. Every string comes from @momentum/brand, and
+            the initial is derived from the name, so a rename cannot leave an
+            "a" in the tile beside a different word. */}
+        <Link href="/" className="shop-brand" aria-label={`${BRAND.shop} home`}>
+          <span aria-hidden="true">{BRAND.initial}</span>
+          <strong>{BRAND.name}</strong>
+          <small>{BRAND.shopSuffix}</small>
         </Link>
         <Suspense fallback={<SearchForm initialQuery="" />}>
           <LiveSearchForm />

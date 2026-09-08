@@ -8,6 +8,7 @@ import type {
   RoleDestination,
   RoleName,
 } from "@atpost/types/auth"
+import { BRAND } from "@momentum/brand"
 import api, { SESSION_CHANGE_EVENT } from "./client"
 import { useSession } from "./session"
 
@@ -18,8 +19,8 @@ import { useSession } from "./session"
  *
  * Capabilities are a property of the *session*, and this package already owns
  * the session: the cookie the presence signal is read from, `useSession`, the
- * 401→refresh interceptor, and the `postbook:session-changed` event this hook
- * has to listen to. Splitting "who is signed in" from "what they may do"
+ * 401→refresh interceptor, and the `SESSION_CHANGE_EVENT` this hook has to
+ * listen to. Splitting "who is signed in" from "what they may do"
  * across two packages is how the two drift.
  *
  * The alternatives were worse. `@atpost/ui` is a design system with no data
@@ -87,7 +88,7 @@ const ADMIN_LADDER: ReadonlyArray<{ role: RoleName; label: string }> = [
 
 /**
  * Roles the web genuinely cannot serve, because there is no web app for them —
- * these three live only in the atPost mobile app. They are NOT dropped; see
+ * these three live only in the native app. They are NOT dropped; see
  * the comment on RoleSwitcher for why.
  */
 const APP_ONLY_ROLES: ReadonlyArray<{ role: RoleName; label: string; what: string }> = [
@@ -96,7 +97,7 @@ const APP_ONLY_ROLES: ReadonlyArray<{ role: RoleName; label: string; what: strin
   { role: "rider_partner", label: "Rider partner", what: "rides" },
 ]
 
-const APP_ONLY_REASON = "Only in the atPost mobile app — there is no web console for this yet."
+const APP_ONLY_REASON = `Only in the ${BRAND.mobileApp} — there is no web console for this yet.`
 
 /** Roles the derivation below handles by name. Anything else is unknown. */
 const KNOWN_ROLES = new Set<string>([
@@ -128,7 +129,7 @@ export function destinationsFor(response: CapabilitiesResponse | null | undefine
     destinations.push({
       id: "customer",
       label: "Customer",
-      description: "Browse and buy on atPost Shop",
+      description: `Browse and buy on ${BRAND.shop}`,
       href: "/shop",
       unavailableReason: null,
     })

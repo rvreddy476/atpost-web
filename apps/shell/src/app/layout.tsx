@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Figtree, Outfit } from "next/font/google"
+import { BRAND, zoneTitle } from "@momentum/brand"
 import { readServerSession } from "@atpost/api-client/server"
 import { SessionProvider } from "@atpost/api-client/session"
 import "./globals.css"
@@ -30,8 +31,8 @@ const figtree = Figtree({
 })
 
 export const metadata: Metadata = {
-  title: "Momentum",
-  description: "Momentum — one account, every part of the platform.",
+  title: zoneTitle(),
+  description: `${BRAND.name} — ${BRAND.tagline}`,
 }
 
 /**

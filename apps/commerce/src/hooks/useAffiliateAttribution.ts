@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { STORAGE_KEYS } from "@momentum/brand"
 
 /**
  * Affiliate-attribution session glue.
@@ -19,7 +20,9 @@ import { useEffect, useState } from "react"
  * cookie from last week's reel to credit an unrelated order today).
  *
  * Convention
- *   key: "atpost.affiliate_via"
+ *   key: STORAGE_KEYS.affiliateVia, a frozen literal in @momentum/brand —
+ *        renaming it drops the attribution of every visit already in flight,
+ *        so a creator loses commission on an order they had already earned.
  *   value: bare code string (e.g. "abc123")
  *   reset: cleared on checkout success (callers responsibility).
  *
@@ -31,7 +34,7 @@ import { useEffect, useState } from "react"
  *   avoids the "who gets credit when two creators tag the same
  *   product" problem.
  */
-const SESSION_KEY = "atpost.affiliate_via"
+const SESSION_KEY = STORAGE_KEYS.affiliateVia
 
 /**
  * Capture-side hook. Reads ?via= from the URL on mount; if present,

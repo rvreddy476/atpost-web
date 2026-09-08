@@ -53,7 +53,7 @@ export default function NewProductPage() {
     <div className="min-h-screen bg-shop-bg">
       <StoreHeader />
       <main className="mx-auto max-w-xl px-5 py-10">
-        <Link href="/sell" className="text-sm text-shop-faint hover:text-shop-gold">
+        <Link href="/sell" className="text-sm text-shop-faint hover:text-shop-interactive">
           ← Back to my products
         </Link>
         <h1 className="shop-display mt-3 text-2xl">Add product</h1>

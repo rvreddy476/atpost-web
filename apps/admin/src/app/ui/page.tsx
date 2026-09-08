@@ -12,6 +12,7 @@
  * an existing screen renders.
  */
 
+import { BRAND } from "@momentum/brand"
 import { useState } from "react"
 import {
   Button,
@@ -281,7 +282,7 @@ function Sandbox() {
           onChange={setFulfilment}
           options={[
             { value: "self", label: "I ship it myself", description: "You pack and hand over." },
-            { value: "atpost", label: "atPost fulfils", description: "We store and ship for you." },
+            { value: "atpost", label: `${BRAND.name} fulfils`, description: "We store and ship for you." },
             { value: "pickup", label: "Buyer collects", disabled: true },
           ]}
         />
@@ -293,7 +294,7 @@ function Sandbox() {
           error="Choose a fulfilment method"
           options={[
             { value: "self", label: "I ship it myself" },
-            { value: "atpost", label: "atPost fulfils" },
+            { value: "atpost", label: `${BRAND.name} fulfils` },
           ]}
         />
       </Section>

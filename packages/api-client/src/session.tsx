@@ -72,7 +72,9 @@ import api, {
    The cookie is shared, so the tabs cannot disagree about the underlying
    fact — only about when they noticed. Three listeners, cheapest first:
 
-     · `postbook:session-changed` — this tab, immediate.
+     · `SESSION_CHANGE_EVENT` — this tab, immediate. Its literal value, and
+       why that value may never be rebuilt from the product name, are in
+       @momentum/brand's STORAGE_KEYS.
      · `storage` on a key nobody reads — other tabs, near-immediate. There is
        no "a cookie changed" event, so a sign-out writes a timestamp purely to
        make `storage` fire elsewhere.

@@ -1,111 +1,254 @@
+/* @momentum/tokens FIRST, before Tailwind's layers.
+
+   It declares every --mo-* custom property and, at the end, points the
+   --brand-* contract @atpost/ui reads at those same values. The shop used to
+   redefine that contract for navy immediately below this line; it no longer
+   does, and the deletion is the single most visible part of this change —
+   RoleSwitcher, Button, Input, Select and Table now render in the shop exactly
+   as they render in the feed. */
+@import "@momentum/tokens/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* next/font generates a family name per font and exposes it as a variable (see
+   layout.tsx). Handing those to the token sheet's own variables is the seam
+   that lets @momentum/tokens stay a plain stylesheet with no idea how a zone
+   loaded its fonts — apps/shell and apps/social do exactly this. Both keep
+   their full system fallback behind them, so a failed font request degrades
+   rather than breaks. */
+:root {
+  --mo-font-display: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   atPost Shop — navy ground, white type, gold actions.
+   The shop, on Momentum — violet-black ground, one commerce accent.
 
-   Everything visual in this zone resolves to the tokens below. Two families:
+   This zone rendered navy-and-gold under an "atPost" wordmark, which made it
+   read as a different product from the feed and the sign-in page. It is now
+   the same product: the same ground, the same card, the same type colours, the
+   same interactive colour, the same fonts. What stayed is gold, and gold alone
+   is what says "you are in the shop".
 
-   --shop-*   storefront vocabulary, consumed through the zone-local `shop-*`
-              Tailwind scale declared in apps/commerce/tailwind.config.js.
-   --brand-*  the shared contract @atpost/ui reads. Redefining them here is
-              what restyles Button/Input/Select/Table for the shop WITHOUT
-              editing packages/ui — the admin console keeps its own light
-              values in apps/admin/src/app/globals.css and is untouched.
+   ── The rule: gold is commerce, cyan is interaction, ember is the brand ────
 
-   Contrast (WCAG 2.1, measured, not assumed):
-     #FFFFFF on #041122 ground ............. 18.95:1  AAA
-     #FFFFFF on #0B1B2E surface ............ 17.35:1  AAA
-     #B2C3D6 muted  on #0B1B2E .............  9.64:1  AAA
-     #8FA5BE faint  on #0B1B2E .............  6.85:1  AA  (AAA at 18px+ bold)
-     #D4AF37 gold   on #041122 .............  9.01:1  AAA (gold as TEXT)
-     #041122 navy   on #D4AF37 gold ........  9.01:1  AAA (gold as BUTTON)
-     #FFFFFF white  on #D4AF37 gold ........  2.10:1  FAILS — never used.
-     #0B1B2E navy   on #F5F6F8 photo plate . 16.04:1  AAA
-   Gold buttons therefore carry navy type, never white.
+   There is more than one "primary" available now, and painting the shop with
+   both ember and gold would be worse than the navy-and-gold it replaces — two
+   primary actions on a screen is none. So each colour got one job, and the
+   split is by MEANING rather than by prominence:
+
+   GOLD — the shop speaking as a shop.
+     · every money figure: a price, a total, a saving, a payout
+     · every control on the BUY PATH, whose click changes what you are buying
+       or what you will pay: add to bag, the quantity steppers, the selected
+       variant, apply coupon, checkout, the bag badge
+     · the shop's own section eyebrows and its merchandising marks (rating
+       stars, "Featured", the trust strip, the assurance ticks)
+   Gold ALWAYS carries --mo-on-gold, navy #041122, and never white: white on
+   gold is 2.10 and fails at every size. (The violet-black ground would in fact
+   measure 9.25 on gold — marginally better than navy's 9.01 — but the token
+   sheet names navy as the ink on gold, and a shop that picks its own is a
+   shop that will disagree with the sheet the next time gold moves.)
+
+   CYAN — the platform speaking, and the biggest single change here.
+     Most of the gold in the old sheet was not money at all: it was the tint on
+     every hover border, every focus ring, every card-title hover, every footer
+     link, every form field in focus. All of that is now --mo-cyan, Momentum's
+     interactive colour, the same one the feed and the sign-in page use. That
+     is what drops gold from "the colour of this zone" to "the colour of money
+     in this zone", and it is what makes the shop and the feed read as one
+     product rather than two.
+
+   EMBER — the brand, and it appears exactly twice.
+     · the wordmark tile in the header (a fill, its glyph 21px/700)
+     · .btn-ember, the one platform-level call to action: becoming a seller
+     Plus two non-text marks: the hero's rule and the seller invitation's edge.
+     Ember NEVER appears on the buy path and never more than once per screen.
+     It also may never be small text: #DC2626 on the ground is 4.03, which is
+     large-text-and-non-text only, so ember is a FILL with dark ink or it is a
+     mark — never a 13px label.
+
+   ── Tokens ────────────────────────────────────────────────────────────────
+
+   --shop-*  is kept as the zone's vocabulary and is now an ALIAS LAYER over
+             --mo-*. Six hundred lines of layout below already speak it, the
+             `shop-*` Tailwind scale in tailwind.config.js resolves to it, and
+             fifty `text-shop-faint` in .tsx files resolve through it. Rewriting
+             all of that to say `mo-` would have been a large diff across a
+             storefront, a cart and a checkout that work, in exchange for
+             nothing a reader can see. The palette still lives in exactly one
+             place; this file just names it twice.
+
+   --brand-* is NOT redefined here any more. See the note on the import above.
+
+   ── The third grey left, exactly as it left apps/shell ────────────────────
+
+   The old sheet had three greys: #FFFFFF, #B2C3D6 and #8FA5BE. Momentum has
+   two that may carry running text — #F1EEF8 and #A19CB9 — and a third,
+   #6B658A, that measures 3.01 on a card and is LARGE-TEXT / NON-TEXT ONLY.
+   Every use of --shop-faint in this file is small text: a 10px seller name, an
+   11px field hint, a 12px timestamp, a footer line. So --shop-faint and
+   --shop-muted BOTH point at --mo-body and are deliberately the same colour;
+   the hierarchy they used to draw is drawn by size and weight instead.
+   --mo-muted-lg therefore appears nowhere in this file, which is not an
+   oversight — there is nowhere in a storefront where a grey that fails small
+   text is the right answer.
+
+   ── Contrast (WCAG 2.1, computed against the values this sheet renders) ────
+
+     TYPE
+     #F1EEF8 ink   on #1F1D33 card ................ 14.30  AAA
+     #A19CB9 body  on #0D0C14 ground ...............  7.38  AAA
+     #A19CB9 body  on #1F1D33 card .................  6.22  AA
+     #A19CB9 body  on #08070E well .................  7.61  AAA
+     #A19CB9 body  on #2A2745 raised ...............  5.41  AA
+     #A19CB9 body  on #332F55 hero radial top ......  4.75  AA
+
+     GOLD — money and the commerce accent
+     #D4AF37 gold  on #0D0C14 ground ...............  9.25  AAA
+     #D4AF37 gold  on #1F1D33 card .................  7.79  AAA
+     #D4AF37 gold  on #08070E well / footer ........  9.54  AAA
+     #D4AF37 gold  on #2A2745 summary top stop .....  6.77  AA
+     #D4AF37 gold  on #332F55 hero radial top ......  5.95  AA
+     #E4C766 light on #1F1D33 card .................  9.88  AAA
+     #D4AF37 gold  on a gold/.12 wash (#352F33) ....  6.22  AA
+     #041122 navy  on #D4AF37 gold FILL ............  9.01  AAA
+     #041122 navy  on #E4C766 gold hover ........... 11.42  AAA
+     #041122 navy  on #C9A227 gold pressed .........  7.83  AAA
+     #FFFFFF white on #D4AF37 gold .................  2.10  FAILS — never used
+
+     CYAN — every interaction
+     #06B6D4 cyan  on #0D0C14 ground ...............  8.01  AAA
+     #06B6D4 cyan  on #1F1D33 card .................  6.75  AA
+     #06B6D4 cyan  on #08070E well .................  8.26  AAA
+     #06B6D4 cyan  on #2A2745 raised ...............  5.87  AA
+     #06B6D4 cyan  on #332F55 hero radial top ......  5.15  AA
+     #06B6D4 cyan  on a cyan/.10 wash (#0C1D27) ....  7.09  AAA
+     #0D0C14 ink   on #06B6D4 cyan FILL ............  8.01  AAA
+
+     EMBER — the brand
+     #0D0C14 ink   on #DC2626 red end ..............  4.03  AA at 19px/700
+     #0D0C14 ink   on #F97316 orange end ...........  6.94  AA at any size
+     #DC2626 red   as a NON-TEXT mark on the ground   4.03  clears the 3.0 bar
+     #F1EEF8 ink   on an ember/.10 wash ............ 13.40  AAA
+
+     THE LIGHT PRODUCT PLATE — the one thing that is not a Momentum surface
+     #4A5D75 ink   on #F5F6F8 plate ................  6.24  AA
+     #4A5D75 ink   on #FFFFFF plate highlight ......  6.74  AA
+     #4A5D75 ink   on #E7EBF1 plate low stop .......  5.64  AA
+
+   Nothing this sheet paints measures below 4.5 for normal text. The single
+   figure under 4.5 anywhere is the ember button's 4.03, and .btn-ember carries
+   the 19px/700 the token sheet requires for exactly that reason.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Ground and surfaces. A card must LIFT off the page, so surface is a
-     step lighter than the ground and carries a hairline + drop shadow. */
-  --shop-bg: 4 17 34;            /* #041122 deep navy ground              */
-  --shop-surface: 11 27 46;      /* #0B1B2E raised card                   */
-  --shop-raised: 18 38 61;       /* #12263D hover / nested surface        */
-  --shop-sunken: 2 11 23;        /* #020B17 wells, footer, inset fields   */
+  /* ── Ground and surfaces: Momentum's, wholesale ── */
+  --shop-bg: var(--mo-bg);
+  --shop-surface: var(--mo-surface);
+  --shop-raised: var(--mo-raised);
+  --shop-sunken: var(--mo-sunken);
+  --shop-overlay: var(--mo-overlay);
 
-  /* Type. */
-  --shop-ink: 255 255 255;       /* #FFFFFF primary                       */
-  --shop-muted: 178 195 214;     /* #B2C3D6 secondary (~70% white, cooled)*/
-  --shop-faint: 143 165 190;     /* #8FA5BE tertiary / metadata           */
+  /* ── Type. Two greys, not three; see the header. ── */
+  --shop-ink: var(--mo-ink);
+  --shop-muted: var(--mo-body);
+  --shop-faint: var(--mo-body);
 
-  /* Gold. An accent for the ONE primary action on a screen, and for price.
-     Never a page background, never a section fill. */
-  --shop-gold: 212 175 55;       /* #D4AF37                               */
-  --shop-gold-deep: 201 162 39;  /* #C9A227 pressed                       */
-  --shop-gold-light: 228 199 102;/* #E4C766 hover / gold as small text    */
+  /* ── The interactive colour. Everything that used to be a gold tint. ── */
+  --shop-interactive: var(--mo-cyan);
 
-  /* The plate product photography sits on. See .photo-plate below. */
-  --shop-plate: 245 246 248;     /* #F5F6F8                               */
-  --shop-plate-ink: 74 93 117;   /* #4A5D75 type on the plate, 6.24:1     */
+  /* ── The brand accent, for the two places it is allowed. ── */
+  --shop-ember: var(--mo-ember);
+  --shop-ember-hover: var(--mo-ember-hover);
+  --shop-ember-flat: var(--mo-primary);
+  --shop-on-ember: var(--mo-on-primary);
 
-  /* Semantic. */
-  --shop-good: 110 231 168;      /* #6EE7A8 saving / delivered, 11.28:1   */
-  --shop-bad: 252 165 165;       /* #FCA5A5 error, 9.14:1                 */
-  --shop-warn: 252 211 118;      /* #FCD376 pending                       */
+  /* ── Semantic: same hues, same meanings, now from the shared sheet ── */
+  --shop-good: var(--mo-good);
+  --shop-bad: var(--mo-bad);
+  --shop-warn: var(--mo-warn);
 
-  /* Hairlines. White at low alpha reads as light catching an edge, which is
-     what separates panels on navy — a darker line just looks like a gap. */
-  --shop-line: rgba(255, 255, 255, .10);
-  --shop-line-strong: rgba(255, 255, 255, .20);
-  --shop-gold-line: rgba(212, 175, 55, .38);
+  /* ── Hairlines and elevation ── */
+  --shop-line: var(--mo-line);
+  --shop-line-strong: var(--mo-line-strong);
+  --shop-shadow: var(--mo-shadow);
+  --shop-shadow-lift: var(--mo-shadow-lift);
 
-  --shop-shadow: 0 18px 40px -22px rgba(0, 0, 0, .85);
-  --shop-shadow-lift: 0 26px 54px -20px rgba(0, 0, 0, .9);
+  /* ── Display type is Outfit now, not a system serif ────────────────────
+     The old value was an editorial serif chosen to make navy-and-gold read as
+     a store rather than a dashboard. It was also the loudest single signal
+     that this zone was a different product: the feed and the sign-in page set
+     display type in Outfit. Pointing at --mo-font-display gets the shop the
+     same pairing, and next/font in this zone's layout.tsx self-hosts it. */
+  --shop-display: var(--mo-font-display);
 
-  /* An editorial serif for display type. System-resident, so no font request
-     and no layout shift; it is what makes navy + gold read as a store rather
-     than a dashboard. */
-  --shop-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
-
-  /* ── the @atpost/ui contract, pointed at the shop palette ── */
-  --brand-bg: var(--shop-bg);
-  --brand-text: var(--shop-ink);
-  --brand-accent: var(--shop-gold);
-  --brand-secondary: var(--shop-raised);
-  --brand-highlight: var(--shop-gold);
-  --brand-divider: var(--shop-line);
-  --brand-card: var(--shop-surface);
+  /* ── The light product plate ───────────────────────────────────────────
+     The one colour family this zone still owns, and the reason is physical
+     rather than stylistic: catalogue photography is shot on white, and a white
+     cutout dropped on a violet-black ground glares as a hard rectangle. Every
+     photo therefore sits on a light plate (see .photo-plate). There is no
+     Momentum token for it and there should not be — a light surface has no
+     business in a dark theme's shared sheet, where the next reader would find
+     it and use it for a card. Declared here as tokens so nothing below is a
+     bare hex, and measured in the header like everything else. */
+  --shop-plate: 245 246 248;       /* #F5F6F8 the plate                     */
+  --shop-plate-hi: 255 255 255;    /* #FFFFFF its top-light stop            */
+  --shop-plate-lo: 231 235 241;    /* #E7EBF1 its floor stop                */
+  --shop-plate-ink: 74 93 117;     /* #4A5D75 type on the plate, 6.24       */
+  --shop-plate-edge: 4 17 34;      /* #041122 the rim, drawn at low alpha   */
 }
 
+/* Gold lives ONLY under .mo-commerce, which this zone's <body> carries.
+   That scoping is @momentum/tokens' and it is the mechanism, not a habit:
+   outside that subtree --mo-gold does not exist, so "gold is reserved for
+   money" is a fact about the stylesheet rather than a rule to remember. The
+   aliases have to be declared HERE rather than in :root above, because a
+   custom property whose value is `var(--mo-gold)` is resolved on the element
+   it is declared on — at :root, where --mo-gold is undefined, the whole alias
+   would collapse to nothing and every gold rule below would render
+   transparent. */
+.mo-commerce {
+  --shop-gold: var(--mo-gold);
+  --shop-gold-deep: var(--mo-gold-deep);
+  --shop-gold-light: var(--mo-gold-light);
+  --shop-gold-line: var(--mo-gold-line);
+  /* Navy. The ONLY type that may sit on a gold fill. */
+  --shop-on-gold: var(--mo-on-gold);
+}
+
+/* The ground, the type colour, the font, the one focus treatment and
+   `color-scheme: dark` all arrive with `.mo-root` on <body> (see layout.tsx),
+   which is why there is no body rule painting them here and no `*:focus-visible`
+   of this zone's own. The old sheet drew a GOLD focus ring; Momentum's is cyan
+   and offset, and the offset is load-bearing — see the note in tokens.css. */
 body {
-  background-color: rgb(var(--shop-bg));
-  color: rgb(var(--shop-ink));
-  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
-
-::selection { background: rgb(var(--shop-gold) / .3); }
-
-*:focus-visible { outline: 2px solid rgb(var(--shop-gold)); outline-offset: 2px; }
 
 /* ───────────────────────────────────────────────────────────── display type */
-.shop-display { font-family: var(--shop-display); font-weight: 600; letter-spacing: -.01em; }
-.shop-eyebrow { color: rgb(var(--shop-gold)); font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
+.shop-display { font-family: var(--shop-display); font-weight: 600; letter-spacing: var(--mo-tracking-display); }
+/* An eyebrow is the shop naming its own section — commerce voice, so gold. */
+.shop-eyebrow { color: rgb(var(--shop-gold)); font-size: 11px; font-weight: 700; letter-spacing: var(--mo-tracking-eyebrow); text-transform: uppercase; }
 
 /* ══════════════════════════════════════════════════════ PRODUCT PHOTOGRAPHY
 
-   The one decision a dark storefront lives or dies by. Catalogue photos are
-   shot on white; dropped straight onto navy they glare as hard white
-   rectangles and the page reads broken.
+   The one decision a dark storefront lives or dies by, and it did not change
+   when the ground did — it got MORE important, because #0D0C14 is darker than
+   the navy was and a raw white cutout on it glares harder.
 
-   So no photo ever touches the navy. Each sits on a light PLATE: a near-white
-   panel with its own faint top-light gradient, a fixed square ratio, generous
-   padding so nothing crowds the edge, and an inset hairline that gives the
-   plate a rim. A white-background cutout melts into the plate instead of
-   fighting it; a photo with its own background still reads as a framed
-   picture. object-fit: contain keeps every silhouette intact whatever the
-   source crop, and the plate — the brightest thing on the page — is what the
-   eye lands on first. Which, in a shop, is the goods.
+   No photo ever touches the page ground. Each sits on a light PLATE: a
+   near-white panel with its own faint top-light gradient, a fixed square
+   ratio, generous padding so nothing crowds the edge, and an inset hairline
+   that gives the plate a rim. A white-background cutout melts into the plate
+   instead of fighting it; a photo with its own background still reads as a
+   framed picture. object-fit: contain keeps every silhouette intact whatever
+   the source crop, and the plate — the brightest thing on the page — is what
+   the eye lands on first. Which, in a shop, is the goods.
    ═════════════════════════════════════════════════════════════════════════ */
 .photo-plate {
   position: relative;
@@ -113,8 +256,8 @@ body {
   overflow: hidden;
   place-items: center;
   aspect-ratio: 1;
-  border-radius: 14px;
-  background: linear-gradient(168deg, #ffffff 0%, rgb(var(--shop-plate)) 52%, #e7ebf1 100%);
+  border-radius: var(--mo-radius);
+  background: linear-gradient(168deg, rgb(var(--shop-plate-hi)) 0%, rgb(var(--shop-plate)) 52%, rgb(var(--shop-plate-lo)) 100%);
   isolation: isolate;
 }
 /* The rim: a light inner edge at the top, a soft floor at the bottom, so the
@@ -125,20 +268,30 @@ body {
   z-index: 2;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .9), inset 0 0 0 1px rgb(4 17 34 / .07), inset 0 -22px 30px -26px rgb(4 17 34 / .3);
+  box-shadow:
+    inset 0 1px 0 rgb(var(--shop-plate-hi) / .9),
+    inset 0 0 0 1px rgb(var(--shop-plate-edge) / .07),
+    inset 0 -22px 30px -26px rgb(var(--shop-plate-edge) / .3);
   content: "";
   pointer-events: none;
 }
-.photo-plate img { z-index: 1; width: 100%; height: 100%; padding: 12%; object-fit: contain; transition: transform .4s cubic-bezier(.2, .7, .3, 1); }
+.photo-plate img { z-index: 1; width: 100%; height: 100%; padding: 12%; object-fit: contain; transition: transform .4s var(--mo-ease); }
 .photo-plate--tight img { padding: 8%; }
 .photo-plate-empty { display: grid; place-items: center; gap: 8px; color: rgb(var(--shop-plate-ink) / .85); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-/* Badges live ON the plate, in navy, because the plate is light. */
-.plate-badge { position: absolute; z-index: 3; top: 10px; left: 10px; border-radius: 999px; background: rgb(var(--shop-bg)); padding: 5px 10px; color: rgb(var(--shop-gold)); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+/* Badges live ON the plate, so they are a dark chip: the page ground with gold
+   type at 9.25. A merchandising mark is the shop's own voice, hence gold. */
+.plate-badge { position: absolute; z-index: 3; top: 10px; left: 10px; border-radius: var(--mo-radius-pill); background: rgb(var(--shop-bg)); padding: 5px 10px; color: rgb(var(--shop-gold)); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
 .plate-badge--out { background: rgb(var(--shop-bg) / .92); color: rgb(var(--shop-muted)); }
 
 /* ═══════════════════════════════════════════════════════════════════ ACTIONS
-   Gold is the primary action and nothing else. Secondary actions are an
-   outline or a ghost in white — a screen where everything is gold reads cheap.
+
+   Three fills, and which one a button gets is decided by what the button DOES,
+   not by how important it looks:
+
+     .btn-gold    it moves money or changes the order — add, checkout, apply
+     .btn-ember   it joins the platform — one per page, and only that
+     .btn-outline everything else
+
    Declared as plain CSS (not @layer components) so a class here beats a
    Tailwind utility of the same property, which is how these compose with the
    className passed to @atpost/ui's Button.
@@ -146,12 +299,45 @@ body {
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 12px; padding: 0 20px; font-size: 14px; font-weight: 700; letter-spacing: .01em; transition: background .18s, color .18s, border-color .18s, transform .18s, box-shadow .18s; }
 .btn:disabled, .btn[aria-disabled="true"] { cursor: not-allowed; opacity: .45; transform: none; box-shadow: none; }
 
-.btn-gold { background: linear-gradient(180deg, rgb(var(--shop-gold-light)), rgb(var(--shop-gold))); color: rgb(var(--shop-bg)); box-shadow: 0 10px 26px -14px rgb(212 175 55 / .8); }
-.btn-gold:hover:not(:disabled) { background: linear-gradient(180deg, #f0d888, rgb(var(--shop-gold-light))); transform: translateY(-1px); }
+.btn-gold { background: linear-gradient(180deg, rgb(var(--shop-gold-light)), rgb(var(--shop-gold))); color: rgb(var(--shop-on-gold)); box-shadow: 0 10px 26px -14px rgb(var(--shop-gold) / .8); }
+.btn-gold:hover:not(:disabled) { background: linear-gradient(180deg, rgb(var(--shop-gold-light)), rgb(var(--shop-gold-light))); transform: translateY(-1px); }
 .btn-gold:active:not(:disabled) { background: rgb(var(--shop-gold-deep)); transform: translateY(0); }
 
+/* The ember button. ONE per page, and only for the platform-level action —
+   in this zone that is "become a seller" and nothing else.
+
+   font-size and font-weight are not decoration here. Dark ink on the red end
+   of the gradient measures 4.03, which is legible only as large text, so the
+   label is pinned to the token floor (--mo-ember-label-size / -weight). A
+   14px ember label is an accessibility bug, which is why the size is taken
+   from a token rather than typed in.
+
+   Hover BRIGHTENS, never darkens: the ink is the ground colour, so a lighter
+   fill can only improve the label (4.03 → 5.17 at the worst point of the hover
+   ramp) and a darker one is the single direction that loses it. Disabled drops
+   the gradient entirely rather than dimming it — .55 opacity over this ground
+   was measured at 1.92. */
+.btn-ember {
+  min-height: 52px;
+  border: 0;
+  border-radius: var(--mo-radius-sm);
+  padding: 0 26px;
+  background-color: rgb(var(--shop-ember-flat));
+  background-image: var(--shop-ember);
+  color: rgb(var(--shop-on-ember));
+  font-size: var(--mo-ember-label-size);
+  font-weight: var(--mo-ember-label-weight);
+  line-height: 1;
+  box-shadow: var(--mo-ember-glow);
+}
+.btn-ember:hover:not(:disabled) { background-image: var(--shop-ember-hover); box-shadow: var(--mo-ember-glow-hover); transform: translateY(-1px); }
+.btn-ember:active:not(:disabled) { background-image: var(--shop-ember); transform: translateY(1px); box-shadow: var(--mo-shadow-sm); }
+.btn-ember:disabled { background-color: rgb(var(--shop-raised)); background-image: none; color: rgb(var(--shop-muted)); box-shadow: none; opacity: 1; }
+
+/* Secondary actions are an outline or a ghost. Their hover is CYAN, not gold:
+   wanting to look at a thing is not the same as buying it. */
 .btn-outline { border: 1px solid var(--shop-line-strong); background: transparent; color: rgb(var(--shop-ink)); }
-.btn-outline:hover:not(:disabled) { border-color: rgb(var(--shop-gold)); background: rgb(var(--shop-gold) / .08); color: rgb(var(--shop-gold-light)); }
+.btn-outline:hover:not(:disabled) { border-color: rgb(var(--shop-interactive)); background: rgb(var(--shop-interactive) / .1); color: rgb(var(--shop-interactive)); }
 
 .btn-ghost { background: rgb(var(--shop-ink) / .06); color: rgb(var(--shop-ink)); }
 .btn-ghost:hover:not(:disabled) { background: rgb(var(--shop-ink) / .12); }
@@ -160,19 +346,24 @@ body {
 .btn-danger:hover:not(:disabled) { background: rgb(var(--shop-bad) / .12); }
 
 .btn-sm { min-height: 36px; border-radius: 10px; padding: 0 14px; font-size: 12px; }
-.btn-lg { min-height: 52px; border-radius: 14px; padding: 0 28px; font-size: 15px; }
+.btn-lg { min-height: 52px; border-radius: var(--mo-radius); padding: 0 28px; font-size: 15px; }
 .btn-block { width: 100%; }
+/* .btn-sm must not shrink an ember label below the 19px floor. Reassert it. */
+.btn-ember.btn-sm, .btn-ember.btn-lg { font-size: var(--mo-ember-label-size); }
 
-/* A gold text link. Gold on navy clears AAA, so this is safe at any size. */
-.gold-link { display: inline-flex; align-items: center; gap: 6px; color: rgb(var(--shop-gold)); font-size: 14px; font-weight: 700; transition: color .15s, gap .15s; }
-.gold-link:hover { color: rgb(var(--shop-gold-light)); gap: 10px; }
+/* A navigation link. Cyan, because "see everything" and "view product" take
+   you somewhere — they do not spend anything. This class was `.gold-link`
+   before the re-skin and was renamed rather than recoloured in place: a class
+   called gold-link that renders cyan is a trap for the next reader. */
+.shop-link { display: inline-flex; align-items: center; gap: 6px; color: rgb(var(--shop-interactive)); font-size: 14px; font-weight: 700; transition: color .15s, gap .15s; }
+.shop-link:hover { color: rgb(var(--shop-interactive)); gap: 10px; }
 .quiet-link { display: inline-flex; align-items: center; gap: 6px; color: rgb(var(--shop-muted)); font-size: 13px; }
-.quiet-link:hover { color: rgb(var(--shop-gold)); }
+.quiet-link:hover { color: rgb(var(--shop-interactive)); }
 
 /* ══════════════════════════════════════════════════════════════════ SURFACES */
 .panel { border: 1px solid var(--shop-line); border-radius: 18px; background: rgb(var(--shop-surface)); box-shadow: var(--shop-shadow); }
 .panel-pad { padding: 24px; }
-.panel-quiet { border: 1px solid var(--shop-line); border-radius: 14px; background: rgb(var(--shop-sunken)); }
+.panel-quiet { border: 1px solid var(--shop-line); border-radius: var(--mo-radius); background: rgb(var(--shop-sunken)); }
 .panel-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-family: var(--shop-display); font-size: 19px; font-weight: 600; }
 
 .shop-page { max-width: 1400px; margin: 0 auto; padding: 32px 24px 96px; }
@@ -180,50 +371,69 @@ body {
 
 /* ═══════════════════════════════════════════════════════════════════ HEADER */
 .marketplace-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--shop-line); background: rgb(var(--shop-bg) / .88); color: rgb(var(--shop-ink)); backdrop-filter: blur(18px) saturate(140%); }
+/* The trust bar. Commerce voice — verified sellers, protected payments — so
+   gold, at 9.54 on the sunken band. */
 .market-note { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 30px; border-bottom: 1px solid var(--shop-gold-line); background: rgb(var(--shop-sunken)); color: rgb(var(--shop-gold)); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .header-main { display: flex; max-width: 1400px; min-height: 74px; align-items: center; gap: 24px; margin: auto; padding: 12px 24px; }
 
+/* The wordmark, and the whole re-skin in one lockup: an EMBER tile carrying
+   the product's initial, the product name in Outfit, and a gold SHOP suffix
+   under it. Ember says which product this is, gold says which part of it.
+
+   The tile is the one place ember appears as a fill in the chrome, and its
+   glyph is 21px/700 — above the 19px/700 floor the 4.03 red end requires. */
 .shop-brand { position: relative; display: grid; flex: none; grid-template-columns: auto auto; align-items: center; color: rgb(var(--shop-ink)); }
-.shop-brand span { display: grid; width: 40px; height: 40px; margin-right: 11px; grid-row: 1 / 3; place-items: center; border: 1px solid var(--shop-gold-line); border-radius: 12px; background: linear-gradient(160deg, rgb(var(--shop-gold-light)), rgb(var(--shop-gold-deep))); color: rgb(var(--shop-bg)); font-family: var(--shop-display); font-size: 21px; font-weight: 700; }
-.shop-brand strong { font-family: var(--shop-display); font-size: 21px; font-weight: 600; line-height: 1; letter-spacing: -.01em; }
+.shop-brand span { display: grid; width: 40px; height: 40px; margin-right: 11px; grid-row: 1 / 3; place-items: center; border-radius: 12px; background-color: rgb(var(--shop-ember-flat)); background-image: var(--shop-ember); color: rgb(var(--shop-on-ember)); font-family: var(--shop-display); font-size: 21px; font-weight: 700; box-shadow: var(--mo-ember-glow); }
+.shop-brand strong { font-family: var(--shop-display); font-size: 21px; font-weight: 600; line-height: 1; letter-spacing: var(--mo-tracking-display); }
 .shop-brand small { margin-top: 5px; color: rgb(var(--shop-gold)); font-size: 8px; font-weight: 800; letter-spacing: .26em; }
 
-.market-search { display: flex; height: 46px; min-width: 180px; max-width: 640px; flex: 1; align-items: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 12px; background: rgb(var(--shop-sunken)); padding-left: 16px; color: rgb(var(--shop-faint)); transition: border-color .2s, box-shadow .2s; }
-.market-search:focus-within { border-color: rgb(var(--shop-gold)); box-shadow: 0 0 0 3px rgb(212 175 55 / .16); }
+/* Search is navigation, so its focus and its submit button are cyan. */
+.market-search { display: flex; height: 46px; min-width: 180px; max-width: 640px; flex: 1; align-items: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 12px; background: rgb(var(--shop-sunken)); padding-left: 16px; color: rgb(var(--shop-muted)); transition: border-color .2s, box-shadow .2s; }
+.market-search:focus-within { border-color: rgb(var(--shop-interactive)); box-shadow: 0 0 0 3px rgb(var(--shop-interactive) / .18); }
 .market-search input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0 12px; color: rgb(var(--shop-ink)); outline: 0; }
-.market-search input::placeholder { color: rgb(var(--shop-faint)); }
-.market-search button { display: grid; width: 38px; height: 38px; margin-right: 4px; place-items: center; border-radius: 9px; background: rgb(var(--shop-gold)); color: rgb(var(--shop-bg)); transition: background .15s; }
-.market-search button:hover { background: rgb(var(--shop-gold-light)); }
+.market-search input::placeholder { color: rgb(var(--shop-muted)); }
+.market-search button { display: grid; width: 38px; height: 38px; margin-right: 4px; place-items: center; border-radius: 9px; background: rgb(var(--shop-interactive)); color: rgb(var(--shop-bg)); transition: background .15s; }
+.market-search button:hover { background: rgb(var(--shop-interactive) / .85); }
 .market-search button svg { width: 18px; }
 
 .header-actions { display: flex; flex: none; align-items: center; gap: 4px; }
 .header-action, .cart-action { display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 11px; padding: 0 12px; color: rgb(var(--shop-muted)); font-size: 12px; font-weight: 700; transition: background .15s, color .15s, border-color .15s; }
 .header-action:hover, .cart-action:hover { background: rgb(var(--shop-ink) / .07); color: rgb(var(--shop-ink)); }
 .cart-action { margin-left: 6px; border-color: var(--shop-line-strong); color: rgb(var(--shop-ink)); }
-.cart-action:hover { border-color: rgb(var(--shop-gold)); }
+.cart-action:hover { border-color: rgb(var(--shop-interactive)); }
 .cart-action > span { position: relative; }
-.cart-action b { position: absolute; top: -9px; right: -10px; display: grid; min-width: 19px; height: 19px; place-items: center; border-radius: 999px; background: rgb(var(--shop-gold)); color: rgb(var(--shop-bg)); font-size: 10px; font-weight: 800; }
+/* The bag badge is gold and is the only gold fill in the header. It counts
+   what you are about to pay for, which is the buy path. */
+.cart-action b { position: absolute; top: -9px; right: -10px; display: grid; min-width: 19px; height: 19px; place-items: center; border-radius: var(--mo-radius-pill); background: rgb(var(--shop-gold)); color: rgb(var(--shop-on-gold)); font-size: 10px; font-weight: 800; }
 
+/* Category chips are navigation. Cyan throughout, including the selected one:
+   choosing a department is not a purchase. */
 .category-menu { display: flex; max-width: 1400px; min-height: 46px; align-items: center; gap: 8px; margin: auto; overflow-x: auto; padding: 0 24px 11px; scrollbar-width: none; }
 .category-menu::-webkit-scrollbar { display: none; }
-.category-menu a { display: flex; min-height: 34px; flex: none; align-items: center; border: 1px solid var(--shop-line); border-radius: 999px; padding: 0 15px; color: rgb(var(--shop-muted)); font-size: 12px; font-weight: 600; transition: .15s; }
-.category-menu a:hover { border-color: rgb(var(--shop-gold)); background: rgb(var(--shop-gold) / .1); color: rgb(var(--shop-gold-light)); }
-.category-menu a[aria-current="true"] { border-color: rgb(var(--shop-gold)); background: rgb(var(--shop-gold)); color: rgb(var(--shop-bg)); font-weight: 800; }
+.category-menu a { display: flex; min-height: 34px; flex: none; align-items: center; border: 1px solid var(--shop-line); border-radius: var(--mo-radius-pill); padding: 0 15px; color: rgb(var(--shop-muted)); font-size: 12px; font-weight: 600; transition: .15s; }
+.category-menu a:hover { border-color: rgb(var(--shop-interactive)); background: rgb(var(--shop-interactive) / .1); color: rgb(var(--shop-interactive)); }
+.category-menu a[aria-current="true"] { border-color: rgb(var(--shop-interactive)); background: rgb(var(--shop-interactive)); color: rgb(var(--shop-bg)); font-weight: 800; }
 .category-menu .all-categories, .category-menu .sell-link { gap: 7px; }
 .category-menu .all-categories { border-color: var(--shop-line-strong); background: rgb(var(--shop-ink) / .06); color: rgb(var(--shop-ink)); font-weight: 700; }
-.category-menu .sell-link { margin-left: auto; border-color: var(--shop-gold-line); color: rgb(var(--shop-gold)); }
+/* "Sell on <product>" in the rail is a 12px chip, so it cannot be ember —
+   ember at that size is 4.03 and fails. It is cyan, and the ember button
+   waits on the page it leads to. */
+.category-menu .sell-link { margin-left: auto; border-color: rgb(var(--shop-interactive) / .4); color: rgb(var(--shop-interactive)); }
 
 /* ═════════════════════════════════════════════════════════════════════ HERO
-   A navy editorial panel, not a photo wall. Real catalogue numbers on the
-   left, one real product on a plate to the right — so eight products still
-   read as a considered shop rather than a half-built one.
+   An editorial panel, not a photo wall. Real catalogue numbers on the left,
+   one real product on a plate to the right — so eight products still read as a
+   considered shop rather than a half-built one.
    ═════════════════════════════════════════════════════════════════════════ */
-.hero { position: relative; display: grid; max-width: 1400px; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 40px; margin: 28px auto 0; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 24px; background: radial-gradient(120% 140% at 12% 0%, #12274a 0%, rgb(var(--shop-surface)) 45%, rgb(var(--shop-bg)) 100%); padding: 56px; box-shadow: var(--shop-shadow); }
-.hero::before { position: absolute; top: 0; left: 56px; width: 96px; height: 3px; background: linear-gradient(90deg, rgb(var(--shop-gold)), transparent); content: ""; }
+.hero { position: relative; display: grid; max-width: 1400px; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 40px; margin: 28px auto 0; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 24px; background: radial-gradient(120% 140% at 12% 0%, rgb(var(--shop-overlay)) 0%, rgb(var(--shop-surface)) 45%, rgb(var(--shop-bg)) 100%); padding: 56px; box-shadow: var(--shop-shadow); }
+/* The rule across the hero's top edge is the ember gradient — a non-text mark,
+   which is the only other thing ember is allowed to be. It is the brand
+   signing the page. */
+.hero::before { position: absolute; top: 0; left: 56px; width: 96px; height: 3px; background-image: var(--shop-ember); content: ""; }
 .hero-copy { display: flex; min-width: 0; flex-direction: column; justify-content: center; }
-.hero-copy h1 { max-width: 15ch; margin-top: 18px; font-family: var(--shop-display); font-size: clamp(38px, 4.4vw, 62px); font-weight: 600; line-height: 1.02; letter-spacing: -.02em; }
+.hero-copy h1 { max-width: 15ch; margin-top: 18px; font-family: var(--shop-display); font-size: clamp(38px, 4.4vw, 62px); font-weight: 600; line-height: var(--mo-leading-display); letter-spacing: -.02em; }
 .hero-copy h1 em { color: rgb(var(--shop-gold)); font-style: normal; }
-.hero-copy p { max-width: 46ch; margin-top: 20px; color: rgb(var(--shop-muted)); font-size: 16px; line-height: 1.65; }
+.hero-copy p { max-width: 46ch; margin-top: 20px; color: rgb(var(--shop-muted)); font-size: 16px; line-height: var(--mo-leading-body); }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .hero-stats { display: flex; flex-wrap: wrap; gap: 36px; margin-top: 40px; padding-top: 26px; border-top: 1px solid var(--shop-line); }
 .hero-stats div { display: flex; flex-direction: column; gap: 5px; }
@@ -231,16 +441,19 @@ body {
 .hero-stats span { color: rgb(var(--shop-faint)); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 
 .hero-feature { display: flex; flex-direction: column; align-self: center; border: 1px solid var(--shop-line-strong); border-radius: 20px; background: rgb(var(--shop-surface)); padding: 16px; box-shadow: var(--shop-shadow-lift); transition: transform .3s, border-color .3s; }
-.hero-feature:hover { border-color: rgb(var(--shop-gold)); transform: translateY(-4px); }
+.hero-feature:hover { border-color: rgb(var(--shop-interactive)); transform: translateY(-4px); }
 .hero-feature:hover .photo-plate img { transform: scale(1.04); }
 .hero-feature-body { padding: 18px 6px 4px; }
 .hero-feature-body span { color: rgb(var(--shop-faint)); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .hero-feature-body strong { display: block; margin-top: 8px; font-family: var(--shop-display); font-size: 20px; font-weight: 600; line-height: 1.25; }
 .hero-feature-price { display: flex; align-items: baseline; gap: 10px; margin-top: 14px; }
+/* Money. */
 .hero-feature-price b { color: rgb(var(--shop-gold)); font-size: 24px; font-weight: 700; }
 .hero-feature-price s { color: rgb(var(--shop-faint)); font-size: 14px; }
 
-/* ═════════════════════════════════════════════════════════════ TRUST STRIP */
+/* ═════════════════════════════════════════════════════════════ TRUST STRIP
+   Delivery, protected payments, returns, seller-direct prices. The shop's own
+   promises about money and goods, so the marks are gold. */
 .trust-strip { display: grid; max-width: 1400px; grid-template-columns: repeat(4, 1fr); margin: 20px auto 0; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 16px; background: rgb(var(--shop-surface) / .55); }
 .trust-strip > div { display: flex; align-items: center; gap: 14px; border-right: 1px solid var(--shop-line); padding: 20px 24px; }
 .trust-strip > div:last-child { border-right: 0; }
@@ -257,50 +470,64 @@ body {
 .section-heading h2 { margin-top: 8px; font-family: var(--shop-display); font-size: clamp(24px, 2.6vw, 34px); font-weight: 600; letter-spacing: -.015em; }
 .section-heading p { max-width: 56ch; margin-top: 8px; color: rgb(var(--shop-muted)); font-size: 14px; }
 
-/* ── categories: twelve real ones, legible and comfortably tappable ── */
+/* ── categories: twelve real ones, legible and comfortably tappable ──
+   Browsing is navigation, so the tile's whole interactive vocabulary is cyan.
+   The mark inside it is a calm raised chip rather than another tinted panel:
+   twelve gold-washed squares was the single biggest reason this page used to
+   read as a gold product. */
 .category-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .category-tile { position: relative; display: flex; min-height: 108px; align-items: center; gap: 16px; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 16px; background: rgb(var(--shop-surface)); padding: 18px 20px; transition: border-color .2s, background .2s, transform .2s; }
-.category-tile:hover { border-color: rgb(var(--shop-gold)); background: rgb(var(--shop-raised)); transform: translateY(-2px); }
-.category-tile-mark { display: grid; width: 48px; height: 48px; flex: none; place-items: center; overflow: hidden; border: 1px solid var(--shop-gold-line); border-radius: 12px; background: rgb(var(--shop-gold) / .12); color: rgb(var(--shop-gold)); }
+.category-tile:hover { border-color: rgb(var(--shop-interactive)); background: rgb(var(--shop-raised)); transform: translateY(-2px); }
+.category-tile-mark { display: grid; width: 48px; height: 48px; flex: none; place-items: center; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 12px; background: rgb(var(--shop-raised)); color: rgb(var(--shop-interactive)); }
 .category-tile-mark img { width: 100%; height: 100%; object-fit: cover; }
 .category-tile-copy { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .category-tile-copy strong { font-size: 15px; font-weight: 700; line-height: 1.25; }
 .category-tile-copy small { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: rgb(var(--shop-faint)); font-size: 11px; line-height: 1.45; }
-.category-tile-count { color: rgb(var(--shop-gold)); font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+/* "12 products" means there is something to open, so it is the interactive
+   colour; "Coming soon" means there is not, so it is body copy. The two used
+   to be gold and grey, which said the same thing less clearly. */
+.category-tile-count { color: rgb(var(--shop-interactive)); font-size: 11px; font-weight: 700; letter-spacing: .06em; }
 .category-tile-count.is-empty { color: rgb(var(--shop-faint)); font-weight: 600; }
 
-/* ── the seller invitation that fills the tail of a sparse product grid ── */
-.seller-invite { display: flex; flex-direction: column; justify-content: center; border: 1px dashed var(--shop-gold-line); border-radius: 18px; background: linear-gradient(160deg, rgb(var(--shop-gold) / .08), transparent 70%); padding: 26px; transition: border-color .2s, background .2s; }
-.seller-invite:hover { border-color: rgb(var(--shop-gold)); background: linear-gradient(160deg, rgb(var(--shop-gold) / .14), transparent 70%); }
+/* ── the seller invitation that fills the tail of a sparse product grid ──
+   The platform-level ask, so this is one of ember's two non-text marks: a
+   dashed ember edge and an ember wash. The text on it stays ink and body —
+   ember at 13px would be 4.03 and unreadable. */
+.seller-invite { display: flex; flex-direction: column; justify-content: center; border: 1px dashed rgb(var(--shop-ember-flat) / .55); border-radius: 18px; background: linear-gradient(160deg, rgb(var(--shop-ember-flat) / .10), transparent 70%); padding: 26px; transition: border-color .2s, background .2s; }
+.seller-invite:hover { border-color: rgb(var(--shop-ember-flat)); background: linear-gradient(160deg, rgb(var(--shop-ember-flat) / .16), transparent 70%); }
 .seller-invite strong { margin-top: 14px; font-family: var(--shop-display); font-size: 20px; font-weight: 600; line-height: 1.25; }
 .seller-invite p { margin-top: 10px; color: rgb(var(--shop-muted)); font-size: 13px; line-height: 1.6; }
 
-/* ═══════════════════════════════════════════════════════════ PRODUCT CARDS */
+/* ═══════════════════════════════════════════════════════════ PRODUCT CARDS
+   Three gold marks and no more: the price, the rating, and the one action.
+   Everything else about the card — its edge, its hover, its title colour — is
+   Momentum. That ratio is the re-skin in miniature. */
 .product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .product-card { position: relative; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 18px; background: rgb(var(--shop-surface)); padding: 12px; box-shadow: var(--shop-shadow); transition: border-color .2s, transform .2s, box-shadow .2s; }
-.product-card:hover { border-color: rgb(var(--shop-gold) / .55); transform: translateY(-3px); box-shadow: var(--shop-shadow-lift); }
+.product-card:hover { border-color: rgb(var(--shop-interactive) / .55); transform: translateY(-3px); box-shadow: var(--shop-shadow-lift); }
 .product-card:hover .photo-plate img { transform: scale(1.045); }
 .product-card-body { display: flex; min-width: 0; flex: 1; flex-direction: column; padding: 16px 6px 0; }
 .product-card-seller { overflow: hidden; color: rgb(var(--shop-faint)); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .product-card-title { display: -webkit-box; margin-top: 7px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 14px; font-weight: 600; line-height: 1.4; transition: color .15s; }
-.product-card:hover .product-card-title { color: rgb(var(--shop-gold-light)); }
+.product-card:hover .product-card-title { color: rgb(var(--shop-interactive)); }
 .product-card-rating { display: flex; align-items: center; gap: 5px; margin-top: 8px; color: rgb(var(--shop-gold)); font-size: 11px; font-weight: 700; }
 .product-card-rating span { color: rgb(var(--shop-faint)); font-weight: 500; }
 .product-card-price { display: flex; align-items: baseline; gap: 8px; margin-top: auto; padding-top: 14px; }
-.product-card-price b { color: rgb(var(--shop-ink)); font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+/* The price was white. It is money, and money is gold — 7.79 on the card. */
+.product-card-price b { color: rgb(var(--shop-gold)); font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
 .product-card-price s { color: rgb(var(--shop-faint)); font-size: 12px; }
 .product-card-price em { color: rgb(var(--shop-good)); font-size: 11px; font-style: normal; font-weight: 700; }
 .product-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; border-top: 1px solid var(--shop-line); padding: 12px 6px 2px; }
 .product-card-stock { color: rgb(var(--shop-faint)); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .product-card-stock.is-low { color: rgb(var(--shop-warn)); }
 
-/* Quick-add. Gold, because it is the card's one action. */
-.bag-add { display: inline-flex; min-height: 38px; align-items: center; gap: 7px; border-radius: 10px; background: rgb(var(--shop-gold)); padding: 0 14px; color: rgb(var(--shop-bg)); font-size: 12px; font-weight: 800; transition: background .15s, transform .15s; }
+/* Quick-add and the stepper. Gold: both are the buy path. */
+.bag-add { display: inline-flex; min-height: 38px; align-items: center; gap: 7px; border-radius: 10px; background: rgb(var(--shop-gold)); padding: 0 14px; color: rgb(var(--shop-on-gold)); font-size: 12px; font-weight: 800; transition: background .15s, transform .15s; }
 .bag-add:hover:not(:disabled) { background: rgb(var(--shop-gold-light)); transform: translateY(-1px); }
 .bag-add:disabled { cursor: not-allowed; background: rgb(var(--shop-ink) / .1); color: rgb(var(--shop-faint)); }
 .bag-stepper { display: grid; height: 38px; grid-template-columns: 36px 42px 36px; overflow: hidden; border: 1px solid rgb(var(--shop-gold)); border-radius: 10px; background: rgb(var(--shop-gold) / .12); }
 .bag-stepper button { display: grid; place-items: center; color: rgb(var(--shop-gold)); transition: background .15s, color .15s; }
-.bag-stepper button:hover:not(:disabled) { background: rgb(var(--shop-gold)); color: rgb(var(--shop-bg)); }
+.bag-stepper button:hover:not(:disabled) { background: rgb(var(--shop-gold)); color: rgb(var(--shop-on-gold)); }
 .bag-stepper button:disabled { cursor: wait; opacity: .4; }
 .bag-stepper > span { display: grid; place-items: center; border-inline: 1px solid rgb(var(--shop-gold) / .4); color: rgb(var(--shop-ink)); font-size: 13px; font-weight: 800; }
 
@@ -312,28 +539,33 @@ body {
 .pdp-gallery { position: sticky; top: 150px; display: flex; flex-direction: column; gap: 12px; }
 .pdp-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
 .pdp-thumb { width: 72px; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 12px; padding: 2px; transition: border-color .15s; }
-.pdp-thumb[aria-current="true"] { border-color: rgb(var(--shop-gold)); }
+/* Which photo you are looking at is navigation, not a purchase. Cyan. */
+.pdp-thumb[aria-current="true"] { border-color: rgb(var(--shop-interactive)); }
 .pdp-thumb .photo-plate { border-radius: 10px; }
 .pdp-thumb .photo-plate img { padding: 10%; }
 
 .pdp-title { margin-top: 12px; font-family: var(--shop-display); font-size: clamp(26px, 3vw, 38px); font-weight: 600; line-height: 1.14; letter-spacing: -.015em; }
 .pdp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 14px; color: rgb(var(--shop-muted)); font-size: 13px; }
 .pdp-meta b { color: rgb(var(--shop-ink)); font-weight: 600; }
-.pdp-rating { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--shop-gold-line); border-radius: 999px; padding: 4px 11px; color: rgb(var(--shop-gold)); font-size: 12px; font-weight: 700; }
+.pdp-rating { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--shop-gold-line); border-radius: var(--mo-radius-pill); padding: 4px 11px; color: rgb(var(--shop-gold)); font-size: 12px; font-weight: 700; }
 .pdp-rating span { color: rgb(var(--shop-faint)); font-weight: 500; }
 
 .pdp-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; margin-top: 26px; border-top: 1px solid var(--shop-line); padding-top: 26px; }
-.pdp-price b { font-size: 38px; font-weight: 700; letter-spacing: -.025em; }
+/* The single biggest number on the page, and it is money. */
+.pdp-price b { color: rgb(var(--shop-gold)); font-size: 38px; font-weight: 700; letter-spacing: -.025em; }
 .pdp-price s { color: rgb(var(--shop-faint)); font-size: 17px; }
-.pdp-save { border-radius: 999px; background: rgb(var(--shop-good) / .14); padding: 5px 12px; color: rgb(var(--shop-good)); font-size: 12px; font-weight: 700; }
+.pdp-save { border-radius: var(--mo-radius-pill); background: rgb(var(--shop-good) / .14); padding: 5px 12px; color: rgb(var(--shop-good)); font-size: 12px; font-weight: 700; }
 .pdp-tax { width: 100%; margin-top: 6px; color: rgb(var(--shop-faint)); font-size: 12px; }
 
 .pdp-options { margin-top: 28px; }
 .pdp-options-label { color: rgb(var(--shop-faint)); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .pdp-option-list { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
 .pdp-option { min-height: 44px; border: 1px solid var(--shop-line-strong); border-radius: 11px; padding: 0 18px; color: rgb(var(--shop-muted)); font-size: 13px; font-weight: 600; transition: .15s; }
-.pdp-option:hover { border-color: rgb(var(--shop-gold) / .6); color: rgb(var(--shop-ink)); }
-.pdp-option[aria-pressed="true"] { border-color: rgb(var(--shop-gold)); background: rgb(var(--shop-gold)); color: rgb(var(--shop-bg)); font-weight: 800; }
+.pdp-option:hover { border-color: rgb(var(--shop-interactive) / .6); color: rgb(var(--shop-ink)); }
+/* The SELECTED variant is gold and the hover is cyan, which is the rule at its
+   sharpest: hovering a size is looking, picking one changes the price and what
+   goes in the bag. */
+.pdp-option[aria-pressed="true"] { border-color: rgb(var(--shop-gold)); background: rgb(var(--shop-gold)); color: rgb(var(--shop-on-gold)); font-weight: 800; }
 
 .pdp-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
 .pdp-assurances { display: grid; gap: 12px; margin-top: 28px; border: 1px solid var(--shop-line); border-radius: 16px; background: rgb(var(--shop-surface)); padding: 20px 22px; }
@@ -345,13 +577,13 @@ body {
    them. A definition list, not a table: it reflows to one column on a phone. */
 .spec-group { margin-top: 22px; }
 .spec-group > h3 { margin-bottom: 12px; color: rgb(var(--shop-gold)); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
-.spec-list { display: grid; grid-template-columns: minmax(120px, 210px) minmax(0, 1fr); overflow: hidden; border: 1px solid var(--shop-line); border-radius: 14px; }
+.spec-list { display: grid; grid-template-columns: minmax(120px, 210px) minmax(0, 1fr); overflow: hidden; border: 1px solid var(--shop-line); border-radius: var(--mo-radius); }
 .spec-list dt { border-bottom: 1px solid var(--shop-line); background: rgb(var(--shop-sunken)); padding: 13px 18px; color: rgb(var(--shop-faint)); font-size: 12px; font-weight: 600; }
 .spec-list dd { border-bottom: 1px solid var(--shop-line); padding: 13px 18px; color: rgb(var(--shop-ink)); font-size: 13px; }
 .spec-list dt:last-of-type, .spec-list dd:last-of-type { border-bottom: 0; }
-.spec-chip { display: inline-block; margin: 2px 6px 2px 0; border: 1px solid var(--shop-line-strong); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.spec-chip { display: inline-block; margin: 2px 6px 2px 0; border: 1px solid var(--shop-line-strong); border-radius: var(--mo-radius-pill); padding: 3px 10px; font-size: 12px; }
 
-.review-card { border: 1px solid var(--shop-line); border-radius: 14px; background: rgb(var(--shop-surface)); padding: 16px 18px; }
+.review-card { border: 1px solid var(--shop-line); border-radius: var(--mo-radius); background: rgb(var(--shop-surface)); padding: 16px 18px; }
 .review-stars { color: rgb(var(--shop-gold)); font-size: 13px; letter-spacing: .12em; }
 
 /* ══════════════════════════════════════════════════════════════ CART / BAG */
@@ -360,7 +592,8 @@ body {
    out-rank a `text-*` utility on the same element. Where a state needs its own
    colour it gets a modifier here rather than a utility that would lose. */
 .cart-state-error { color: rgb(var(--shop-bad)); }
-.cart-loader { width: 18px; height: 18px; border: 2px solid rgb(var(--shop-ink) / .18); border-top-color: rgb(var(--shop-gold)); border-radius: 50%; animation: spin 1s linear infinite; }
+/* A spinner is not money; it is the interface working. Cyan. */
+.cart-loader { width: 18px; height: 18px; border: 2px solid rgb(var(--shop-ink) / .18); border-top-color: rgb(var(--shop-interactive)); border-radius: 50%; animation: spin 1s linear infinite; }
 .empty-vbag { display: flex; min-height: 66vh; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
 .empty-vbag-mark { display: grid; width: 78px; height: 78px; margin-bottom: 26px; place-items: center; border: 1px solid var(--shop-gold-line); border-radius: 20px; background: rgb(var(--shop-gold) / .12); color: rgb(var(--shop-gold)); }
 .empty-vbag h1 { margin-top: 14px; font-family: var(--shop-display); font-size: clamp(32px, 5vw, 52px); font-weight: 600; line-height: 1.06; }
@@ -374,12 +607,12 @@ body {
 .vbag-layout { display: grid; grid-template-columns: minmax(0, 1.62fr) minmax(340px, .64fr); align-items: start; gap: 26px; }
 .vbag-items { display: flex; flex-direction: column; gap: 12px; }
 .vbag-item { position: relative; display: grid; grid-template-columns: 124px minmax(0, 1fr) auto; gap: 20px; border: 1px solid var(--shop-line); border-radius: 18px; background: rgb(var(--shop-surface)); padding: 14px; transition: border-color .2s; }
-.vbag-item:hover { border-color: rgb(var(--shop-gold) / .5); }
+.vbag-item:hover { border-color: rgb(var(--shop-interactive) / .5); }
 .vbag-item-image { width: 124px; }
 .vbag-item-copy { display: flex; min-width: 0; flex-direction: column; justify-content: center; }
 .vbag-item-copy > span { color: rgb(var(--shop-faint)); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .vbag-item-copy > a { margin-top: 7px; font-size: 16px; font-weight: 600; line-height: 1.3; }
-.vbag-item-copy > a:hover { color: rgb(var(--shop-gold-light)); }
+.vbag-item-copy > a:hover { color: rgb(var(--shop-interactive)); }
 .vbag-item-copy > small { margin-top: 8px; color: rgb(var(--shop-faint)); font-size: 10px; letter-spacing: .1em; }
 .vbag-item-unit { margin-top: 12px; color: rgb(var(--shop-muted)); font-size: 12px; }
 /* The struck-through "was ₹X" the cart shows when price_was_minor is set —
@@ -394,25 +627,30 @@ body {
 /* Named only when every line is one seller's; a mixed bag gets the notice. */
 .vbag-seller { display: flex; align-items: center; gap: 7px; margin: -18px 0 22px; color: rgb(var(--shop-faint)); font-size: 12px; font-weight: 600; }
 .vbag-item-controls { display: flex; min-width: 132px; flex-direction: column; align-items: flex-end; justify-content: center; gap: 12px; }
-.vbag-item-controls > strong { font-size: 18px; font-weight: 700; }
+/* The line total. Money. */
+.vbag-item-controls > strong { color: rgb(var(--shop-gold)); font-size: 18px; font-weight: 700; }
+/* Changing a quantity changes what you pay, so the stepper's active state is
+   gold — the same reasoning as .bag-stepper. */
 .cart-quantity { display: grid; height: 38px; grid-template-columns: 36px 40px 36px; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 10px; }
 .cart-quantity button { display: grid; place-items: center; color: rgb(var(--shop-muted)); transition: .15s; }
-.cart-quantity button:hover:not(:disabled) { background: rgb(var(--shop-gold)); color: rgb(var(--shop-bg)); }
+.cart-quantity button:hover:not(:disabled) { background: rgb(var(--shop-gold)); color: rgb(var(--shop-on-gold)); }
 .cart-quantity button:disabled { opacity: .35; }
 .cart-quantity span { display: grid; place-items: center; border-inline: 1px solid var(--shop-line); font-size: 13px; font-weight: 700; }
 .vbag-remove { display: flex; align-items: center; gap: 6px; color: rgb(var(--shop-faint)); font-size: 11px; }
 .vbag-remove:hover { color: rgb(var(--shop-bad)); }
 .continue-market { display: flex; width: max-content; align-items: center; gap: 8px; margin: 16px 0 0 6px; color: rgb(var(--shop-muted)); font-size: 13px; font-weight: 600; }
-.continue-market:hover { color: rgb(var(--shop-gold)); }
+.continue-market:hover { color: rgb(var(--shop-interactive)); }
 
 .vbag-summary { position: sticky; top: 150px; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 20px; background: linear-gradient(170deg, rgb(var(--shop-raised)), rgb(var(--shop-surface)) 60%); padding: 30px; box-shadow: var(--shop-shadow-lift); }
 .vbag-summary h2 { margin-top: 10px; font-family: var(--shop-display); font-size: 28px; font-weight: 600; letter-spacing: -.015em; }
-.coupon-field { display: flex; height: 46px; align-items: center; margin-top: 24px; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 11px; background: rgb(var(--shop-sunken)); padding-left: 14px; color: rgb(var(--shop-faint)); }
-.coupon-field:focus-within { border-color: rgb(var(--shop-gold)); }
-.coupon-field input { min-width: 0; flex: 1; background: transparent; padding: 0 10px; color: rgb(var(--shop-ink)); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; letter-spacing: .1em; outline: 0; }
-.coupon-field input::placeholder { color: rgb(var(--shop-faint)); }
+/* A coupon changes what you pay, so Apply is gold. Its FOCUS is still cyan,
+   because focus is the platform's, not the shop's. */
+.coupon-field { display: flex; height: 46px; align-items: center; margin-top: 24px; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 11px; background: rgb(var(--shop-sunken)); padding-left: 14px; color: rgb(var(--shop-muted)); }
+.coupon-field:focus-within { border-color: rgb(var(--shop-interactive)); }
+.coupon-field input { min-width: 0; flex: 1; background: transparent; padding: 0 10px; color: rgb(var(--shop-ink)); font-family: var(--mo-font-mono); font-size: 12px; letter-spacing: .1em; outline: 0; }
+.coupon-field input::placeholder { color: rgb(var(--shop-muted)); }
 .coupon-field button { align-self: stretch; border-left: 1px solid var(--shop-line-strong); padding: 0 16px; color: rgb(var(--shop-gold)); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
-.coupon-field button:hover:not(:disabled) { background: rgb(var(--shop-gold)); color: rgb(var(--shop-bg)); }
+.coupon-field button:hover:not(:disabled) { background: rgb(var(--shop-gold)); color: rgb(var(--shop-on-gold)); }
 .coupon-field button:disabled { opacity: .4; }
 .coupon-message { margin-top: 10px; color: rgb(var(--shop-good)); font-size: 11px; }
 .coupon-message.error { color: rgb(var(--shop-bad)); }
@@ -424,29 +662,37 @@ body {
 .summary-total { align-items: flex-end; margin-top: 6px; border-top: 1px solid var(--shop-line); padding-top: 18px; }
 .summary-total span { display: flex; flex-direction: column; color: rgb(var(--shop-ink)); font-weight: 600; }
 .summary-total small { margin-top: 4px; color: rgb(var(--shop-faint)); font-size: 10px; font-weight: 400; }
+/* The number the whole page is about. */
 .summary-total strong { color: rgb(var(--shop-gold)); font-size: 24px; font-weight: 700; }
 .summary-trust { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; color: rgb(var(--shop-faint)); font-size: 11px; }
 
 /* ═══════════════════════════════════════════════════════════════════ FORMS
-   Native controls need explicit help: an unstyled <select>/<input> on navy
-   renders with the platform's white chrome and black text.
+   Native controls need explicit help: an unstyled <select>/<input> on a dark
+   ground renders with the platform's white chrome and black text. `.mo-root`
+   sets `color-scheme: dark`, which handles the scrollbars and the date picker;
+   these rules handle everything it does not.
+
+   Focus is CYAN here, not gold. A form field lighting up is the platform
+   responding, and it is the same ring the sign-in page draws.
    ═════════════════════════════════════════════════════════════════════════ */
 .field { display: flex; min-height: 44px; width: 100%; align-items: center; border: 1px solid var(--shop-line-strong); border-radius: 11px; background: rgb(var(--shop-sunken)); padding: 10px 14px; color: rgb(var(--shop-ink)); font-size: 14px; outline: 0; transition: border-color .15s, box-shadow .15s; }
-.field::placeholder { color: rgb(var(--shop-faint)); }
-.field:focus { border-color: rgb(var(--shop-gold)); box-shadow: 0 0 0 3px rgb(212 175 55 / .16); }
+.field::placeholder { color: rgb(var(--shop-muted)); }
+.field:focus { border-color: rgb(var(--shop-interactive)); box-shadow: 0 0 0 3px rgb(var(--shop-interactive) / .18); }
 textarea.field { min-height: 104px; align-items: stretch; line-height: 1.55; }
-select.field { appearance: none; background-image: linear-gradient(45deg, transparent 50%, rgb(var(--shop-faint)) 50%), linear-gradient(135deg, rgb(var(--shop-faint)) 50%, transparent 50%); background-position: calc(100% - 19px) 50%, calc(100% - 14px) 50%; background-repeat: no-repeat; background-size: 5px 5px, 5px 5px; padding-right: 36px; }
+select.field { appearance: none; background-image: linear-gradient(45deg, transparent 50%, rgb(var(--shop-muted)) 50%), linear-gradient(135deg, rgb(var(--shop-muted)) 50%, transparent 50%); background-position: calc(100% - 19px) 50%, calc(100% - 14px) 50%; background-repeat: no-repeat; background-size: 5px 5px, 5px 5px; padding-right: 36px; }
 select.field option { background: rgb(var(--shop-surface)); color: rgb(var(--shop-ink)); }
 .field-label { display: block; margin-bottom: 7px; color: rgb(var(--shop-muted)); font-size: 12px; font-weight: 600; }
 .field-hint { margin-top: 7px; color: rgb(var(--shop-faint)); font-size: 11px; }
 
-/* Radio / checkbox rows that read as choices, not as text with a dot. */
+/* Radio / checkbox rows that read as choices, not as text with a dot. Picking
+   a delivery option is a form interaction, not a payment, so the selected row
+   is cyan. */
 .choice-row { display: flex; min-height: 56px; cursor: pointer; align-items: center; gap: 13px; border: 1px solid var(--shop-line); border-radius: 12px; background: rgb(var(--shop-sunken)); padding: 14px 16px; color: rgb(var(--shop-muted)); font-size: 14px; transition: border-color .15s, background .15s, color .15s; }
 .choice-row:hover { border-color: var(--shop-line-strong); color: rgb(var(--shop-ink)); }
-.choice-row.is-selected { border-color: rgb(var(--shop-gold)); background: rgb(var(--shop-gold) / .08); color: rgb(var(--shop-ink)); }
-.choice-row input[type="radio"], .choice-row input[type="checkbox"] { width: 17px; height: 17px; flex: none; accent-color: rgb(var(--shop-gold)); }
+.choice-row.is-selected { border-color: rgb(var(--shop-interactive)); background: rgb(var(--shop-interactive) / .1); color: rgb(var(--shop-ink)); }
+.choice-row input[type="radio"], .choice-row input[type="checkbox"] { width: 17px; height: 17px; flex: none; accent-color: rgb(var(--shop-interactive)); }
 
-.status-pill { display: inline-flex; align-items: center; border: 1px solid currentColor; border-radius: 999px; padding: 4px 12px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: capitalize; }
+.status-pill { display: inline-flex; align-items: center; border: 1px solid currentColor; border-radius: var(--mo-radius-pill); padding: 4px 12px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: capitalize; }
 .notice { border: 1px solid var(--shop-line); border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.55; }
 .notice-error { border-color: rgb(var(--shop-bad) / .4); background: rgb(var(--shop-bad) / .1); color: rgb(var(--shop-bad)); }
 .notice-good { border-color: rgb(var(--shop-good) / .4); background: rgb(var(--shop-good) / .1); color: rgb(var(--shop-good)); }
@@ -457,7 +703,7 @@ select.field option { background: rgb(var(--shop-surface)); color: rgb(var(--sho
 .shop-footer-inner { display: flex; max-width: 1400px; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; margin: auto; padding: 34px 24px; }
 .shop-footer nav { display: flex; flex-wrap: wrap; gap: 22px; }
 .shop-footer a { color: rgb(var(--shop-muted)); font-size: 13px; }
-.shop-footer a:hover { color: rgb(var(--shop-gold)); }
+.shop-footer a:hover { color: rgb(var(--shop-interactive)); }
 .shop-footer small { color: rgb(var(--shop-faint)); font-size: 12px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -515,7 +761,7 @@ select.field option { background: rgb(var(--shop-surface)); color: rgb(var(--sho
   .category-grid { grid-template-columns: 1fr; gap: 10px; }
   .category-tile { min-height: 84px; padding: 14px 16px; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .product-card { border-radius: 14px; padding: 8px; }
+  .product-card { border-radius: var(--mo-radius); padding: 8px; }
   .product-card-body { padding: 12px 4px 0; }
   .product-card-foot { flex-direction: column; align-items: stretch; }
   .bag-add, .bag-stepper { width: 100%; }

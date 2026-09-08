@@ -162,7 +162,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
           {shipmentData.shipment.tracking_url ? (
             <a href={shipmentData.shipment.tracking_url} target="_blank" rel="noreferrer"
-              className="gold-link mt-2">
+              className="shop-link mt-2">
               Track shipment →
             </a>
           ) : null}
@@ -170,7 +170,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           {shipmentData.events && shipmentData.events.length > 0 ? (
             <ol className="mt-4 space-y-2">
               {shipmentData.events.map((e) => (
-                <li key={e.id} className="border-l-2 border-shop-gold/50 pl-4 text-sm">
+                <li key={e.id} className="border-l-2 border-shop-interactive/50 pl-4 text-sm">
                   <div className="font-medium">{e.status.replace(/_/g, ' ')}</div>
                   {e.location ? <div className="text-shop-faint">{e.location}</div> : null}
                   {e.remark ? <div className="text-shop-faint">{e.remark}</div> : null}

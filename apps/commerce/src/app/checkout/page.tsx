@@ -154,9 +154,9 @@ function CheckoutContent() {
       <StoreHeader />
       <main className="shop-page flex-1">
         <nav aria-label="Breadcrumb" className="text-xs text-shop-faint">
-          <Link href="/" className="hover:text-shop-gold">Shop</Link>
+          <Link href="/" className="hover:text-shop-interactive">Shop</Link>
           <span aria-hidden="true"> / </span>
-          <Link href="/cart" className="hover:text-shop-gold">Bag</Link>
+          <Link href="/cart" className="hover:text-shop-interactive">Bag</Link>
           <span aria-hidden="true"> / </span>
           <span className="text-shop-muted">Checkout</span>
         </nav>
@@ -190,7 +190,7 @@ function CheckoutContent() {
               ) : null}
 
               {!showAddForm ? (
-                <button type="button" onClick={() => setShowAddForm(true)} className="gold-link mt-4">
+                <button type="button" onClick={() => setShowAddForm(true)} className="shop-link mt-4">
                   <Plus size={15} aria-hidden="true" /> Add a new address
                 </button>
               ) : (

@@ -38,7 +38,15 @@ function OnboardingForm() {
         <Input placeholder="Store name" value={storeName} onChange={(e) => setStoreName(e.target.value)} required />
         <Input type="email" placeholder="Contact email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         {error && <p className="text-sm text-shop-bad">{error}</p>}
-        <Button type="submit" disabled={start.isPending}>
+        {/* The shop's ONE ember button. Opening a store is the platform-level
+            act — it is not a purchase, so it is not gold, and it is the only
+            action in this zone that is neither. `.btn-ember` carries the 19px/
+            700 the token sheet requires of anything sitting on the gradient:
+            dark ink on the red end measures 4.03, which is legible as large
+            text only. The plain CSS classes are declared after
+            @tailwind utilities, so they out-rank the Button's own
+            `bg-brand-text` default variant. */}
+        <Button type="submit" disabled={start.isPending} className="btn btn-ember btn-block">
           {start.isPending ? "Creating…" : "Create store"}
         </Button>
       </form>

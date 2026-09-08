@@ -5,6 +5,7 @@
 // a 409 that names the fields it will cost you — can be reasoned about without
 // mounting a form.
 
+import { STORAGE_KEYS } from "@momentum/brand"
 import type { AttributeValueMap } from "@atpost/types/commerce"
 import type { VariationProblem } from "./variation"
 
@@ -183,7 +184,9 @@ export function toAttributePayload(values: AttributeValueMap): AttributeWireValu
 // never a moment where the browser and `products.status = 'draft'` both believe
 // they are the record of truth and disagree about what the seller typed.
 
-const SCRATCH_PREFIX = "atpost.sell.scratch."
+// The literal is frozen in @momentum/brand: renaming it would silently discard
+// every half-written listing already sitting in a seller browser.
+const SCRATCH_PREFIX = STORAGE_KEYS.listingScratchPrefix
 
 export interface ListingScratch {
   categoryId: string
