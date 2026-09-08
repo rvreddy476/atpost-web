@@ -44,11 +44,24 @@ export interface FeedAnalytics {
   recordWatch: (item: FeedItem, session: WatchSessionInfo, event: WatchEvent) => void
   recordImpression: (item: FeedItem, position: number, visibleMs: number, autoplay: boolean) => void
   recordEngagement: (type: AnalyticsEventType, item: FeedItem, position: number) => void
+  /**
+   * `reason` is widened to `string` for the same reason the wire type is.
+   *
+   * A report's category is a MODERATION taxonomy — twelve values the trust-
+   * and-safety queue routes on — while `NegativeReason` is a ranking signal
+   * with eight. Five overlap; `analyticsReasonFor` maps those and passes the
+   * rest through as their canonical string, which the ingest endpoint stores
+   * as "unspecified". That is deliberately preferred to dropping the event: a
+   * report is a strong negative signal whatever its category, and the category
+   * is on the report row anyway. `NegativeSignalPayload.reason` is already
+   * `NegativeReason | string` for exactly this, so this signature was the
+   * narrower of the two rather than the safer one.
+   */
   recordNegative: (
     type: "not_interested" | "report" | "block_creator",
     item: FeedItem,
     position: number,
-    reason: NegativeReason
+    reason: NegativeReason | string
   ) => void
   flush: () => void
 }
@@ -221,7 +234,7 @@ export function useFeedAnalytics(): FeedAnalytics {
       type: "not_interested" | "report" | "block_creator",
       item: FeedItem,
       position: number,
-      reason: NegativeReason
+      reason: NegativeReason | string
     ) => {
       queue.enqueue({ type, payload: { ...common(item, position), reason } })
       void queue.flush()

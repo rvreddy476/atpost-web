@@ -552,13 +552,20 @@ function Body(props: BodyProps) {
  *     there is no post detail route in this zone to point one at. Omitting it
  *     drops "Copy link" from the overflow menu, which is the correct outcome:
  *     there is no link to copy.
- *   · `onToggleMuted`. Superseded — mute is a property of a player now and the
- *     prop is accepted and ignored. `muted` is only the value a player starts
- *     from, and it starts muted because a browser refuses to autoplay sound
- *     and answers the attempt with a rejected promise rather than an error.
  *   · `onComment` / `comments`. Comments are a surface this page does not
  *     have and does not fetch; the card drops the control rather than leaving
- *     a dead glyph.
+ *     a dead glyph. Wiring it here is the same four functions the feed passes
+ *     and is a follow-up, not a gap in the card.
+ *   · `isOwnPost` / `onFeedback` / `onReport`. This page has no session read
+ *     and no negative-signal handlers, so the overflow menu here is Save
+ *     alone. That is the menu computing its own rows from what was wired, not
+ *     a decision made twice.
+ *
+ * There is no `onToggleMuted` to omit any more: `muted` is the value each
+ * player STARTS from, every player owns its sound after that, and the prop
+ * that used to let a surface overrule them is gone from `PostCardProps`. It
+ * starts muted because a browser refuses to autoplay sound and answers the
+ * attempt with a rejected promise rather than an error.
  */
 function Card({ row, ...props }: { row: SearchPostRow } & BodyProps) {
   return (

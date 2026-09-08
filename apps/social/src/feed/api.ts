@@ -20,17 +20,41 @@
  *   DELETE /v1/posts/{id}/bookmark                    -> {bookmarked:false}
  *   POST   /v1/posts/{id}/repost    {type:"plain"}    -> 201
  *   DELETE /v1/posts/{id}/repost                      -> 204, EMPTY BODY
+ *   GET    /v1/posts/{id}/comments  ?cursor&limit     -> [Comment], next_cursor
+ *   POST   /v1/posts/{id}/comments  {text:…}          -> 201, the new comment
+ *   POST   /v1/feed/feedback   {post_id|author_id, signal}  -> 200
+ *   POST   /v1/reports    {entity_type,entity_id,reason,details} -> 200
  *   POST   /v1/analytics/events     {events:[...]}    -> 202 {accepted,duplicate}
  *
- * Two of those are shaped differently from their neighbours and both are easy
- * to get wrong: like is a toggle that ignores what you wanted, bookmark is a
- * pair of idempotent setters; and the repost delete answers 204 with no
- * envelope at all, so parsing its body throws.
+ * Four of those are shaped differently from their neighbours and every one is
+ * easy to get wrong: like is a toggle that ignores what you wanted; bookmark
+ * is a pair of idempotent setters; the repost delete answers 204 with no
+ * envelope at all, so parsing its body throws; and `/v1/reports` answers
+ * **200**, not the 201 a create usually gets.
+ *
+ * The comment routes carry the asymmetry written up at the top of
+ * @momentum/content's `comments.ts`: the CREATE sends `text`, an edit would
+ * send `body`, and the field that comes back is always `body`. Nothing here
+ * can fix that, and nothing here hides it either.
  */
 
 import api from "@atpost/api-client"
 import type { FeedItem, FeedPage } from "@atpost/types/feed"
 import type { AnalyticsEvent, SendOutcome } from "@momentum/analytics"
+import {
+  commentErrorMessage,
+  type CommentPage,
+  type CommentRow,
+  type ReportReason,
+} from "@momentum/content"
+import {
+  failureOf,
+  feedbackNotice,
+  reportNotice,
+  type FeedbackSignal,
+  type FeedbackTarget,
+  type Notice,
+} from "./outcomes"
 
 /**
  * The server clamps `limit` and only returns `meta.next_cursor` when the page
@@ -131,6 +155,157 @@ export async function setRepost(postId: string, reposted: boolean): Promise<{ on
   }
   await api.delete(path)
   return { on: false }
+}
+
+/* ── Comments ───────────────────────────────────────────────────────────── */
+
+/**
+ * The page size, and why it is not the maximum.
+ *
+ * The endpoint clamps to 50 — but not by clamping. `ListComments` in
+ * post-service reads `if limit <= 0 || limit > 50 { limit = 20 }`, so asking
+ * for 100 silently gets the SMALLEST page rather than the largest, which is
+ * the opposite of what the caller wanted and produces no error to notice it
+ * by. 20 is the server's own default and the number this asks for on purpose.
+ */
+const COMMENT_PAGE_SIZE = 20
+
+/**
+ * One page of a post's comments, newest first.
+ *
+ * The cursor is an RFC3339Nano `created_at` handed back verbatim; there is no
+ * sort parameter and no way to ask for oldest-first. `meta.next_cursor` is
+ * absent at the end of the list, which is the terminating condition rather
+ * than a missing field — the same arrangement `/v1/feed/home` uses.
+ *
+ * Reads succeed unauthenticated (the handler treats `X-User-Id` as optional
+ * and only uses it to reveal the viewer's own held-for-review comments), so
+ * this is not gated on the session.
+ */
+export async function fetchComments(postId: string, cursor: string | null): Promise<CommentPage> {
+  const res = await api.get<Envelope<CommentRow[]>>(`/v1/posts/${postId}/comments`, {
+    params: {
+      limit: COMMENT_PAGE_SIZE,
+      ...(cursor ? { cursor } : {}),
+    },
+  })
+  return {
+    items: res.data?.data ?? [],
+    nextCursor: res.data?.meta?.next_cursor || null,
+  }
+}
+
+/**
+ * Write one. 201, and the row the server made.
+ *
+ * The row is returned rather than swallowed because the id, the timestamp and
+ * the counts are all the server's to assign — a client that invented them
+ * would show a comment that does not match the one everyone else can see.
+ *
+ * What the row does NOT carry is a hydrated `author`: verified on the live
+ * gateway, the create response has `author_id` and no `author`, while the
+ * list has both. The sheet is told who the viewer is so it can name the row
+ * anyway; see `commentAuthorName`.
+ *
+ * No `Idempotency-Key` is sent. The header is supported and makes the insert
+ * durably idempotent, but it is only worth having where a retry exists to
+ * protect, and there is no automatic retry on this path — a failed comment
+ * comes back to the composer with the text still in it and a person decides.
+ * Sending a key without a retry buys nothing and risks the 409
+ * IDEMPOTENCY_KEY_REUSED that a reused key answers with.
+ */
+export async function createComment(postId: string, text: string): Promise<CommentRow> {
+  const res = await api.post<Envelope<CommentRow>>(`/v1/posts/${postId}/comments`, { text })
+  const row = res.data?.data
+  if (!row) throw new Error("The server accepted the comment but did not return it.")
+  return row
+}
+
+/**
+ * Why a comment was refused, in a sentence.
+ *
+ * The classification itself lives in @momentum/content, which owns the
+ * vocabulary of this surface and is tested as a table. All this adds is the
+ * transport: axios keeps the status and the envelope's code in different
+ * places, and the package may not know that axios exists.
+ */
+export function commentFailureMessage(error: unknown): string {
+  const { status, code } = failureOf(error)
+  return commentErrorMessage(code, status)
+}
+
+/* ── Steering the ranker, and reporting ─────────────────────────────────── */
+
+/**
+ * "Interested" / "Not interested" / "Don't recommend this account".
+ *
+ * ── Exactly one of the two ids ────────────────────────────────────────────
+ * The endpoint takes `post_id` OR `author_id` and rejects both together and
+ * neither with the same 400 (verified: "post_id and author_id are mutually
+ * exclusive", "post_id or author_id is required"). So the target is a
+ * discriminated argument here rather than two optional fields, and the
+ * request body cannot be built wrong.
+ *
+ * ── It answers, and the answer is not thrown away ─────────────────────────
+ * `not_interested` on a post removes it from every surface on the next fetch;
+ * on an author it removes everything they have posted. The feed acts on that
+ * immediately rather than waiting for a refetch — feed-service's own note
+ * says why, and it is the reason this reports back instead of returning
+ * nothing: something has to be said, and what to say depends on which of the
+ * three rows was pressed and on whether the server agreed.
+ *
+ * `ok` is separate from the notice's tone on purpose. The tone is how it
+ * LOOKS and the flag is whether it HAPPENED, and the report route below is
+ * the proof that those two can differ — a 409 there is bad news that reads as
+ * good. Here `ok` is what the optimistic removal is rolled back on.
+ */
+export async function sendFeedback(
+  target: { kind: FeedbackTarget; id: string },
+  signal: FeedbackSignal
+): Promise<{ ok: boolean; notice: Notice }> {
+  try {
+    await api.post("/v1/feed/feedback", {
+      ...(target.kind === "post" ? { post_id: target.id } : { author_id: target.id }),
+      signal,
+    })
+    return { ok: true, notice: feedbackNotice(signal, target.kind) }
+  } catch (error: unknown) {
+    return { ok: false, notice: feedbackNotice(signal, target.kind, failureOf(error)) }
+  }
+}
+
+/**
+ * File a report against a post.
+ *
+ * ── 200, and 409 is not a failure ─────────────────────────────────────────
+ * The create answers **200** rather than 201, and a second report of the same
+ * post by the same person answers **409 ACTIVE_REPORT_EXISTS** — which means
+ * their report is already open in the moderation queue. That is the state
+ * they were trying to reach, so it comes back as a confirmation. See
+ * `reportNotice`, where the distinction is made and tested.
+ *
+ * `reason` is the server's own allowlist (`REPORT_REASONS` mirrors
+ * trust-safety-service's `validReportCategories`) and is not free text. An
+ * unrecognised value answers 500, which is a server defect and is flagged in
+ * the report rather than defended against here — there is no path from the
+ * menu to a value that is not on the list.
+ */
+export async function fileReport(
+  postId: string,
+  reason: ReportReason,
+  details: string
+): Promise<Notice> {
+  try {
+    await api.post("/v1/reports", {
+      entity_type: "post",
+      entity_id: postId,
+      reason,
+      details,
+    })
+    return reportNotice()
+  } catch (error: unknown) {
+    return reportNotice(failureOf(error))
+  }
 }
 
 /**

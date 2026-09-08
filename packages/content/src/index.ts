@@ -55,7 +55,11 @@ export {
   canSend,
   commentAuthorName,
   commentErrorMessage,
+  discardComment,
+  isPendingComment,
   mergeComments,
+  pendingComment,
+  settleComment,
 } from "./comments"
 export type { CommentApi, CommentAuthor, CommentPage, CommentRow } from "./comments"
 

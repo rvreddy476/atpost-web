@@ -196,18 +196,12 @@ export function currentDestinationId(pathname: string | null | undefined): strin
   return null
 }
 
-/**
- * Search: present, and not pretending.
- *
- * `GET /v1/search?q=…` is live and answers with posts, users and hashtags —
- * verified against the running gateway. What does not exist is a page to put
- * the answer on: this zone serves one route, and the brief for it is the page
- * AROUND the feed, not a second surface inside it. A field that accepts a
- * query and navigates nowhere is the lie this whole file is arranged to
- * avoid, so the control renders in its real shape and says so.
- *
- * Wiring it is a small, well-defined follow-up precisely because the endpoint
- * is already there.
+/*
+ * A `SEARCH_UNAVAILABLE_REASON` used to sit here, saying that `GET /v1/search`
+ * was live but had nowhere on the web to put its answer. It has somewhere now
+ * — `/social/search`, reached from ./SearchBox.tsx — so the sentence went with
+ * the follow-up rather than being left behind it. An explanation of why
+ * something cannot be used, kept next to the thing now working, is read as
+ * current by whoever finds it next, and the file's whole subject is not
+ * saying things that are no longer true.
  */
-export const SEARCH_UNAVAILABLE_REASON =
-  "Search has no results page on the web yet — it is in the " + BRAND.mobileApp + "."

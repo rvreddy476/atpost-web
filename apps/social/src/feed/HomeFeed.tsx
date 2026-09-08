@@ -10,8 +10,7 @@
  * @momentum/content instead — that is the line the zone is thin on one side of.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { Volume2, VolumeX } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "@atpost/api-client/session"
 import type { FeedItem } from "@atpost/types/feed"
 import {
@@ -21,16 +20,58 @@ import {
   FeedSkeleton,
   InfiniteFeed,
   PostCard,
+  analyticsReasonFor,
   useDwellTracker,
+  type CommentRow,
+  type ReportReason,
 } from "@momentum/content"
 import { prefersReducedMotion, useAutoplayCoordinator } from "@momentum/player"
-import { fetchFeedPage, setBookmark, setRepost, toggleLike } from "./api"
+import {
+  commentFailureMessage,
+  createComment,
+  fetchComments,
+  fetchFeedPage,
+  fileReport,
+  sendFeedback,
+  setBookmark,
+  setRepost,
+  toggleLike,
+} from "./api"
+import type { Notice } from "./outcomes"
 import { useFeedAnalytics } from "./useFeedAnalytics"
 
 type Status = "loading" | "ready" | "error"
 
+/**
+ * The sound a video starts with, and the last thing in this file that has an
+ * opinion about it.
+ *
+ * A browser refuses to autoplay anything with sound, and the refusal arrives
+ * as a rejected promise rather than an exception — so an unmuted autoplay is
+ * not "louder", it is a video that silently never starts. Every player begins
+ * here and then owns its own sound: once somebody has used the control on a
+ * video, their choice wins for that video and nothing above it may overrule
+ * them. That is why this is a constant and not state, and why the one mute
+ * button that used to sit in the header — silencing twenty players at once,
+ * and fighting each player's own setting the moment either was touched — is
+ * gone rather than kept alongside.
+ */
+const STARTS_MUTED = true
+
 export function HomeFeed() {
-  const { signedIn, status: sessionStatus } = useSession()
+  /**
+   * `userId` is the whole mechanism behind `isOwnPost`.
+   *
+   * There is no "this is yours" flag on a feed item — `author_id` is on every
+   * post and says nothing about who is looking. The viewer comes from
+   * `GET /v1/auth/me` through the session provider, which is the only thing on
+   * the page that knows, and it is null until that request lands. So the
+   * predicate below is false for a moment on every page load, and false is the
+   * safe direction to be wrong in: the menu shows a stranger's rows, which
+   * means an offer to report your own post rather than an offer to act on
+   * somebody else's.
+   */
+  const { signedIn, status: sessionStatus, userId } = useSession()
 
   const [items, setItems] = useState<FeedItem[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
@@ -38,17 +79,6 @@ export function HomeFeed() {
   const [errorMessage, setErrorMessage] = useState("")
   const [loadingMore, setLoadingMore] = useState(false)
   const [reachedEnd, setReachedEnd] = useState(false)
-
-  /**
-   * Muted until asked otherwise.
-   *
-   * Not a default that can be flipped by config: a browser refuses to autoplay
-   * anything with sound, and the refusal arrives as a rejected promise rather
-   * than an exception — so an unmuted autoplay is not "louder", it is a video
-   * that silently never starts. One control for the whole feed, because
-   * per-card mute means scrolling changes the volume.
-   */
-  const [muted, setMuted] = useState(true)
 
   /**
    * Read once, on mount.
@@ -301,11 +331,160 @@ export function HomeFeed() {
     [patch, analytics, positionOf]
   )
 
+  /* ── Comments ─────────────────────────────────────────────────────────── */
+
+  /**
+   * The two functions the sheet needs, and nothing else.
+   *
+   * Identity matters here: `CommentSheet` reloads whenever `api` changes,
+   * because `load` depends on it. An object literal built in the JSX below
+   * would be a new object on every render of the feed — every like, every
+   * scroll — and the open sheet would refetch page one each time. Neither
+   * function closes over anything, so one object for the life of the zone is
+   * correct as well as cheap.
+   */
+  const comments = useMemo(() => ({ list: fetchComments, create: createComment }), [])
+
+  /**
+   * The server accepted a comment.
+   *
+   * Two things follow, and they are separate on purpose. The count on the
+   * action bar is the post's, so it is patched into the item — otherwise
+   * scrolling the card out of view and back would re-mount it from stale
+   * props and show the old number. The event is the analytics contract's, and
+   * `comment_create` is the one engagement type the server does NOT collapse
+   * per session, which is why `recordEngagement` gives it an empty dedupe key
+   * and why a second and third comment are counted.
+   */
+  const onCommentCreated = useCallback(
+    (item: FeedItem, _row: CommentRow) => {
+      patch(item.id, {
+        counts: { ...item.counts, comments: (item.counts?.comments ?? 0) + 1 },
+      })
+      analytics.recordEngagement("comment_create", item, positionOf(item))
+    },
+    [patch, analytics, positionOf]
+  )
+
+  /* ── Steering the feed ────────────────────────────────────────────────── */
+
+  /**
+   * The one line of feedback the overflow menu leaves behind.
+   *
+   * The menu closes the moment a row is pressed — that is what a menu does —
+   * so it is not where the answer can be shown, and the card may be about to
+   * be removed from the list, so it cannot be shown there either. It goes
+   * here, above the feed, and it is cleared on a timer.
+   */
+  const [notice, setNotice] = useState<Notice | null>(null)
+  useEffect(() => {
+    if (!notice) return
+    const id = window.setTimeout(() => setNotice(null), 5_000)
+    return () => window.clearTimeout(id)
+  }, [notice])
+
+  /**
+   * "Interested", "Not interested", "Don't recommend this account".
+   *
+   * ── Removed on the press, put back if it was refused ──────────────────────
+   * `not_interested` is enforced at the hydration tail of every surface, so
+   * the post (or every post by that author) is gone from the NEXT fetch — but
+   * the next fetch is minutes away in an infinite feed, and feed-service's own
+   * note names the failure exactly: "a 'Not interested' the viewer has to
+   * scroll past for five more minutes is a broken button".
+   *
+   * So the card goes immediately and comes back if the server refuses, which
+   * is `useOptimisticToggle`'s bargain applied to a list instead of a boolean
+   * — including the half that is easy to skip: the rollback is accompanied by
+   * a sentence, because a post that reappears with no explanation reads as a
+   * bug rather than as a request that did not land.
+   *
+   * `interested` removes nothing. It is a ranking hint, not a hide.
+   */
+  const onFeedback = useCallback(
+    (item: FeedItem, signal: "interested" | "not_interested", target: "post" | "author") => {
+      const position = positionOf(item)
+      const hides = signal === "not_interested"
+      // Captured BEFORE the optimistic removal, so a rollback restores the
+      // list that was actually there rather than one a later render produced.
+      // Seeded from the current render rather than from nothing: `setItems`
+      // defers its updater, so an empty seed would be a rollback to a blank
+      // feed in the window before React has processed the update. This is
+      // `useOptimisticToggle`'s `let restore = state` for a list.
+      let restore: FeedItem[] = items
+
+      if (hides) {
+        setItems((prev) => {
+          restore = prev
+          return prev.filter((i) =>
+            target === "author" ? i.author_id !== item.author_id : i.id !== item.id
+          )
+        })
+        // The reasons are the analytics contract's own vocabulary, not the
+        // menu's. "Not interested" on a post is `irrelevant`; on an account it
+        // is `dislike_creator`, which is what the row means. The event type
+        // stays `not_interested` for both — `block_creator` is a block, and
+        // "don't recommend" is not one.
+        analytics.recordNegative(
+          "not_interested",
+          item,
+          position,
+          target === "author" ? "dislike_creator" : "irrelevant"
+        )
+      }
+
+      void sendFeedback(
+        { kind: target, id: target === "author" ? item.author_id : item.id },
+        signal
+      ).then(({ ok, notice: answer }) => {
+        if (!ok && hides) setItems(restore)
+        setNotice(answer)
+      })
+    },
+    [analytics, positionOf, items]
+  )
+
+  /**
+   * A report, filed.
+   *
+   * Nothing is removed and nothing is optimistic: a report is a request for
+   * somebody to look, not a hide, and the post staying where it is is the
+   * truth. The one thing that must not happen is the 409 being painted as a
+   * failure — see `reportNotice`, where "you have already reported this" is
+   * classified as the confirmation it is.
+   *
+   * The negative signal is recorded whatever the report's fate. A report is a
+   * strong ranking signal in its own right and the queue is a different
+   * system; losing the signal because moderation was briefly unreachable
+   * would be the wrong trade.
+   */
+  const onReport = useCallback(
+    (item: FeedItem, reason: ReportReason, details: string) => {
+      analytics.recordNegative("report", item, positionOf(item), analyticsReasonFor(reason))
+      void fileReport(item.id, reason, details).then(setNotice)
+    },
+    [analytics, positionOf]
+  )
+
+  /**
+   * Whether the viewer wrote this. See `userId` at the top of the component.
+   *
+   * `Boolean(userId)` is not redundant with the comparison: `userId` is null
+   * until `/v1/auth/me` answers, and an item whose `author_id` is somehow
+   * absent would otherwise make `undefined === null` — no, but a future shape
+   * where both are missing would compare equal and hand a stranger the
+   * author's menu. The check costs nothing and closes that off.
+   */
+  const isOwnPost = useCallback(
+    (item: FeedItem) => Boolean(userId) && item.author_id === userId,
+    [userId]
+  )
+
   /* ── Render ───────────────────────────────────────────────────────────── */
 
   if (status === "loading") {
     return (
-      <Shell muted={muted} onToggleMuted={() => setMuted((m) => !m)} showMute={false}>
+      <Shell notice={notice}>
         <FeedSkeleton />
       </Shell>
     )
@@ -313,7 +492,7 @@ export function HomeFeed() {
 
   if (status === "error") {
     return (
-      <Shell muted={muted} onToggleMuted={() => setMuted((m) => !m)} showMute={false}>
+      <Shell notice={notice}>
         <FeedError message={errorMessage} onRetry={() => void load(null, "replace")} />
       </Shell>
     )
@@ -321,14 +500,14 @@ export function HomeFeed() {
 
   if (items.length === 0) {
     return (
-      <Shell muted={muted} onToggleMuted={() => setMuted((m) => !m)} showMute={false}>
+      <Shell notice={notice}>
         <FeedEmpty onRefresh={() => void load(null, "replace")} />
       </Shell>
     )
   }
 
   return (
-    <Shell muted={muted} onToggleMuted={() => setMuted((m) => !m)} showMute>
+    <Shell notice={notice}>
       <InfiniteFeed
         hasMore={!reachedEnd}
         loading={loadingMore}
@@ -350,8 +529,9 @@ export function HomeFeed() {
               // through ONE cached callback — see `cardRef`.
               containerRef={cardRef(item.id)}
               active={activeId === item.id}
-              muted={muted}
-              onToggleMuted={() => setMuted((m) => !m)}
+              // The value every player on this card STARTS from. Nothing above
+              // a player can change its sound any more; see `STARTS_MUTED`.
+              muted={STARTS_MUTED}
               session={session}
               onWatchEvent={
                 session ? (event) => analytics.recordWatch(item, session, event) : undefined
@@ -361,6 +541,26 @@ export function HomeFeed() {
               onSave={onSave}
               onRepost={onRepost}
               onStale={handleStale}
+              /*
+                The comment surface. `comments` is what makes the bar's comment
+                control appear at all — the card drops it when nothing is wired
+                rather than leaving the dead glyph this feed shipped with — and
+                `onComment` is deliberately NOT passed, because that prop means
+                "navigate somewhere instead" and this zone has nowhere to go.
+              */
+              comments={comments}
+              viewerId={userId ?? undefined}
+              onCommentCreated={onCommentCreated}
+              commentError={commentFailureMessage}
+              /*
+                The overflow menu. `permalink` stays absent for the reason its
+                own note gives — there is no post detail route in this zone, so
+                "Copy link" would copy a link to a page that does not exist and
+                the menu drops the row instead.
+              */
+              isOwnPost={isOwnPost}
+              onFeedback={onFeedback}
+              onReport={onReport}
             />
           )
         })}
@@ -471,7 +671,7 @@ function useTopChromeInset(): number {
 }
 
 /**
- * The feed's own heading, and the one global control.
+ * The feed's own heading, and whatever the feed last had to say.
  *
  * This used to BE the column — `<main className="mx-auto max-w-xl">`, its own
  * width, its own centring, its own page padding. It is not any more: the zone
@@ -481,44 +681,48 @@ function useTopChromeInset(): number {
  * the nested `<main>` would have been a second landmark of the same kind
  * inside the first.
  *
- * What is left here is what only the feed can decide: what the column is
- * called, and whether the videos in it have sound.
+ * ── The mute button that used to sit here is gone ─────────────────────────
+ * One control, wired to one `muted` state, passed to twenty cards. Sound is a
+ * property of a player now: each one starts from `STARTS_MUTED` and then owns
+ * its own, so a header switch could only either be ignored — a control that
+ * does nothing — or override a choice somebody had already made on a video
+ * they were watching. Both are worse than the button not being there, and the
+ * per-player control is the one that is actually where the sound is.
+ *
+ * What is left is what only the feed can decide: what the column is called,
+ * and the answer to the last thing that was asked of it.
  */
-function Shell({
-  children,
-  muted,
-  onToggleMuted,
-  showMute,
-}: {
-  children: React.ReactNode
-  muted: boolean
-  onToggleMuted: () => void
-  showMute: boolean
-}) {
+function Shell({ children, notice }: { children: React.ReactNode; notice: Notice | null }) {
   return (
     <div>
       <header className="mb-5 flex items-center justify-between">
         <h1 className="font-mo-display text-2xl font-semibold tracking-mo-display text-mo-ink">
           Home
         </h1>
-        {showMute && (
-          <button
-            type="button"
-            onClick={onToggleMuted}
-            // `aria-pressed` rather than a label that changes meaning: the
-            // button IS the mute control, and its state is whether it is on.
-            aria-pressed={muted}
-            aria-label={muted ? "Unmute videos" : "Mute videos"}
-            className="rounded-mo-pill border border-mo px-3 py-1.5 text-sm text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised"
-          >
-            {muted ? (
-              <VolumeX aria-hidden="true" className="h-4 w-4" />
-            ) : (
-              <Volume2 aria-hidden="true" className="h-4 w-4" />
-            )}
-          </button>
-        )}
       </header>
+      {/*
+        Always rendered, so a screen reader has a live region to announce INTO
+        — a `role="status"` that appears at the same moment as its text is a
+        region the announcement can be missed by. `role="status"` rather than
+        `alert` because none of these interrupts anything: the worst of them
+        says a ranking hint did not record.
+
+        In flow rather than floating: a pill fixed to the bottom of the window
+        would sit over the action bar of whatever card is down there, and this
+        column already has a top the eye returns to after using the menu.
+      */}
+      <div role="status" aria-live="polite" className="empty:hidden">
+        {notice && (
+          <p
+            className={[
+              "mb-4 rounded-mo border border-mo bg-mo-raised px-3 py-2 text-sm",
+              notice.tone === "good" ? "text-mo-good" : "text-mo-bad",
+            ].join(" ")}
+          >
+            {notice.text}
+          </p>
+        )}
+      </div>
       {children}
     </div>
   )

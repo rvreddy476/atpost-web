@@ -109,16 +109,6 @@ export interface PostCardProps extends PostCardHandlers {
    * player starts from and nothing here can change a video's sound.
    */
   muted: boolean
-  /**
-   * Superseded, accepted, and ignored.
-   *
-   * There used to be one mute button in the feed's header wired to this, which
-   * silenced twenty players at once. Sound is a property of a player and now
-   * lives on one, so there is nothing above the player left to toggle. The
-   * prop is kept only so the zone still compiles while its header button is
-   * removed — delete both together.
-   */
-  onToggleMuted?: () => void
   session?: WatchSessionInfo
   onWatchEvent?: (event: WatchEvent) => void
   /** Playlist url resolution, owned by the zone. Passed to the player. */
@@ -131,6 +121,16 @@ export interface PostCardProps extends PostCardHandlers {
    * left as the dead glyph it has been since the bar was written.
    */
   comments?: CommentApi
+  /**
+   * The signed-in account's id, when there is one.
+   *
+   * Separate from `isOwnPost` on purpose, though the zone derives both from
+   * the same session. `isOwnPost` answers a question about the POST and is a
+   * predicate because a surface may know the answer without knowing the id;
+   * this is the id itself, needed one level down by the comment sheet to name
+   * a row the server did not name. Neither is derivable from the other.
+   */
+  viewerId?: string
   /** Fired after the server accepted one. This is where `comment_create` goes. */
   onCommentCreated?: (item: FeedItem, row: CommentRow) => void
   /** Turns a rejected comment request into a sentence. The zone owns transport. */
@@ -156,10 +156,10 @@ export function PostCard({
   onReport,
   isOwnPost,
   comments,
+  viewerId,
   onCommentCreated,
   commentError,
 }: PostCardProps) {
-  // `onToggleMuted` is deliberately not destructured — see its note above.
   const [commentsOpen, setCommentsOpen] = useState(false)
   const author = item.author
   const name = item.channel?.name || author?.display_name || "Someone"
@@ -377,6 +377,7 @@ export function PostCard({
           postId={item.id}
           label={`${name}'s post`}
           api={comments}
+          viewerId={viewerId}
           onCreated={(row) => onCommentCreated?.(item, row)}
           errorMessage={commentError}
         />

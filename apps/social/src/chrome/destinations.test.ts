@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { BRAND } from "@momentum/brand"
-import {
-  APP_ONLY_REASON,
-  DESTINATIONS,
-  SEARCH_UNAVAILABLE_REASON,
-  currentDestinationId,
-  isActionable,
-} from "./destinations"
+import { APP_ONLY_REASON, DESTINATIONS, currentDestinationId, isActionable } from "./destinations"
 
 /**
  * These assert the two things about this list that would ship as bugs.
@@ -79,7 +73,6 @@ describe("DESTINATIONS", () => {
 
   it("names the app rather than spelling the brand out", () => {
     expect(APP_ONLY_REASON).toContain(BRAND.mobileApp)
-    expect(SEARCH_UNAVAILABLE_REASON).toContain(BRAND.mobileApp)
   })
 })
 

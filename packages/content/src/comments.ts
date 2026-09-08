@@ -24,6 +24,11 @@
  *     value falls back to 20 rather than clamping to 50, so asking for 100
  *     quietly gets you the smallest page.
  *   · There is NO viewer-liked flag on a comment. See `CommentRow` below.
+ *
+ * A fifth, found on the live gateway after the first four were written: the
+ * CREATE response does not hydrate `author`, and the LIST does. So the row a
+ * person has just written is the one row on the list with no name on it,
+ * which is why `commentAuthorName` takes the viewer.
  */
 
 /** `CommentAuthor` in post-service. Absent when hydration was skipped. */
@@ -121,11 +126,29 @@ export function commentErrorMessage(code: string | undefined, status: number | u
   return "That comment did not send."
 }
 
-/** The author's name, with the same fallbacks the server itself uses. */
-export function commentAuthorName(row: CommentRow): string {
+/**
+ * The author's name, with the same fallbacks the server itself uses.
+ *
+ * ── Why the viewer is an argument ─────────────────────────────────────────
+ * `POST /v1/posts/{id}/comments` answers with the row it made and does NOT
+ * hydrate `author` on it — only the LIST does (verified on the live gateway:
+ * the create response carries `author_id` and no `author`, the list carries
+ * both). So the comment somebody has just written renders as "Someone" until
+ * the sheet is reopened, which is the one row on the list they are certain
+ * about. The same is true of an optimistic row, which cannot have an author
+ * because it has never been anywhere near the server.
+ *
+ * Told who is looking, both cases answer "You" — which is not a guess and not
+ * a placeholder, it is the only name that is definitely correct. A hydrated
+ * author still wins: once the list has said "Momentum Tester", that is what
+ * everyone else sees and what this shows.
+ */
+export function commentAuthorName(row: CommentRow, viewerId?: string): string {
   const author = row.author
-  if (!author) return "Someone"
-  return author.display_name || (author.username ? `@${author.username}` : "Someone")
+  const named = author?.display_name || (author?.username ? `@${author.username}` : "")
+  if (named) return named
+  if (viewerId && row.author_id === viewerId) return "You"
+  return "Someone"
 }
 
 /**
@@ -150,4 +173,104 @@ export function canSend(draft: string): boolean {
 export function mergeComments(existing: CommentRow[], incoming: CommentRow[]): CommentRow[] {
   const seen = new Set(existing.map((row) => row.id))
   return [...existing, ...incoming.filter((row) => !seen.has(row.id))]
+}
+
+/* ── Posting optimistically ─────────────────────────────────────────────── */
+
+/**
+ * The id a comment carries before the server has given it one.
+ *
+ * A prefix rather than a flag on the row, because the row IS a `CommentRow`
+ * everywhere else — it is keyed, rendered and merged by exactly the same code
+ * as a real one — and a second shape for "almost a comment" would have to be
+ * threaded through all of it. The colon cannot collide with a real id: the
+ * server's are UUIDs.
+ */
+const PENDING_PREFIX = "pending:"
+
+export function isPendingComment(row: CommentRow): boolean {
+  return row.id.startsWith(PENDING_PREFIX)
+}
+
+/**
+ * The row to show while the request is in the air.
+ *
+ * ── Why optimistic, given the create response is authoritative ────────────
+ * Waiting is the wrong answer for the same reason it is wrong for a like:
+ * a comment that appears when the round trip finishes reads as a composer
+ * that swallowed what you typed. `useOptimisticToggle` in
+ * @momentum/interactions is the idiom this follows — write it now, take the
+ * server's version when it lands, and if it is refused put the state BACK and
+ * say so. A rollback nobody is told about is worse than no optimism at all.
+ *
+ * ── What it deliberately does not invent ──────────────────────────────────
+ * The id is local and marked as such, so nothing downstream can mistake it
+ * for something addressable — a pending row must never be the target of an
+ * edit or a delete, and `isPendingComment` is how the sheet knows. The counts
+ * are zero because they are, and `author` is left absent rather than faked:
+ * the viewer's display name is not something the zone has (`/v1/auth/me`
+ * answers an id and an address), and `commentAuthorName` already answers
+ * "You" for a row whose `author_id` is the viewer's.
+ */
+export function pendingComment(input: {
+  postId: string
+  authorId: string
+  text: string
+  /** A value unique within this sheet. The caller owns uniqueness. */
+  nonce: string
+  /** RFC3339. Injected so the row can be tested without a clock. */
+  createdAt: string
+}): CommentRow {
+  return {
+    id: `${PENDING_PREFIX}${input.nonce}`,
+    post_id: input.postId,
+    author_id: input.authorId,
+    body: input.text,
+    like_count: 0,
+    dislike_count: 0,
+    reply_count: 0,
+    is_reply: false,
+    created_at: input.createdAt,
+  }
+}
+
+/**
+ * The server accepted it: swap the local row for the real one.
+ *
+ * The real row can already be on the list — a page fetched while the create
+ * was in flight will contain it, and the create is idempotent on a
+ * fingerprint of the text, so a retry answers with the SAME row a second
+ * time. Either way the pending row goes and the real one appears once, in the
+ * place the pending row held rather than jumping to the top.
+ */
+export function settleComment(
+  rows: CommentRow[],
+  pendingId: string,
+  saved: CommentRow
+): CommentRow[] {
+  const settled: CommentRow[] = []
+  let placed = false
+  for (const row of rows) {
+    if (row.id === pendingId) {
+      if (!placed) {
+        settled.push(saved)
+        placed = true
+      }
+      continue
+    }
+    if (row.id === saved.id) {
+      if (placed) continue
+      settled.push(saved)
+      placed = true
+      continue
+    }
+    settled.push(row)
+  }
+  if (!placed) settled.unshift(saved)
+  return settled
+}
+
+/** The server refused it: take the row back off the list. */
+export function discardComment(rows: CommentRow[], pendingId: string): CommentRow[] {
+  return rows.filter((row) => row.id !== pendingId)
 }

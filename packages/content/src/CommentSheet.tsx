@@ -50,7 +50,11 @@ import {
   QUICK_REACTIONS,
   canSend,
   commentAuthorName,
+  discardComment,
+  isPendingComment,
   mergeComments,
+  pendingComment,
+  settleComment,
   type CommentApi,
   type CommentRow,
 } from "./comments"
@@ -64,11 +68,24 @@ export interface CommentSheetProps {
   label?: string
   api: CommentApi
   /**
+   * Who is reading, when anyone is. Only the zone knows.
+   *
+   * Used for one thing: naming a row the server has not named. See
+   * `commentAuthorName` — the create response carries no `author`, and an
+   * optimistic row cannot, so both would otherwise say "Someone" about the
+   * person looking at them.
+   */
+  viewerId?: string
+  /**
    * Told after the server accepted one, with the row it made.
    *
    * This is where `comment_create` is fired from. It is deliberately not fired
    * inside this component: the analytics contract needs the surface, the feed
    * position and the item, none of which this sheet has or should have.
+   *
+   * Fired on the SERVER's answer, never on the optimistic write — an event
+   * that counted comments nobody accepted would be a lie in the ranker and in
+   * a creator's dashboard.
    */
   onCreated?: (row: CommentRow) => void
   /** Turns a rejected request into a sentence. The zone knows its transport. */
@@ -81,6 +98,7 @@ export function CommentSheet({
   postId,
   label,
   api,
+  viewerId,
   onCreated,
   errorMessage,
 }: CommentSheetProps) {
@@ -96,6 +114,8 @@ export function CommentSheet({
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const restoreFocus = useRef<HTMLElement | null>(null)
   const inFlight = useRef(false)
+  /** Local, monotonic, and never seen by anyone: the pending row's key. */
+  const nonce = useRef(0)
 
   const say = useCallback(
     (err: unknown) => (errorMessage ? errorMessage(err) : "That did not work."),
@@ -196,26 +216,51 @@ export function CommentSheet({
 
   /* ── Sending ────────────────────────────────────────────────────────────── */
 
+  /**
+   * Write it now; take the server's word for it when that arrives.
+   *
+   * The idiom is `useOptimisticToggle`'s, deliberately — the same three
+   * moves, in the same order, for the same reason. Show the change
+   * immediately, because a composer that swallows what you typed for the
+   * length of a round trip reads as broken. Replace the guess with the truth
+   * when it lands, because the id, the timestamp and the hydrated author are
+   * the server's to assign. And if it is refused, put the list BACK and say
+   * why — a silent rollback is worse than never having been optimistic,
+   * because it shows a state that was never true and never mentions it.
+   *
+   * The draft is restored with the failure rather than cleared, so nothing a
+   * person wrote is lost to a 403 they did not expect.
+   */
   const submit = useCallback(async () => {
     const text = draft.trim()
     if (!text || sending) return
     setSending(true)
     setError("")
+
+    // Prepended, because the list is newest-first and the server puts it
+    // there too — so the row does not move when the real one replaces it.
+    const optimistic = pendingComment({
+      postId,
+      authorId: viewerId ?? "",
+      text,
+      nonce: `${nonce.current++}`,
+      createdAt: new Date().toISOString(),
+    })
+    setRows((prev) => mergeComments([optimistic], prev))
+    setDraft("")
+
     try {
       const row = await api.create(postId, text)
-      // Prepended, because the list is newest-first and the server would put
-      // it there on the next fetch. Not optimistic: the id, the timestamp and
-      // the hydrated author all come from the server, and a locally invented
-      // row would be replaced by a different-looking one a second later.
-      setRows((prev) => mergeComments([row], prev))
-      setDraft("")
+      setRows((prev) => settleComment(prev, optimistic.id, row))
       onCreated?.(row)
     } catch (err) {
+      setRows((prev) => discardComment(prev, optimistic.id))
+      setDraft((current) => (current ? current : text))
       setError(say(err))
     } finally {
       setSending(false)
     }
-  }, [draft, sending, api, postId, onCreated, say])
+  }, [draft, sending, api, postId, viewerId, onCreated, say])
 
   if (!open) return null
 
@@ -292,7 +337,7 @@ export function CommentSheet({
             <ul className="space-y-4">
               {rows.map((row) => (
                 <li key={row.id}>
-                  <CommentLine row={row} />
+                  <CommentLine row={row} viewerId={viewerId} />
                   {/* The post author's answer, nested. The phone indents it by
                       40dp under its parent; this is the same relationship
                       expressed as a nested list, so a screen reader hears the
@@ -300,7 +345,7 @@ export function CommentSheet({
                   {row.reply && (
                     <ul className="mt-3 pl-11">
                       <li>
-                        <CommentLine row={row.reply} />
+                        <CommentLine row={row.reply} viewerId={viewerId} />
                       </li>
                     </ul>
                   )}
@@ -327,8 +372,15 @@ export function CommentSheet({
           gives up the space — which is what `imePadding()` buys on Android.
         */}
         <div className="border-t border-mo px-3 py-2">
+          {/*
+            `alert` rather than `status`, unlike the confirmation pills
+            elsewhere. This one appears at the moment a comment was taken back
+            OFF the list — the screen changed under someone who was told it had
+            worked — and that is precisely the case ARIA reserves interruption
+            for. The draft is still in the box below it.
+          */}
           {error && status === "ready" && (
-            <p role="status" className="pb-2 text-xs text-mo-bad">
+            <p role="alert" className="pb-2 text-xs text-mo-bad">
               {error}
             </p>
           )}
@@ -396,19 +448,32 @@ export function CommentSheet({
   )
 }
 
-/** One comment: avatar, name, age, body. The phone's row, in the same order. */
-function CommentLine({ row }: { row: CommentRow }) {
-  const name = commentAuthorName(row)
+/**
+ * One comment: avatar, name, age, body. The phone's row, in the same order.
+ *
+ * A row that has not been accepted yet says so, in the slot the timestamp
+ * will occupy — "2 seconds ago" would be a claim about a comment that does not
+ * exist anywhere but this browser. Dimmed as well, because the word alone is
+ * easy to miss halfway down a list, and both together are what make the
+ * rollback legible when it comes: the faint one is the one that vanishes.
+ */
+function CommentLine({ row, viewerId }: { row: CommentRow; viewerId?: string }) {
+  const name = commentAuthorName(row, viewerId)
+  const pending = isPendingComment(row)
   return (
-    <div className="flex gap-3">
+    <div className={`flex gap-3 ${pending ? "opacity-60" : ""}`}>
       {/* 32px, which is the phone's `UsAvatarSize.Small` on this row. */}
       <Avatar name={name} id={row.author_id} size="sm" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="truncate text-sm font-semibold text-mo-ink">{name}</span>
-          <time dateTime={row.created_at} className="text-xs text-mo-body">
-            {relativeTime(row.created_at)}
-          </time>
+          {pending ? (
+            <span className="text-xs text-mo-body">Sending…</span>
+          ) : (
+            <time dateTime={row.created_at} className="text-xs text-mo-body">
+              {relativeTime(row.created_at)}
+            </time>
+          )}
         </div>
         <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-mo-ink">
           {row.body}

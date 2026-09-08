@@ -3,27 +3,26 @@
 /**
  * The bar across the top: the lockup, search, the destinations, and you.
  *
- * ── It is sticky, and that has a cost the player has to be told about ─────
- * `useAutoplayCoordinator` measures every card against the VIEWPORT — see
- * `visibleFraction` in packages/player/src/autoplay.ts, which clamps with
- * `Math.max(box.top, 0)` and divides by `window.innerHeight`. It has no notion
- * of an occluded region, and there is no option to give it one: `AutoplayOptions`
- * is `{ enabled, minRatio }` and nothing else.
+ * ── It is sticky, and the player is told what that costs ──────────────────
+ * `useAutoplayCoordinator` measures every card against the VIEWPORT, and a
+ * sticky bar means the top of the window is not part of it: without being
+ * told, the coordinator credits a card for the strip of it sitting behind
+ * this header, by exactly `insetTop / min(cardHeight, viewportHeight)` — up
+ * to 6.7 points on a 900px window. That error flows through `activeId` into
+ * `watch_heartbeat`, which is what a creator is paid on.
  *
- * So a 56px sticky header makes the coordinator credit up to 56px of a card
- * that is behind chrome. On a 900px viewport that is 6.2 points of
- * `visibleFraction`, which means a card measured at the 0.6 bar can be as
- * little as ~0.54 genuinely visible. It is bounded and it is not the
- * catastrophic version of this bug — nothing plays while fully hidden, and a
- * card that has scrolled off the top still falls away as before — but it is
- * real, and it is written here rather than discovered later.
+ * That is fixed, in the player, where the geometry belongs: `AutoplayOptions`
+ * takes a `viewportInset` (`{top, bottom}`, layout pixels) and
+ * `visibleFraction` measures against the band that is left. Raising
+ * `minRatio` to compensate was considered and rejected — the error is a
+ * function of the window's height, so any constant is right at one window
+ * size and wrong at every other.
  *
- * The fix belongs in the player and is deliberately NOT hacked around from
- * this side. Raising `minRatio` to compensate was considered and rejected: the
- * error is `inset / viewportHeight`, so any constant would over-correct on a
- * tall window and under-correct on a short one, and it would silently change
- * the hand-off behaviour `minRatio` was tuned for. See the report; the shape
- * the player needs is an inset, not a bigger threshold.
+ * Nothing about the number lives in this file. `useTopChromeInset` in
+ * src/feed/HomeFeed.tsx MEASURES the real chrome by hit-testing the top edge
+ * of the viewport, so it cannot drift from this header the way a shared
+ * constant would — see its own note for why it is a photograph rather than a
+ * reading of the markup.
  *
  * ── Why the header does not scroll away ───────────────────────────────────
  * Below 1024px the left rail is gone, so this bar is the only navigation on
@@ -51,10 +50,9 @@ import { SearchBox } from "./SearchBox"
  * handler, a no-JavaScript fallback and a Suspense boundary for the prefill,
  * and this file is a layout.
  *
- * `SEARCH_UNAVAILABLE_REASON` in ./destinations.ts is now stale and no longer
- * imported. It is left in place rather than deleted, because that file is not
- * this change's to edit; removing it is a one-line follow-up and is in the
- * report.
+ * `SEARCH_UNAVAILABLE_REASON` went with it: a sentence explaining why search
+ * cannot be used, kept alive next to a search box that works, is the kind of
+ * thing that gets read as current and put back on screen.
  */
 
 export function AppHeader({

@@ -5,7 +5,11 @@ import {
   canSend,
   commentAuthorName,
   commentErrorMessage,
+  discardComment,
+  isPendingComment,
   mergeComments,
+  pendingComment,
+  settleComment,
   type CommentRow,
 } from "./comments"
 
@@ -53,6 +57,82 @@ describe("commentAuthorName", () => {
     // real case on this endpoint, not a defensive one.
     expect(commentAuthorName(row("a"))).toBe("Someone")
     expect(commentAuthorName(row("a", { author: { id: "u1" } }))).toBe("Someone")
+  })
+
+  it("names an unhydrated row as the viewer's own when it is", () => {
+    // The create response carries `author_id` and NO `author` — verified on
+    // the live gateway — so the comment somebody has just written is the one
+    // row on the list nobody can put a name to. "You" is not a guess.
+    expect(commentAuthorName(row("a", { author_id: "u1" }), "u1")).toBe("You")
+    expect(commentAuthorName(row("a", { author_id: "u2" }), "u1")).toBe("Someone")
+    // And a signed-out reader is told nothing it does not know.
+    expect(commentAuthorName(row("a", { author_id: "u1" }))).toBe("Someone")
+  })
+
+  it("still prefers a hydrated name over 'You'", () => {
+    // Once the LIST has said "Ada L", that is what everyone else sees, so it
+    // is what the author sees too. Otherwise reopening the sheet would rename
+    // your own comment.
+    const hydrated = row("a", { author_id: "u1", author: { id: "u1", display_name: "Ada L" } })
+    expect(commentAuthorName(hydrated, "u1")).toBe("Ada L")
+  })
+})
+
+describe("posting optimistically", () => {
+  const pending = pendingComment({
+    postId: "p1",
+    authorId: "u1",
+    text: "  written now  ",
+    nonce: "0",
+    createdAt: "2026-09-08T10:00:00Z",
+  })
+
+  it("marks the row as local, and only that row", () => {
+    // The id is what stops a pending row being treated as addressable — an
+    // edit or a delete aimed at it would go to the server as a UUID that does
+    // not exist. Nothing the server issues can collide: its ids are UUIDs.
+    expect(isPendingComment(pending)).toBe(true)
+    expect(isPendingComment(row("2846935d-d61e-4749-96b7-8c608746917e"))).toBe(false)
+  })
+
+  it("carries the text through and invents nothing else", () => {
+    expect(pending.body).toBe("  written now  ")
+    expect(pending.post_id).toBe("p1")
+    expect(pending.author_id).toBe("u1")
+    expect(pending.like_count).toBe(0)
+    // No fabricated author: `commentAuthorName` answers "You" from the id.
+    expect(pending.author).toBeUndefined()
+  })
+
+  it("puts the server's row exactly where the local one was", () => {
+    const saved = row("real", { body: "written now" })
+    const settled = settleComment([pending, row("a"), row("b")], pending.id, saved)
+    expect(settled.map((r) => r.id)).toEqual(["real", "a", "b"])
+  })
+
+  it("does not leave two copies when the row is already on the list", () => {
+    // A page fetched while the create was in flight contains the new comment,
+    // and the create is idempotent on a fingerprint of the text, so a retry
+    // answers with the SAME row again. Either way it appears once — a
+    // duplicate React key is a silent rendering corruption.
+    const saved = row("real")
+    const settled = settleComment([pending, saved, row("a")], pending.id, saved)
+    expect(settled.map((r) => r.id)).toEqual(["real", "a"])
+  })
+
+  it("still shows the comment if the pending row has gone", () => {
+    // The sheet reloads on open and the list is replaced wholesale; a create
+    // that lands after that must not be silently dropped.
+    const saved = row("real")
+    expect(settleComment([row("a")], pending.id, saved).map((r) => r.id)).toEqual(["real", "a"])
+  })
+
+  it("takes the row back off when the server refuses", () => {
+    const rolled = discardComment([pending, row("a")], pending.id)
+    expect(rolled.map((r) => r.id)).toEqual(["a"])
+    // And leaves everything else exactly as it was — a refused comment is not
+    // a reason to disturb the conversation somebody is reading.
+    expect(discardComment([row("a"), row("b")], pending.id).map((r) => r.id)).toEqual(["a", "b"])
   })
 })
 
