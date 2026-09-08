@@ -101,13 +101,25 @@ export function HomeFeed() {
   }, [])
 
   /**
+   * How much of the top of the window is behind chrome — measured, not known.
+   * See `useTopChromeInset`.
+   */
+  const topInset = useTopChromeInset()
+  const viewportInset = { top: topInset }
+
+  /**
    * The one playing item, resolved by STABLE ID.
    *
    * Disabled entirely under reduced motion, which is the accessible reading of
    * the setting: not "autoplay more gently" but "do not start video on your
    * own". Every card still plays on demand.
+   *
+   * The inset is what stops the coordinator crediting a card for the strip of
+   * it that is behind the sticky header. Both trackers get the same number
+   * from the same measurement, because an impression and a play have to agree
+   * about what "on screen" means.
    */
-  const coordinator = useAutoplayCoordinator({ enabled: !reducedMotion })
+  const coordinator = useAutoplayCoordinator({ enabled: !reducedMotion, viewportInset })
   const activeId = coordinator.activeId
 
   // Positions are 1-based ranks in the feed as delivered, and are looked up by
@@ -127,7 +139,8 @@ export function HomeFeed() {
         analytics.recordImpression(items[index], index + 1, visibleMs, id === activeId)
       },
       [items, analytics, activeId]
-    )
+    ),
+    { viewportInset }
   )
 
   /**
@@ -354,6 +367,107 @@ export function HomeFeed() {
       </InfiniteFeed>
     </Shell>
   )
+}
+
+/**
+ * How many pixels at the top of the window are covered by chrome.
+ *
+ * ── Why this is measured and not written down ─────────────────────────────
+ * The zone's header is `sticky top-0` with `h-14` and a 1px bottom border, so
+ * "56.67" is a number someone could type here and it would be wrong the moment
+ * the header gains a row, loses a border, changes at a breakpoint, or is
+ * rendered at a device pixel ratio that lands the border on 0.67px — which is
+ * exactly what this measures on the live page at 1440×900. A constant is also
+ * wrong for the more ordinary reason that AppHeader lives in another
+ * directory: nothing would make the two change together, and nothing would
+ * fail if they stopped agreeing. The player would just quietly go back to
+ * paying creators for pixels behind a bar.
+ *
+ * ── How the number is obtained ────────────────────────────────────────────
+ * By asking the browser what is painted over the top edge of the viewport.
+ * `elementsFromPoint(centreX, 0)` hit-tests that point and returns the whole
+ * stack there, ancestors included; anything in it that is `position: fixed` or
+ * `sticky` and pinned at or above the top is chrome, and the lowest edge among
+ * them is where content starts. That is not a reading of the header's markup —
+ * it is a reading of the pixels — so it cannot drift from the header for the
+ * same reason a photograph cannot drift from its subject. It needs no
+ * agreement with another file, no shared constant, and no CSS variable that
+ * could itself be edited apart from the thing it describes.
+ *
+ * A full-screen overlay is `fixed` too, and would otherwise report the whole
+ * window as chrome; anything covering more than a third of the height is not a
+ * bar and is ignored. When nothing qualifies — no chrome, or a browser without
+ * `elementsFromPoint` — the answer is 0, which is precisely the behaviour this
+ * had before it could measure anything.
+ *
+ * Re-measured on resize (a breakpoint can change the header's height), once
+ * the webfonts have settled (a fallback face can change it too), and when the
+ * document resizes. Not on scroll: a sticky bar occludes the same strip at
+ * every offset, and this is a hit test, not something to run per frame.
+ */
+const MAX_CHROME_FRACTION = 1 / 3
+
+function measureTopChromeInset(): number {
+  if (typeof window === "undefined" || typeof document === "undefined") return 0
+  if (typeof document.elementsFromPoint !== "function") return 0
+
+  const viewportHeight = window.innerHeight
+  if (viewportHeight <= 0) return 0
+  const x = Math.max(0, Math.floor(window.innerWidth / 2))
+
+  let inset = 0
+  for (const el of document.elementsFromPoint(x, 0)) {
+    const position = window.getComputedStyle(el).position
+    if (position !== "fixed" && position !== "sticky") continue
+    const rect = el.getBoundingClientRect()
+    // Pinned to the top, and actually covering something.
+    if (rect.top > 0.5 || rect.bottom <= 0) continue
+    if (rect.bottom > viewportHeight * MAX_CHROME_FRACTION) continue
+    if (rect.bottom > inset) inset = rect.bottom
+  }
+  return inset
+}
+
+function useTopChromeInset(): number {
+  // 0 on the server and on the first client render, which is the same value on
+  // both — reading layout during render would be a hydration mismatch on the
+  // front page, the same trap `reducedMotion` above is written around.
+  const [inset, setInset] = useState(0)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    let frame = 0
+    let live = true
+
+    const measure = () => {
+      frame = 0
+      const next = measureTopChromeInset()
+      // Sub-pixel jitter is not a change worth re-rendering the feed for, but
+      // it IS worth keeping the value itself exact once it does change.
+      setInset((prev) => (Math.abs(next - prev) < 0.5 ? prev : next))
+    }
+    const schedule = () => {
+      if (frame || !live) return
+      frame = window.requestAnimationFrame(measure)
+    }
+
+    measure()
+    window.addEventListener("resize", schedule, { passive: true })
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null
+    resizeObserver?.observe(document.documentElement)
+    // A webfont swapping in can change a bar's height after first paint.
+    document.fonts?.ready.then(schedule).catch(() => {})
+
+    return () => {
+      live = false
+      window.removeEventListener("resize", schedule)
+      resizeObserver?.disconnect()
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [])
+
+  return inset
 }
 
 /**

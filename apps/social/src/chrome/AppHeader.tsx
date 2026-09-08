@@ -31,53 +31,31 @@
  * there is nothing else to reach them by.
  */
 
-import { Search } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
-import { DESTINATIONS, SEARCH_UNAVAILABLE_REASON } from "./destinations"
+import { DESTINATIONS } from "./destinations"
 import { HeaderNavIcon } from "./NavItem"
 import { ProfileMenu } from "./ProfileMenu"
-
-const SEARCH_REASON_ID = "mo-search-unavailable"
+import { SearchBox } from "./SearchBox"
 
 /**
- * Search, in its real shape and not pretending to work.
+ * ── Search is no longer inert ─────────────────────────────────────────────
+ * What stood here was a `<button aria-disabled>` with no handler and an
+ * `sr-only` sentence saying that `GET /v1/search` was live and this zone had
+ * nowhere to put the answer. `/social/search` is now that somewhere, so the
+ * control is a real `role="search"` form — the same pill, the same sunken
+ * well, the same glyph, the same `sm:` breakpoint and the same 260px cap. Only
+ * the promise behind the shape changed.
  *
- * `GET /v1/search?q=` is live — it answers with posts, users and hashtags —
- * and this zone has nowhere to put the answer. A field that swallows a query
- * and navigates nowhere is the single most confusing thing a header can do, so
- * this is a control with an accessible name, a visible reason, and no input
- * to type into. A BUTTON and not a `searchbox`: it is honestly a thing you
- * would press, and announcing an editable role for something with no editing
- * in it is its own small lie. `aria-disabled` rather than `disabled` for the
- * reason RoleSwitcher wrote down — `disabled` would put it out of the focus
- * order and the explanation would be announced to nobody.
+ * It lives in ./SearchBox.tsx rather than here because it grew a submit
+ * handler, a no-JavaScript fallback and a Suspense boundary for the prefill,
+ * and this file is a layout.
+ *
+ * `SEARCH_UNAVAILABLE_REASON` in ./destinations.ts is now stale and no longer
+ * imported. It is left in place rather than deleted, because that file is not
+ * this change's to edit; removing it is a one-line follow-up and is in the
+ * report.
  */
-function SearchControl() {
-  return (
-    <>
-      <button
-        type="button"
-        aria-disabled="true"
-        aria-label="Search"
-        aria-describedby={SEARCH_REASON_ID}
-        // No onClick at all. `aria-disabled` is a promise to assistive tech
-        // and nothing else stops the press, so the absence of a handler is
-        // what actually keeps it inert.
-        className="hidden h-10 w-full max-w-[260px] cursor-default items-center gap-2 rounded-mo-pill border border-mo bg-mo-sunken px-3.5 text-left text-sm text-mo-body sm:flex"
-      >
-        {/* --mo-muted-lg over --mo-sunken, measured on the rendered page at
-            3.68 — over the 3.0 bar this glyph is held to as a non-text mark,
-            and sunken is one of the two grounds tokens.css allows it on. */}
-        <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-mo-muted-lg" />
-        <span className="truncate">Search {BRAND.name}</span>
-      </button>
-      <span id={SEARCH_REASON_ID} className="sr-only">
-        {SEARCH_UNAVAILABLE_REASON}
-      </span>
-    </>
-  )
-}
 
 export function AppHeader({
   displayName,
@@ -123,7 +101,7 @@ export function AppHeader({
           </span>
         </a>
 
-        <SearchControl />
+        <SearchBox />
 
         {/* ── Centre: the destinations ──────────────────────────────────── */}
         <nav

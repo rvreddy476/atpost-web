@@ -65,8 +65,15 @@ export interface PostCarouselProps {
   media: FeedMedia[]
   /** The coordinator's answer for the POST. Never for a page. */
   active: boolean
+  /**
+   * The DEFAULT sound state each page's player starts from.
+   *
+   * Not a shared one, and there is no toggle here: mute belongs to a player
+   * now and every page has its own. Two videos in one carousel therefore have
+   * two independent speakers, which is the right answer — they are two
+   * different videos.
+   */
   muted: boolean
-  onToggleMuted?: () => void
   /**
    * The watch session the zone minted for this post, and where to send what
    * it measures. Both are handed to ONE page — see `sessionPageId`.
@@ -108,7 +115,6 @@ export function PostCarousel({
   media,
   active,
   muted,
-  onToggleMuted,
   session,
   onWatchEvent,
   sessionPageId,
@@ -263,8 +269,10 @@ export function PostCarousel({
    * How far the last drag travelled, kept for the click that follows it.
    *
    * `pointerup` is followed by a `click` whose target is whatever is under the
-   * pointer — a <video> with an onClick that toggles mute. Without this, every
-   * mouse drag that finished over a video page would also unmute the feed.
+   * pointer — a <video> with an onClick that toggles PLAY/PAUSE. Without this,
+   * every mouse drag that finished over a video page would also stop it. (It
+   * used to unmute the whole feed instead, which was the same bug wearing the
+   * old click handler.)
    */
   const dragDistance = useRef(0)
 
@@ -374,7 +382,6 @@ export function PostCarousel({
                     // Both halves. See carousel.ts.
                     active={isPageActive(active, index, page)}
                     muted={muted}
-                    onToggleMuted={onToggleMuted}
                     session={measured ? session : undefined}
                     onWatchEvent={measured ? onWatchEvent : undefined}
                     onStale={onStale}

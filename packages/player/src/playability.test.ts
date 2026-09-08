@@ -86,9 +86,48 @@ describe("variant pickers", () => {
     expect(pickProgressive(video({ variants: { thumb_150: "t", medium_1080: "m" } }))).toBeUndefined()
   })
 
-  it("picks a poster big enough to not look blurry", () => {
-    expect(pickPoster(video())).toBe("b") // 480p before 360p before thumb_150
-    expect(pickPoster(video({ variants: { thumb_150: "t" } }))).toBe("t")
+  /* ── The poster attribute must be handed an IMAGE ──────────────────────
+   *
+   * It was handed `480p`, which on a video row is the mp4 rendition. A browser
+   * silently draws nothing for that, and the blurhash behind the frame made it
+   * look deliberate. See the long note on `pickPoster`.
+   */
+  describe("pickPoster", () => {
+    it("never hands a video's mp4 rendition to a poster attribute", () => {
+      const poster = pickPoster(video())
+      expect(poster).toBeUndefined()
+      // Named explicitly, because "undefined" would also pass if the ladder
+      // were simply misspelt.
+      expect(["a", "b", "c", "o"]).not.toContain(poster)
+    })
+
+    it("refuses the 150px square crop rather than stretch it across a card", () => {
+      // A video's only image variant. `object-contain` would draw it as a
+      // 4x-upscaled square band in a 9:16 frame, over a blurhash that is
+      // already the right shape and already painted.
+      expect(pickPoster(video({ variants: { thumb_150: "t" } }))).toBeUndefined()
+    })
+
+    it("takes a real image variant on a video the day the pipeline emits one", () => {
+      expect(pickPoster(video({ variants: { thumb_150: "t", medium_1080: "m" } }))).toBe("m")
+      expect(pickPoster(video({ variants: { small_480: "s" } }))).toBe("s")
+    })
+
+    it("still resolves an image's own ladder, largest first", () => {
+      const image = (variants: Record<string, string>): FeedMedia => ({
+        media_id: "i1",
+        kind: "image",
+        position: 0,
+        variants,
+      })
+      expect(pickPoster(image({ thumb_150: "t", small_480: "s", medium_1080: "m" }))).toBe("m")
+      expect(pickPoster(image({ thumb_150: "t", small_480: "s" }))).toBe("s")
+      expect(pickPoster(image({ thumb_150: "t" }))).toBe("t")
+    })
+
+    it("returns undefined rather than a wrong key when there are no variants", () => {
+      expect(pickPoster(video({ variants: undefined }))).toBeUndefined()
+    })
   })
 })
 

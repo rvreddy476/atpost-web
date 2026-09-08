@@ -79,6 +79,100 @@ describe("visibleFraction", () => {
       expect(pickActive([card("a", 120, H)], V, { minRatio: MIN })).toBe("a")
     })
   })
+
+  /* ── The strip behind the sticky header ────────────────────────────────
+   *
+   * apps/social has a sticky header. Measured on the live page at 1440x900 by
+   * hit-testing the top edge of the viewport: 57px — `h-14` plus a 1px bottom
+   * border. Clamping at 0 and dividing by `innerHeight` counted every one of
+   * those pixels as visible, so a card was credited by exactly
+   * `inset / min(cardHeight, viewportHeight)` = 57/675 = 0.0844 more than it
+   * deserved, and that number reaches `watch_heartbeat`.
+   *
+   * The five rows below are the live measurements at the scroll offsets the
+   * bug was reported at, taken in headless Chrome against the running zone.
+   */
+  describe("chrome over the viewport", () => {
+    const INSET = { top: 57 }
+    const H = 675
+    const V = 900
+
+    // scrollY → the card's `top`, from the live page.
+    const measured: [number, number, number, number][] = [
+      // scrollY, cardTop, before the fix, after it
+      [1380, -221, 0.6726, 0.5881],
+      [1390, -231, 0.6578, 0.5733],
+      [1400, -241, 0.643, 0.5585],
+      [1410, -251, 0.6281, 0.5437],
+      [1420, -261, 0.6133, 0.5289],
+    ]
+
+    it.each(measured)(
+      "at scrollY %i the card is %i from the top: %f measured, %f actually visible",
+      (_scrollY, top, oldReading, trueReading) => {
+        expect(visibleFraction({ top, height: H }, V)).toBeCloseTo(oldReading, 4)
+        expect(visibleFraction({ top, height: H }, V, INSET)).toBeCloseTo(trueReading, 4)
+      }
+    )
+
+    it("does not play a card that only clears the bar by counting hidden pixels", () => {
+      for (const [, top] of measured) {
+        expect(pickActive([card("a", top, H)], V, { minRatio: MIN })).toBe("a")
+        expect(pickActive([card("a", top, H)], V, { minRatio: MIN, inset: INSET })).toBeNull()
+      }
+    })
+
+    it("removes the same pixels from both halves of the fraction", () => {
+      // A card exactly filling the band below the header is completely visible
+      // and must read 1 — not 843/900. Subtracting the inset only from the
+      // numerator would cap every card below 1 and quietly re-tune the bar.
+      expect(visibleFraction({ top: 57, height: 843 }, 900, { top: 57 })).toBe(1)
+    })
+
+    it("measures distance from the centre of what can be SEEN", () => {
+      // Two identical cards either side of the visible band's centre, which is
+      // 28.5px below the window's. `upper` is nearer the window's centre and
+      // `lower` is nearer the band's; without the inset the tie goes the wrong
+      // way, which on a slow scroll is the crown handed to the card above the
+      // one being read.
+      const upper = card("upper", 57, 400)
+      const lower = card("lower", 471, 400)
+      expect(pickActive([upper, lower], 928, { minRatio: MIN })).toBe("upper")
+      expect(pickActive([upper, lower], 928, { minRatio: MIN, inset: { top: 57 } })).toBe("lower")
+    })
+
+    it("is unchanged when there is no chrome", () => {
+      // Every existing surface passes nothing, and must measure as it did.
+      for (const [, top] of measured) {
+        expect(visibleFraction({ top, height: H }, V, {})).toBeCloseTo(
+          visibleFraction({ top, height: H }, V),
+          10
+        )
+        expect(visibleFraction({ top, height: H }, V, { top: 0, bottom: 0 })).toBeCloseTo(
+          visibleFraction({ top, height: H }, V),
+          10
+        )
+      }
+    })
+
+    it("takes a bottom inset too, for a surface with a docked bar", () => {
+      // 800px band inside a 900px window; a 400px card sitting in the middle
+      // of it is half of what can be seen.
+      expect(visibleFraction({ top: 250, height: 400 }, 900, { top: 50, bottom: 50 })).toBe(1)
+      expect(visibleFraction({ top: 450, height: 800 }, 900, { top: 50, bottom: 50 })).toBeCloseTo(
+        0.5,
+        5
+      )
+    })
+
+    it("refuses to divide by a band that a nonsense inset has closed", () => {
+      expect(visibleFraction({ top: 0, height: 500 }, 900, { top: 900 })).toBe(0)
+      expect(visibleFraction({ top: 0, height: 500 }, 900, { top: 700, bottom: 400 })).toBe(0)
+      // A negative inset is a caller's arithmetic error, not a licence to
+      // credit a card for pixels above the window.
+      expect(visibleFraction({ top: -100, height: 500 }, 900, { top: -100 })).toBeCloseTo(0.8, 5)
+    })
+  })
 })
 
 describe("pickActive", () => {

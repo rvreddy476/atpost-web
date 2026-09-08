@@ -20,8 +20,46 @@
 export { MomentumVideo, HEARTBEAT_INTERVAL_MS, SAMPLE_INTERVAL_MS } from "./MomentumVideo"
 export type { MomentumVideoProps, VideoSource } from "./MomentumVideo"
 
-export { useAutoplayCoordinator } from "./autoplay"
-export type { AutoplayCoordinator, AutoplayOptions } from "./autoplay"
+// `visibleFraction` is exported because it is the ONE definition of "how much
+// of this is on screen" the product has. @momentum/content's dwell tracker
+// asks the same question about the same cards and must get the same answer:
+// two implementations of this drifted once already, which is how an impression
+// could be credited for pixels behind the header that autoplay refused to
+// count. See the note on `visibleFraction` itself.
+export { useAutoplayCoordinator, visibleFraction } from "./autoplay"
+export type { AutoplayCoordinator, AutoplayOptions, Box, ViewportInset } from "./autoplay"
+
+/**
+ * The transport rules, as values.
+ *
+ * `shouldPlay` is the one to read: it is the only place the coordinator's
+ * `active` and the PERSON's own play/pause decision meet. The
+ * one-video-at-a-time invariant is now split across it,
+ * `intentOnActiveChange`, and the arbitration in `manualPlayback.ts` — so
+ * changing any one of the three without the other two is how it comes back.
+ */
+export {
+  CONTROLS_HIDE_MS,
+  SEEK_STEP_SECONDS,
+  formatClock,
+  intentOnActiveChange,
+  keyAction,
+  playGlyphVisible,
+  progressFraction,
+  restingLineVisible,
+  scrubTarget,
+  scrubberVisible,
+  seekTarget,
+  shouldPlay,
+  toggleIntent,
+} from "./controls"
+export type { ChromeState, ControlAction, PlaybackIntent } from "./controls"
+
+export {
+  claimManualPlayback,
+  releaseManualPlayback,
+  revokeManualPlaybackExcept,
+} from "./manualPlayback"
 
 export {
   analyticsContentType,

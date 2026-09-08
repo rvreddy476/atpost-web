@@ -36,6 +36,40 @@ export {
   slideLabel,
 } from "./carousel"
 
+/**
+ * The comment surface, and the overflow menu.
+ *
+ * Both exported on their own for the same reason PostCarousel is: reels, tube
+ * and a post detail page need a comment sheet and a "more" menu without
+ * inheriting a feed card around them. Both are prop-driven and reach no
+ * network — `CommentApi` is two functions the ZONE supplies, because this
+ * package may not import api-client and the paths under `/v1/posts` and
+ * `/v1/comments` are the zone's business. The contract those functions have to
+ * satisfy is written out at the top of `comments.ts`.
+ */
+export { CommentSheet } from "./CommentSheet"
+export type { CommentSheetProps } from "./CommentSheet"
+export {
+  COMMENT_PAGE_MAX,
+  QUICK_REACTIONS,
+  canSend,
+  commentAuthorName,
+  commentErrorMessage,
+  mergeComments,
+} from "./comments"
+export type { CommentApi, CommentAuthor, CommentPage, CommentRow } from "./comments"
+
+export { PostOverflowMenu } from "./PostOverflowMenu"
+export type { PostOverflowMenuProps } from "./PostOverflowMenu"
+export {
+  REPORT_REASONS,
+  analyticsReasonFor,
+  postMenuGroups,
+  reportNeedsDetails,
+  saveLabel,
+} from "./postMenu"
+export type { PostMenuInput, PostMenuRow, PostMenuRowId, ReportReason } from "./postMenu"
+
 export { InfiniteFeed } from "./InfiniteFeed"
 export type { InfiniteFeedProps } from "./InfiniteFeed"
 

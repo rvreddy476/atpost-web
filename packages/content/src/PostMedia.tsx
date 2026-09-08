@@ -48,8 +48,16 @@ export interface PostMediaProps {
   media: FeedMedia
   /** From the coordinator. Exactly one card in the feed may be true. */
   active: boolean
+  /**
+   * The DEFAULT sound state, not a shared one.
+   *
+   * Mute is per player now — the speaker lives on the video itself and the
+   * player stops listening to this the moment a person uses it. There is no
+   * `onToggleMuted` here any more for exactly that reason: nothing above the
+   * player performs the toggle, so a callback to ask permission would be a
+   * handler with nothing on the other end of it.
+   */
   muted: boolean
-  onToggleMuted?: () => void
   session?: WatchSessionInfo
   onWatchEvent?: (event: WatchEvent) => void
   /** "This post's URLs have gone stale" — the zone refetches the page. */
@@ -138,7 +146,6 @@ export function PostMedia({
   media,
   active,
   muted,
-  onToggleMuted,
   session,
   onWatchEvent,
   onStale,
@@ -226,6 +233,15 @@ export function PostMedia({
           source={source}
           active={active}
           muted={muted}
+          /*
+            Stable, and unique across the document — a post can carry two
+            videos and two posts can carry the same media in a repost. It is
+            used only to arbitrate hand-started playback between players (see
+            manualPlayback.ts), which is a decision that MUST key on identity
+            rather than on a position in a list; the coordinator learned that
+            the hard way and the note at the top of autoplay.ts says so.
+          */
+          playbackId={`${item.id}:${media.media_id}`}
           // A flick is short and loops the way the phone app loops it; a long
           // video that restarted itself forever would be a trap.
           loop={item.content_type === "flick"}
@@ -236,7 +252,8 @@ export function PostMedia({
           // No `onPreviousTrack` / `onNextTrack`: a feed's "next" is a scroll,
           // not a track change. See the registration note in useMediaSession.
           mediaSession={mediaSession}
-          onToggleMuted={onToggleMuted}
+          // No `onToggleMuted`: the player owns its sound and there is nothing
+          // above it to tell. See the note on `muted` in the props above.
           onUnplayable={() => onStale?.(item.id)}
           resolveUrl={resolveUrl}
         />

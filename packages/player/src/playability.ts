@@ -98,18 +98,60 @@ export function pickProgressive(media: FeedMedia): string | undefined {
 }
 
 /**
- * A still frame to show before the first video frame arrives.
+ * A still frame to show before the first video frame arrives — or nothing,
+ * which for a video today is the honest answer.
  *
- * `thumb_150` is 150px and would be a blurry mess stretched across a card, so
- * it is last. When nothing here exists the caller falls back to the blurhash,
- * which is why this returns undefined rather than a placeholder path.
+ * ── What was wrong ────────────────────────────────────────────────────────
+ * This preferred `480p` and then `360p`, and on a VIDEO row those are not
+ * images. They are the transcode renditions — `video/mp4`, verified by
+ * fetching one and reading its bytes — so every video element on the feed
+ * carried `poster="…/480p"`, a poster attribute pointed at a video file. A
+ * browser cannot decode that as an image and shows nothing, silently: no
+ * console error, no network failure, nothing to notice. It looked fine only
+ * because @momentum/content paints a blurhash behind the frame, so the thing
+ * that was actually working was never the poster.
+ *
+ * Selecting by NAME is what caused it — the names differ by kind (images carry
+ * thumb_150 / small_480 / medium_1080 / original, videos carry thumb_150 /
+ * 360p / 480p / 720p / original) and a list that spans both kinds is a list
+ * that will pick the wrong one for one of them. So the ladders are separate
+ * and the kind chooses, which is also what keeps the image path intact.
+ *
+ * ── Why a video now gets no poster ────────────────────────────────────────
+ * The only image a video row carries is `thumb_150`: a 150x150 SQUARE crop.
+ * The video element renders `object-contain` (see PostMedia — nothing is
+ * cropped, only bounded), so a square poster in a 9:16 frame is drawn as a
+ * band across the middle at 4x upscale, with the placeholder showing above and
+ * below it. That is worse than what is already there, on every axis that
+ * matters: the blurhash is the right shape, is derived from the real frame, is
+ * in the first HTML before any request is made, and costs no round trip. A
+ * 150px square crop would replace it with a blurrier, wrongly-framed picture
+ * AND spend a request to do it.
+ *
+ * So the rule is that a poster must be a real image big enough to be one, and
+ * a video row has none. The ladder below is not empty and not dead: it is
+ * where a genuine poster plugs in the day the transcode pipeline emits one,
+ * and it means the rule is written down rather than the conclusion.
+ *
+ * Callers already handle undefined — it is the reason this returns undefined
+ * rather than a placeholder path — and undefined leaves the blurhash showing,
+ * which is what was showing all along.
  */
-const POSTER_PREFERENCE = ["480p", "360p", "thumb_150"] as const
+const IMAGE_POSTER_PREFERENCE = ["medium_1080", "small_480", "thumb_150"] as const
+
+/**
+ * Image variants a VIDEO row could carry that are large enough to be a poster.
+ * No video row carries either of these today; `thumb_150` is excluded on
+ * purpose and the block above says why.
+ */
+const VIDEO_POSTER_PREFERENCE = ["medium_1080", "small_480"] as const
 
 export function pickPoster(media: FeedMedia): string | undefined {
   const v = media.variants
   if (!v) return undefined
-  for (const name of POSTER_PREFERENCE) {
+  const preference: readonly string[] =
+    media.kind === "video" ? VIDEO_POSTER_PREFERENCE : IMAGE_POSTER_PREFERENCE
+  for (const name of preference) {
     if (v[name]) return v[name]
   }
   return undefined

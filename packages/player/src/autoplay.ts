@@ -100,6 +100,50 @@ export interface AutoplayOptions {
    * frame of a slow scroll, and the flicker is worse than a late start.
    */
   minRatio?: number
+  /**
+   * The parts of the window that are covered by chrome and are therefore not
+   * "on screen" at all. See `ViewportInset`.
+   */
+  viewportInset?: ViewportInset
+}
+
+/**
+ * The window is not always the same thing as what you can see.
+ *
+ * A sticky header sits over the top of the viewport, so the top `n` pixels of
+ * the window show chrome and never show a card. Without being told, this file
+ * measures a card as visible while part of it is behind that bar, and credits
+ * it — the error is exactly `insetTop / min(cardHeight, viewportHeight)`, up
+ * to 6.7 points on a 900px window with a 56px header. Bounded, but systematic,
+ * and it flows through `activeId` into `watch_heartbeat`, which is what a
+ * creator is paid on.
+ *
+ * ── Why an inset and not a bigger `minRatio` ──────────────────────────────
+ * Raising the bar to compensate was considered and rejected. The error is a
+ * function of the window's height, so any constant added to `minRatio` is
+ * right at one window size and wrong at every other — over-correcting on a
+ * tall desktop window and under-correcting on a short phone one. It would also
+ * quietly change the hand-off behaviour, which is a separate thing 0.6 was
+ * tuned for. This describes the geometry instead, and the geometry is what
+ * changed.
+ *
+ * The numbers are pixels of the LAYOUT viewport, measured from the real chrome
+ * by whoever renders it — never a constant written down twice. `bottom` is
+ * here for the surface that grows a docked player or a tab bar; nothing sets
+ * it today and it costs nothing to have got the shape right once.
+ */
+export interface ViewportInset {
+  top?: number
+  bottom?: number
+}
+
+/** The strip of the window that a card can actually be seen in. */
+function usableBand(viewportHeight: number, inset?: ViewportInset) {
+  // Negative or absurd insets are a caller's arithmetic error, not a licence
+  // to divide by a negative number.
+  const top = Math.max(0, inset?.top ?? 0)
+  const bottom = Math.max(0, inset?.bottom ?? 0)
+  return { top, bottom: viewportHeight - bottom, height: viewportHeight - top - bottom }
 }
 
 /**
@@ -162,11 +206,22 @@ export interface Candidate {
  * It takes a plain rectangle rather than an IntersectionObserverEntry on
  * purpose: this is now computed from a live `getBoundingClientRect()` at the
  * moment of the decision, never from a number an observer recorded earlier.
+ *
+ * `inset` removes the parts of the window that are covered by chrome — see
+ * `ViewportInset`. Both ends of the sum move: pixels behind the header are not
+ * counted as visible, AND they are not counted as available to be visible, or
+ * a card that exactly filled the gap below the header could never reach 1.
  */
-export function visibleFraction(box: Box, viewportHeight: number): number {
-  const measurable = Math.min(box.height || 0, viewportHeight || 0)
+export function visibleFraction(
+  box: Box,
+  viewportHeight: number,
+  inset?: ViewportInset
+): number {
+  const band = usableBand(viewportHeight || 0, inset)
+  if (band.height <= 0) return 0
+  const measurable = Math.min(box.height || 0, band.height)
   if (measurable <= 0) return 0
-  const visible = Math.min(box.top + box.height, viewportHeight) - Math.max(box.top, 0)
+  const visible = Math.min(box.top + box.height, band.bottom) - Math.max(box.top, band.top)
   if (visible <= 0) return 0
   return Math.min(1, visible / measurable)
 }
@@ -176,6 +231,8 @@ export interface PickOptions {
   /** Whatever is playing right now, so it can be given the benefit of the doubt. */
   currentId?: string | null
   margin?: number
+  /** Chrome over the window — see `ViewportInset`. */
+  inset?: ViewportInset
 }
 
 /**
@@ -190,13 +247,19 @@ export interface PickOptions {
  * of itself keeps the crown unless a challenger beats it by `margin`. A
  * hand-off should happen when the reader has moved on, not when two cards are
  * a percentage point apart.
+ *
+ * The centre the tiebreak measures from is the centre of what can be SEEN, not
+ * of the window: with a 56px header the two are 28px apart, which is enough to
+ * hand a tie to the upper of two equal cards when the lower one is the one the
+ * reader is looking at.
  */
 export function pickActive(
   candidates: readonly Candidate[],
   viewportHeight: number,
-  { minRatio, currentId = null, margin = HANDOVER_MARGIN }: PickOptions
+  { minRatio, currentId = null, margin = HANDOVER_MARGIN, inset }: PickOptions
 ): string | null {
-  const viewportCentre = viewportHeight / 2
+  const band = usableBand(viewportHeight, inset)
+  const viewportCentre = (band.top + band.bottom) / 2
 
   let bestId: string | null = null
   let bestFraction = 0
@@ -204,7 +267,7 @@ export function pickActive(
   let incumbentFraction = 0
 
   for (const { id, box } of candidates) {
-    const fraction = visibleFraction(box, viewportHeight)
+    const fraction = visibleFraction(box, viewportHeight, inset)
     if (id === currentId) incumbentFraction = fraction
     if (fraction < minRatio) continue
 
@@ -237,6 +300,18 @@ export function pickActive(
 
 export function useAutoplayCoordinator(options: AutoplayOptions = {}): AutoplayCoordinator {
   const { enabled = true, minRatio = 0.6 } = options
+  /**
+   * Taken apart into two numbers on purpose.
+   *
+   * A caller writes `viewportInset={{ top: headerHeight }}` and that object is
+   * a new one on every render. If it reached a dependency array as an object,
+   * `recompute` would be rebuilt every render, `schedule` with it, and the
+   * effect below would disconnect and rebuild the IntersectionObserver and all
+   * five listeners several times a second — the exact churn the rest of this
+   * file is arranged to avoid.
+   */
+  const insetTop = options.viewportInset?.top ?? 0
+  const insetBottom = options.viewportInset?.bottom ?? 0
 
   /**
    * `activeId` is the ONLY state here, and that is a deliberate constraint.
@@ -272,6 +347,13 @@ export function useAutoplayCoordinator(options: AutoplayOptions = {}): AutoplayC
    */
   const elementToId = useRef(new Map<Element, string>()).current
   const idToElement = useRef(new Map<string, Element>()).current
+  /**
+   * The inset, reachable from `recompute` without being in its dependencies —
+   * same reason as `activeIdRef`. A header is measured after mount, so this
+   * value changes once, early; putting it in the deps would rebuild the
+   * observer immediately after the first paint for nothing.
+   */
+  const insetRef = useRef<ViewportInset>({ top: insetTop, bottom: insetBottom })
   const observerRef = useRef<IntersectionObserver | null>(null)
   const resizeRef = useRef<ResizeObserver | null>(null)
   /** Set while the tab is hidden, so nothing becomes active behind our back. */
@@ -309,6 +391,7 @@ export function useAutoplayCoordinator(options: AutoplayOptions = {}): AutoplayC
     const next = pickActive(candidates, viewportHeight, {
       minRatio,
       currentId: activeIdRef.current,
+      inset: insetRef.current,
     })
     setActiveId((prev) => (prev === next ? prev : next))
   }, [enabled, minRatio, idToElement])
@@ -348,6 +431,16 @@ export function useAutoplayCoordinator(options: AutoplayOptions = {}): AutoplayC
   useEffect(() => {
     scheduleRef.current = schedule
   }, [schedule])
+
+  /**
+   * A changed inset means every card's measurement changed, without any of
+   * them moving. Nothing else here would notice — no scroll, no resize, no
+   * threshold crossing — so this rings the doorbell itself.
+   */
+  useEffect(() => {
+    insetRef.current = { top: insetTop, bottom: insetBottom }
+    scheduleRef.current?.()
+  }, [insetTop, insetBottom, insetRef])
 
   /**
    * Every way the viewport can move, wired once for the whole feed.
