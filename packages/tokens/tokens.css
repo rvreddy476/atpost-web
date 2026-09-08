@@ -8,18 +8,25 @@
    next to this file only names these variables; it never redefines a colour.
 
    ── The shape of it ───────────────────────────────────────────────────────
-   Near-black ground, white type, ONE white button per screen. Depth comes
-   from elevation — a surface a step lighter than the ground, a hairline of
-   white at low alpha, a drop shadow — rather than from drawing a border round
-   everything. Pure black was rejected on purpose: it crushes elevation (every
-   surface above it has to be a big jump to read as raised at all) and on OLED
-   it reads as a hole in the screen rather than as a considered dark surface.
+   A violet-black ground, a violet-navy card a step above it, and ONE ember
+   button per screen — a red-to-orange gradient, the Momentum accent. Depth
+   comes from elevation: a surface above the ground, a hairline of white at
+   low alpha, a long soft shadow. It has to, because the ground and the
+   surface are only 1.19:1 apart (measured below); a card here cannot separate
+   itself on contrast alone, so an edge and a shadow are not decoration, they
+   are the only thing making it a card.
+
+   Pure black was rejected on purpose: it crushes elevation and on OLED it
+   reads as a hole in the screen. #0D0C14 is not grey-black either — it is
+   very slightly violet, which is what lets #1F1D33 sit above it as the same
+   colour lit rather than as a different colour entirely.
 
    ── Colour families ───────────────────────────────────────────────────────
    --mo-*      the Momentum vocabulary. Space-separated RGB triplets so
                Tailwind can do `rgb(var(--mo-bg) / <alpha-value>)`, which is
-               the convention the shop's sheet already uses. Hairlines and
-               shadows are full colour values because alpha is baked in.
+               the convention the shop's sheet already uses. Hairlines,
+               shadows and the ember gradient are full values because alpha
+               and colour stops are baked in.
    --brand-*   the contract @atpost/ui reads. Pointed at the Momentum values
                here, LAST, so importing this sheet also restyles Button/Input/
                Select/Table. A zone that wants something else (the shop's
@@ -32,76 +39,224 @@
    thing keeping the social surface and the shop from looking like two
    products stapled together is that gold does not appear outside the shop.
    It always carries navy type; see the measurements below for why never
-   white.
+   white. None of that changed when the palette did.
 
-   ── Contrast (WCAG 2.1 relative luminance, measured, not assumed) ─────────
-     #FFFFFF ink    on #08090A ground .......... 19.93:1  AAA
-     #FFFFFF ink    on #101214 surface ......... 18.77:1  AAA
-     #FFFFFF ink    on #17191D raised .......... 17.60:1  AAA
-     #A9B0B8 muted  on #101214 surface ..........  8.57:1  AAA
-     #A9B0B8 muted  on #08090A ground ...........  9.10:1  AAA
-     #8B939C faint  on #101214 surface ..........  6.04:1  AA   (AAA at 18.66px+ / 14px bold)
-     #8B939C faint  on #08090A ground ...........  6.41:1  AA
-     #08090A ink    on #FFFFFF primary fill ..... 19.93:1  AAA  (the white button)
-     #08090A ink    on #E6E8EB primary hover .... 16.23:1  AAA
-     #6EE7A8 good   on #101214 surface .......... 12.21:1  AAA
-     #FCA5A5 bad    on #101214 surface ...........  9.89:1  AAA
-     #FCD376 warn   on #101214 surface .......... 13.16:1  AAA
-     #9FC1E8 info   on #101214 surface .......... 10.07:1  AAA
-     #D4AF37 gold   on #08090A ground ............  9.48:1  AAA  (gold as TEXT)
-     #041122 navy   on #D4AF37 gold ..............  9.01:1  AAA  (gold as BUTTON)
-     #FFFFFF white  on #D4AF37 gold ..............  2.10:1  FAILS — appears nowhere.
-   Gold buttons therefore carry navy type, never white. Every pair above is a
-   pair this sheet actually produces; nothing here is aspirational.
+   ── Contrast (WCAG 2.1 relative luminance, computed, not estimated) ───────
+   Every figure below came out of a script that walks these exact hex values.
+   Thresholds: 4.5 normal text, 3.0 large text (>=18.66px bold / >=24px) and
+   non-text (icons, borders, focus indicators), 7.0 for AAA normal.
+
+     TYPE ON GROUNDS
+     #F1EEF8 ink    on #0D0C14 bg .............. 16.97  AAA
+     #F1EEF8 ink    on #1F1D33 surface ......... 14.30  AAA
+     #F1EEF8 ink    on #2A2745 raised .......... 12.43  AAA
+     #F1EEF8 ink    on #08070E sunken .......... 17.50  AAA
+     #F1EEF8 ink    on #332F55 overlay ......... 10.92  AAA
+     #A19CB9 body   on #0D0C14 bg ...............  7.38  AAA
+     #A19CB9 body   on #1F1D33 surface ..........  6.22  AA
+     #A19CB9 body   on #2A2745 raised ...........  5.41  AA
+     #A19CB9 body   on #08070E sunken ...........  7.61  AAA
+     #6B658A muted  on #0D0C14 bg ...............  3.57  LARGE / NON-TEXT ONLY
+     #6B658A muted  on #1F1D33 surface ..........  3.01  LARGE / NON-TEXT ONLY
+     #6B658A muted  on #2A2745 raised ...........  2.61  FAILS EVEN THERE
+     #FFFFFF white  on #0D0C14 bg .............. 19.45  AAA  — see note below
+     #FFFFFF white  on #1F1D33 surface ......... 16.38  AAA  — see note below
+
+     ACCENTS
+     #06B6D4 cyan   on #0D0C14 bg ...............  8.01  AAA
+     #06B6D4 cyan   on #1F1D33 surface ..........  6.75  AA
+     #06B6D4 cyan   on #2A2745 raised ...........  5.87  AA
+     #06B6D4 cyan   on #332F55 overlay ..........  5.15  AA
+     #8B5CF6 purple on #0D0C14 bg ...............  4.59  AA (small text OK here)
+     #8B5CF6 purple on #1F1D33 surface ..........  3.87  LARGE / NON-TEXT ONLY
+     #0D0C14 ink    on #06B6D4 cyan fill ........  8.01  AAA
+     #0D0C14 ink    on #8B5CF6 purple fill ......  4.59  AA
+     #FFFFFF white  on #06B6D4 cyan fill ........  2.43  FAILS — never used
+     #FFFFFF white  on #8B5CF6 purple fill ......  4.23  AA (unused; ink wins)
+
+     THE EMBER BUTTON  (#DC2626 -> #F97316, 135deg)
+     Luminance rises monotonically along this ramp — sampled at eleven points
+     to confirm it — so the RED end is the worst case anywhere on the fill and
+     it is the end that governs.
+     #0D0C14 ink    on #DC2626 red end ..........  4.03  LARGE TEXT ONLY
+     #0D0C14 ink    on #F97316 orange end .......  6.94  AA at any size
+     #0D0C14 ink    on the hover ramp, worst .....  5.17  AA at any size
+     #F1EEF8        on #DC2626 red end ..........  4.21  fails normal text
+     #F1EEF8        on #F97316 orange end .......  2.45  FAILS AT EVERY SIZE
+     #FFFFFF        on #DC2626 red end ..........  4.83  (fails at the orange
+                                                          end regardless; moot)
+     #0D0C14 ink    on a .55-opacity ember ......  1.92  why disabled is flat
+
+     SEMANTIC
+     #6EE7A8 good   on #1F1D33 surface ......... 10.66  AAA
+     #FCA5A5 bad    on #1F1D33 surface ..........  8.63  AAA
+     #FCD376 warn   on #1F1D33 surface ......... 11.48  AAA
+
+     GOLD, UNCHANGED, RE-MEASURED AGAINST THE NEW GROUND
+     #D4AF37 gold   on #0D0C14 bg ...............  9.25  AAA  (gold as TEXT)
+     #D4AF37 gold   on #1F1D33 surface ..........  7.79  AAA
+     #041122 navy   on #D4AF37 gold .............  9.01  AAA  (gold as BUTTON)
+     #FFFFFF white  on #D4AF37 gold .............  2.10  FAILS — appears nowhere
+
+     EDGES (not text; the 3.0 bar does not apply to a decorative hairline,
+     but the numbers are here because they explain the elevation model)
+     #1F1D33 surface vs #0D0C14 bg ..............  1.19  cards cannot separate
+                                                          on contrast — hairline
+                                                          and shadow do the work
+     white @ .08 over surface, vs surface .......  1.26
+     white @ .08 over surface, vs bg ............  1.50
+
+   Every pair above is a pair this sheet actually produces. Nothing here is
+   aspirational, and nothing was carried over unmeasured from the version of
+   this file that preceded the Figma palette.
+
+   ── Why the type colour is #F1EEF8 and not #FFFFFF ────────────────────────
+   The palette supplies #F1EEF8. Pure white is 19.45 on the ground against
+   #F1EEF8's 16.97 — both AAA with enormous headroom, so the extra 2.5 points
+   buy nothing anyone can read, and #F1EEF8 carries the faint violet the rest
+   of the palette is built on. White survives only inside the hairlines, where
+   it is a light source rather than a colour.
+
+   ── Why the ember button carries DARK ink ─────────────────────────────────
+   #F1EEF8 was supplied as "button text". It cannot be. A label sits across
+   the whole gradient, so the worst end governs, and #F1EEF8 on the orange end
+   measures 2.45 — a failure at every text size, worse even than the 2.10 that
+   has kept white off gold in this file since the beginning. Same rule, same
+   evidence, different colour.
+
+   So the gradient stays exactly as designed and the ink goes dark:
+   --mo-on-primary is #0D0C14. That costs something too, and the cost is
+   recorded rather than hidden: 4.03 at the red end is LARGE-TEXT-ONLY, so an
+   ember button's label must be >=18.66px bold or >=24px regular. That is not
+   advice — --mo-ember-label-size / -weight carry it and .mo-btn-primary
+   applies it, and a zone painting its own ember button has to apply it too or
+   the button is not accessible.
+
+   #F1EEF8 keeps its job: it is the type colour on every dark surface, which
+   is where it earns 14.30 to 17.50.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
   /* ── Ground and surfaces ────────────────────────────────────────────────
-     Four steps, each one used for a different reason. bg is the page; surface
+     Five steps, each one used for a different reason. bg is the page; surface
      is anything that lifts off it; raised is a hover or a panel nested inside
-     a panel; sunken is a well — an input, a code block, a footer. */
-  --mo-bg: 8 9 10;               /* #08090A near-black ground              */
-  --mo-surface: 16 18 20;        /* #101214 raised card                    */
-  --mo-raised: 23 25 29;         /* #17191D hover / nested surface         */
-  --mo-sunken: 5 5 6;            /* #050506 wells, inset fields            */
-  --mo-overlay: 34 38 43;        /* #22262B menus, tooltips, popovers      */
+     a panel; sunken is a well — an input, a code block; overlay is a menu or
+     popover, which floats above everything and so goes one step further.
+     All five share the same violet cast, so they read as one material at
+     different light levels rather than as five different colours. */
+  --mo-bg: 13 12 20;             /* #0D0C14 violet-black ground            */
+  --mo-surface: 31 29 51;        /* #1F1D33 card                           */
+  --mo-raised: 42 39 69;         /* #2A2745 hover / nested surface         */
+  --mo-sunken: 8 7 14;           /* #08070E wells, inset fields            */
+  --mo-overlay: 51 47 85;        /* #332F55 menus, tooltips, popovers      */
 
   /* ── Type ───────────────────────────────────────────────────────────────
-     Three weights of voice, not five. A fourth greyer step is where dark
-     themes start failing AA without anyone noticing. */
-  --mo-ink: 255 255 255;         /* #FFFFFF primary                        */
-  --mo-muted: 169 176 184;       /* #A9B0B8 secondary                      */
-  --mo-faint: 139 147 156;       /* #8B939C tertiary / metadata            */
+     Three voices, and only the first two may carry running text.
 
-  /* ── The primary action ─────────────────────────────────────────────────
-     White fill, near-black type. There is exactly one of these on a screen;
-     everything else is an outline or a ghost. Restraint is the whole idea —
-     a white button on near-black cannot be missed, so it does not need to be
-     repeated to be noticed. */
-  --mo-primary: 255 255 255;     /* #FFFFFF fill                           */
-  --mo-primary-hover: 230 232 235; /* #E6E8EB                              */
-  --mo-primary-press: 216 219 223; /* #D8DBDF                              */
-  --mo-on-primary: 8 9 10;       /* #08090A type ON the white fill         */
+     --mo-muted-lg is named the way it is so that using it wrongly is hard.
+     #6B658A is 3.57 on the ground and 3.01 on a card: it clears the 3.0 bar
+     for LARGE text and for non-text, and it clears nothing else. It is not a
+     third grey for small print — this palette does not have one, and the
+     third step in the hierarchy here is size and weight, not another colour.
+
+     Its actual jobs:
+       · labels on disabled controls (WCAG 1.4.3 exempts those outright)
+       · non-text marks on --mo-bg only — inactive icons, rules, tick marks
+       · large display type, >=18.66px bold or >=24px regular, on --mo-bg
+     It is 2.61 on --mo-raised, so it may not appear there at all. Timestamps,
+     captions and helper text are small text: they take --mo-body. */
+  --mo-ink: 241 238 248;         /* #F1EEF8 primary type                   */
+  --mo-body: 161 156 185;        /* #A19CB9 body copy, secondary type      */
+  --mo-muted-lg: 107 101 138;    /* #6B658A LARGE TEXT / NON-TEXT ONLY     */
+
+  /* ── The primary action: ember ──────────────────────────────────────────
+     One gradient, one button per screen. The gradient is the identity, so it
+     is written once here and referenced everywhere; a zone that hand-rolls
+     `linear-gradient(#DC2626, #F97316)` has already forked the brand.
+
+     --mo-primary is the solid fallback, and it is the RED end on purpose. Red
+     is the worst end for contrast, so a surface that can only take a flat
+     colour — accent-color, a 1px border, an SVG fill, a browser that drops
+     the gradient — lands on the case the type size was already chosen for.
+     Making orange the fallback would let the fallback look brighter than the
+     real button and would let a label be sized for 6.94 when it might get
+     4.03.
+
+     Hover BRIGHTENS. That is not a style choice: dark ink on a lighter fill
+     gains contrast, so hover can only improve the label (4.03 -> 5.17 at the
+     worst point of the hover ramp). Darkening is the one direction that loses
+     it, which is why there is no darker press gradient — press returns to the
+     resting ember and says "pressed" with a 1px drop and a tighter shadow.
+
+     background-image cannot be interpolated by CSS, so the gradient swap on
+     hover is instantaneous by nature. The smooth part of the feedback is
+     carried by box-shadow and transform, which can be transitioned. */
+  --mo-primary: 220 38 38;           /* #DC2626 red end AND solid fallback */
+  --mo-primary-to: 249 115 22;       /* #F97316 orange end                 */
+  --mo-primary-hover: 239 68 68;     /* #EF4444 hover, red end             */
+  --mo-primary-hover-to: 251 146 60; /* #FB923C hover, orange end          */
+  --mo-on-primary: 13 12 20;         /* #0D0C14 the ONLY type on ember     */
+
+  --mo-ember: linear-gradient(135deg, rgb(var(--mo-primary)) 0%, rgb(var(--mo-primary-to)) 100%);
+  --mo-ember-hover: linear-gradient(135deg, rgb(var(--mo-primary-hover)) 0%, rgb(var(--mo-primary-hover-to)) 100%);
+  /* Decorative only — a shadow is never load-bearing for contrast here. */
+  --mo-ember-glow: 0 10px 30px -12px rgba(220, 38, 38, .70);
+  --mo-ember-glow-hover: 0 14px 38px -12px rgba(249, 115, 22, .75);
+
+  /* ── The two accents, and what each one is FOR ──────────────────────────
+     Purple and cyan arrived together, which is exactly how a palette grows a
+     rainbow of colours that all vaguely mean "important". They get one job
+     each, and the split was decided by the measurements, not by taste.
+
+     CYAN is the INTERACTIVE colour: links, the focus ring, a selected tab, a
+     row you can open, "Continue to the shop". It got that job because it is
+     the only new hue that survives SMALL TEXT on every ground in this sheet
+     (8.01 / 6.75 / 5.87 / 5.15 on bg / surface / raised / overlay) — and
+     interactivity is overwhelmingly expressed as small text. It is also
+     --mo-info, below.
+
+     PURPLE is the PRESENCE colour — live, now, yours. A live badge, an unread
+     dot, a typing indicator, the ring round an active avatar, the wash behind
+     a hero. It got the job that does NOT need small text, because it cannot
+     do small text on a card: 3.87 on --mo-surface clears the 3.0 non-text bar
+     and nothing more. On --mo-bg it reaches 4.59 and may carry small text
+     there, but a card is where text usually lives, so the rule worth
+     remembering is the safe one: purple is a MARK, not prose.
+
+     Neither is the primary action. Ember is. A screen with a purple button
+     and an ember button on it has two primary actions, which is none. */
+  --mo-cyan: 6 182 212;          /* #06B6D4 interactive: links, focus      */
+  --mo-purple: 139 92 246;       /* #8B5CF6 presence: live, unread, mine   */
 
   /* ── Semantic ───────────────────────────────────────────────────────────
-     Carried over from the shop's sheet rather than reinvented: same hues,
-     same names, so a status pill means the same thing in both zones. */
+     Same hues and same names as the shop's sheet, so a status pill means the
+     same thing in both zones. Re-measured against the new ground — all three
+     are AAA on both bg and surface, so they came through the repaint intact
+     and did not need adjusting, only checking.
+
+     --mo-info is now the cyan accent, the same value, not a fourth blue. A
+     neutral notice and an interactive hint are the same voice; keeping the
+     old pale #9FC1E8 beside #06B6D4 would have been two blues doing one job.
+     Folding it in removes a colour rather than adding one. */
   --mo-good: 110 231 168;        /* #6EE7A8 success / delivered            */
   --mo-bad: 252 165 165;         /* #FCA5A5 error                          */
   --mo-warn: 252 211 118;        /* #FCD376 pending                        */
-  --mo-info: 159 193 232;        /* #9FC1E8 neutral notice / admin accent  */
+  --mo-info: 6 182 212;          /* #06B6D4 = --mo-cyan, deliberately      */
 
   /* ── Hairlines ──────────────────────────────────────────────────────────
      White at low alpha, because on a dark ground a light line reads as an
-     edge catching the light, whereas a darker line just reads as a gap. */
+     edge catching the light whereas a darker line just reads as a gap. These
+     matter more here than they did on the near-black theme: surface-to-ground
+     is 1.19:1, so without the hairline a card has no boundary at all. */
   --mo-line: rgba(255, 255, 255, .08);
   --mo-line-strong: rgba(255, 255, 255, .16);
-  --mo-line-focus: rgba(255, 255, 255, .55);
+  /* The focus indicator is cyan and is not a hairline — it is a component of
+     its own, at full strength. See .mo-root *:focus-visible. */
+  --mo-focus: rgb(6 182 212);
 
   /* ── Elevation ──────────────────────────────────────────────────────────
-     Long, soft, and very dark — a shadow on near-black has to be mostly
-     spread or it is invisible. Paired with the surface step above; neither
-     alone reads as lift. */
+     Long, soft, and very dark. Paired with the surface step above; across a
+     1.19:1 step, neither alone reads as lift. */
   --mo-shadow-sm: 0 1px 2px rgba(0, 0, 0, .6);
   --mo-shadow: 0 18px 40px -22px rgba(0, 0, 0, .9);
   --mo-shadow-lift: 0 28px 60px -24px rgba(0, 0, 0, .95);
@@ -144,30 +299,62 @@
   --mo-leading-display: 1.08;
   --mo-leading-body: 1.65;
 
+  /* The floor for any label sitting on the ember gradient. It is a token
+     rather than a number in one stylesheet because the 4.03 measurement
+     applies to every zone that paints an ember button, not only the shell.
+     18.66px is WCAG's large-text threshold at bold weight (14pt); 19px is
+     that with a pixel of margin for rounding. */
+  --mo-ember-label-size: 19px;
+  --mo-ember-label-weight: 700;
+
   /* ── The @atpost/ui contract, pointed at Momentum ───────────────────────
      Declared last so a zone can override any of them after importing this
-     file. See the header note. */
+     file. See the header note.
+
+     One thing this mapping CANNOT carry: @atpost/ui's Button `default`
+     variant is `bg-brand-text text-brand-card` — it uses the type colour as
+     its fill, so there is no flat variable that means "the primary fill", and
+     a gradient could not pass through one if there were. Under this mapping
+     that variant renders #F1EEF8 fill with #1F1D33 type, measured 14.30 and
+     perfectly legible, but it is a near-white button, not the ember one. The
+     ember action is painted by the zone (.mo-btn-primary below, and
+     apps/shell) until @atpost/ui grows a variant that can hold a gradient.
+     That is a component gap. Papering over it by pointing --brand-text at
+     #DC2626 would turn every `text-brand-text` in the library red.
+
+     --brand-accent and --brand-highlight both point at cyan, the way they
+     both used to point at --mo-primary. Their consumers are a focus ring and
+     border (dob-picker), a 6x6 chip whose label is `text-brand-bg`
+     (RoleSwitcher — #0D0C14 on cyan is 8.01) and an 11px preview line on a
+     card (MessageToast — 6.75). All small text or focus indicators, which is
+     cyan's job precisely. Ember red would have made that chip 4.03 at 11px
+     bold, and would have made a form field's focus ring the colour of an
+     error. */
   --brand-bg: var(--mo-bg);
   --brand-text: var(--mo-ink);
-  --brand-accent: var(--mo-primary);
+  --brand-accent: var(--mo-cyan);
   --brand-secondary: var(--mo-raised);
-  --brand-highlight: var(--mo-primary);
+  --brand-highlight: var(--mo-cyan);
   --brand-divider: var(--mo-line);
   --brand-card: var(--mo-surface);
 }
 
 /* ═════════════════════════════════════════════════════════════ COMMERCE ONLY
 
-   Gold, scoped. Put `class="mo-commerce"` on the shop's own subtree — a
-   checkout panel, a payout table, a price — and gold becomes available inside
-   it. Outside it these variables do not exist, which is what makes "gold is
-   reserved for money" a fact about the stylesheet rather than a rule someone
-   has to remember.
+   Gold, scoped. Unchanged by the repaint — the values, the scoping and the
+   navy ink are all exactly as they were. Put `class="mo-commerce"` on the
+   shop's own subtree — a checkout panel, a payout table, a price — and gold
+   becomes available inside it. Outside it these variables do not exist, which
+   is what makes "gold is reserved for money" a fact about the stylesheet
+   rather than a rule someone has to remember.
 
    --mo-on-gold is NAVY, not white, and the header records the measurement:
    white on gold is 2.10:1 and fails at every size. The navy is the shop's own
    ground colour, so a gold button reads as belonging to the storefront even
-   when it appears on Momentum's near-black.
+   when it appears on Momentum's violet-black.
+
+   The ground moved under gold, so gold was re-measured: 9.25 as text on
+   #0D0C14 and 7.79 on #1F1D33, both AAA. Nothing to change.
    ═════════════════════════════════════════════════════════════════════════ */
 .mo-commerce {
   --mo-gold: 212 175 55;         /* #D4AF37 the money colour               */
@@ -179,7 +366,7 @@
 
 /* ══════════════════════════════════════════════════════════════ PRIMITIVES
 
-   Three classes, because these three are where a hand-rolled dark theme goes
+   Four classes, because these four are where a hand-rolled dark theme goes
    wrong most often and they are worth having one right answer for. Everything
    else is left to the zone: this package is tokens, not a component library.
    ═════════════════════════════════════════════════════════════════════════ */
@@ -197,16 +384,82 @@
   color-scheme: dark;
 }
 
-/* One visible focus treatment for the whole product. White, offset, and never
-   removed — a dark theme with a subtle focus ring is a dark theme nobody can
-   navigate by keyboard. */
+/* One visible focus treatment for the whole product: cyan, offset, never
+   removed. Cyan rather than white because the focus ring is the most
+   interactive thing on any page and cyan is the interactive colour — and
+   because it measures 8.01 / 6.75 / 5.87 / 8.26 / 5.15 against bg, surface,
+   raised, sunken and overlay, clearing the 3.0 non-text bar on every ground
+   in the sheet with room to spare.
+
+   THE OFFSET IS LOAD-BEARING, not spacing. Cyan against the ember fill is
+   1.99 at the red end and 1.15 at the orange end: a ring drawn directly on an
+   ember button would be invisible over most of its length. `outline-offset`
+   pushes the ring clear so both of its neighbours are the page ground (8.01),
+   which is what WCAG 2.4.11 actually asks for. Never set outline-offset to 0
+   on an ember surface. */
 .mo-root *:focus-visible {
-  outline: 2px solid rgb(var(--mo-ink));
+  outline: 2px solid var(--mo-focus);
   outline-offset: 2px;
 }
 
 .mo-root ::selection {
-  background: rgb(var(--mo-ink) / .22);
+  background: rgb(var(--mo-purple) / .35);
+  color: rgb(var(--mo-ink));
+}
+
+/* The ember button, with its whole state machine, because the states are the
+   part that is easy to get wrong and the part carrying the contrast risk.
+
+   font-size and font-weight are set here and are NOT decoration: at 4.03 on
+   the red end the label is only legible as large text. Overriding them
+   downward breaks the button, which is why the values are tokens rather than
+   a sentence in a comment.
+
+   disabled drops the gradient entirely instead of dimming it. `opacity: .55`
+   over this ground was measured and rejected: the fill collapses toward
+   #7F1A1E while the ink — which IS the ground colour — does not move with it,
+   leaving 1.92. A flat raised fill with body-coloured type is 5.41 and, more
+   usefully, stops looking like a primary action at all. */
+.mo-btn-primary {
+  display: inline-flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--mo-radius-sm);
+  padding: 0 26px;
+  background-color: rgb(var(--mo-primary));  /* fallback: the red end      */
+  background-image: var(--mo-ember);
+  color: rgb(var(--mo-on-primary));
+  font-family: var(--mo-font-sans);
+  font-size: var(--mo-ember-label-size);
+  font-weight: var(--mo-ember-label-weight);
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--mo-ember-glow);
+  transition: box-shadow var(--mo-fast) var(--mo-ease), transform var(--mo-fast) var(--mo-ease);
+}
+.mo-btn-primary:hover:not(:disabled) {
+  background-color: rgb(var(--mo-primary-hover));
+  background-image: var(--mo-ember-hover);
+  box-shadow: var(--mo-ember-glow-hover);
+}
+/* Press returns to the resting ember and drops the button a pixel. It does
+   not go darker, because darker is the direction that loses the label. */
+.mo-btn-primary:active:not(:disabled) {
+  background-color: rgb(var(--mo-primary));
+  background-image: var(--mo-ember);
+  transform: translateY(1px);
+  box-shadow: var(--mo-shadow-sm), inset 0 2px 6px rgba(0, 0, 0, .28);
+}
+.mo-btn-primary:disabled {
+  background-color: rgb(var(--mo-raised));
+  background-image: none;
+  color: rgb(var(--mo-body));
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 @media (prefers-reduced-motion: reduce) {

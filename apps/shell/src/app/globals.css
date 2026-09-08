@@ -17,6 +17,54 @@
 
    Everything below resolves to a --mo-* variable. A hex code in this file
    outside a comment is a bug.
+
+   ── What the Figma palette changed here ───────────────────────────────────
+
+   Three things, and none of them is only a colour swap.
+
+   1. THE PRIMARY BUTTON IS A GRADIENT. `background` cannot carry it on its
+      own the way a flat colour could: it needs a background-image for the
+      ramp and a background-color underneath for the fallback, and hover
+      cannot be a colour transition because background-image does not
+      interpolate. See .btn-primary.
+
+   2. BUTTON LABELS GOT BIGGER. Dark ink on the red end of the ember gradient
+      measures 4.03, which is legible only as large text, so every .btn on
+      these pages is 19px/700 — the token floor, --mo-ember-label-size. The
+      outline button did not need to grow (its ink is 16.97 on the ground) but
+      it stands next to the primary one in the header and in the hero, and a
+      row of two buttons at two sizes reads as a mistake.
+
+   3. THE THIRD GREY LEFT. This file used --mo-faint for eyebrows, hints,
+      placeholders, the footer and the dev panel. Its replacement in the new
+      palette, #6B658A, measures 3.01 on a card and 3.57 on the ground: large
+      text and non-text only. Every one of those uses is small text, so all of
+      them moved to --mo-body (6.22 on a card, 7.38 on the ground). The
+      hierarchy that grey used to draw is now drawn by size and weight, which
+      is where these pages should have been drawing it anyway.
+
+      --mo-muted-lg therefore appears nowhere in this file. That is not an
+      oversight: there is no place on these four pages where a
+      large-text-only grey is the right answer.
+
+   ── Contrast on these pages, computed against the rendered values ─────────
+     #F1EEF8 ink    on #0D0C14 ground .......... 16.97  AAA
+     #F1EEF8 ink    on #1F1D33 auth card ....... 14.30  AAA
+     #F1EEF8 ink    on #08070E input well ...... 17.50  AAA
+     #A19CB9 body   on #0D0C14 ground ...........  7.38  AAA
+     #A19CB9 body   on #1F1D33 auth card ........  6.22  AA
+     #A19CB9 body   on #08070E input well .......  7.61  AAA   (placeholders)
+     #A19CB9 body   on #2A2745 raised ...........  5.41  AA    (disabled button)
+     #06B6D4 cyan   on #0D0C14 ground ...........  8.01  AAA   (links, focus)
+     #06B6D4 cyan   on #1F1D33 auth card ........  6.75  AA
+     #0D0C14 ink    on #DC2626 ember, red end ....  4.03  AA at 19px/700
+     #0D0C14 ink    on #F97316 ember, orange end .  6.94  AA at any size
+     #0D0C14 ink    on the hover ramp, worst .....  5.17  AA at any size
+     #FCA5A5 error  on #1F1D33 auth card ........  8.63  AAA
+     #FFFFFF tick   on #DC2626 checkbox fill .....  4.83  passes the 3.0
+                                                           non-text bar
+   The one figure on this page under 4.5 is the ember button's 4.03, and the
+   19px/700 label is what makes it compliant rather than a compromise.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @import "@momentum/tokens/tokens.css";
@@ -44,12 +92,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Cyan, offset, matching .mo-root in the token sheet. The offset is not
+   spacing: cyan on the ember fill is 1.99 at the red end and 1.15 at the
+   orange one, so a ring drawn ON a primary button would vanish across most of
+   it. Offsetting puts the page ground on both sides of the ring instead —
+   8.01 — which is the pair WCAG 2.4.11 actually measures. */
 *:focus-visible {
-  outline: 2px solid rgb(var(--mo-ink));
+  outline: 2px solid var(--mo-focus);
   outline-offset: 2px;
 }
 
-::selection { background: rgb(var(--mo-ink) / .22); }
+::selection { background: rgb(var(--mo-purple) / .35); color: rgb(var(--mo-ink)); }
 
 a { color: inherit; }
 
@@ -80,16 +133,23 @@ a { color: inherit; }
   letter-spacing: var(--mo-tracking-display);
   text-decoration: none;
 }
-/* The mark: a white square with the wordmark's initial cut out of it in the
+/* The mark: an ember square with the wordmark's initial cut out of it in the
    ground colour. One shape, no asset, and it is the primary-action pairing —
-   white fill, near-black type — used as an identity. */
+   ember fill, violet-black type — used as an identity.
+
+   The letter is 17px, below the 18.66px the same pairing needs on a button.
+   That is deliberate and it is not a violation: WCAG 1.4.3 exempts text that
+   is part of a logo or brand name from the contrast requirement outright. The
+   mark is the logotype. The BUTTON is not, which is why the button grew and
+   this did not. */
 .brand i {
   display: grid;
   width: 30px;
   height: 30px;
   place-items: center;
   border-radius: 9px;
-  background: rgb(var(--mo-primary));
+  background-color: rgb(var(--mo-primary));
+  background-image: var(--mo-ember);
   color: rgb(var(--mo-on-primary));
   font-family: var(--mo-font-display);
   font-size: 17px;
@@ -99,7 +159,7 @@ a { color: inherit; }
 
 .hero { max-width: 760px; }
 .eyebrow {
-  color: rgb(var(--mo-faint));
+  color: rgb(var(--mo-body));
   font-size: 11px;
   font-weight: 700;
   letter-spacing: var(--mo-tracking-eyebrow);
@@ -116,34 +176,85 @@ a { color: inherit; }
 .hero p {
   max-width: 62ch;
   margin: 0;
-  color: rgb(var(--mo-muted));
+  color: rgb(var(--mo-body));
   font-size: 17px;
 }
 
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: var(--mo-space-6); }
 
-/* One white button per screen; anything beside it is an outline. */
+/* One ember button per screen; anything beside it is an outline.
+
+   The shared size is the ember floor — 19px/700 — for both variants, because
+   they sit side by side. See the header note. */
 .btn {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 48px;
   align-items: center;
   justify-content: center;
   gap: 8px;
   border: 1px solid transparent;
   border-radius: var(--mo-radius-sm);
-  padding: 0 20px;
+  padding: 0 22px;
   font: inherit;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--mo-ember-label-size);
+  font-weight: var(--mo-ember-label-weight);
+  line-height: 1;
+  letter-spacing: -.005em;
   text-decoration: none;
   cursor: pointer;
-  transition: background var(--mo-fast) var(--mo-ease), border-color var(--mo-fast) var(--mo-ease), color var(--mo-fast) var(--mo-ease);
+  transition: background-color var(--mo-fast) var(--mo-ease), border-color var(--mo-fast) var(--mo-ease),
+              color var(--mo-fast) var(--mo-ease), box-shadow var(--mo-fast) var(--mo-ease),
+              transform var(--mo-fast) var(--mo-ease);
 }
-.btn-primary { background: rgb(var(--mo-primary)); color: rgb(var(--mo-on-primary)); }
-.btn-primary:hover { background: rgb(var(--mo-primary-hover)); }
-.btn-primary:active { background: rgb(var(--mo-primary-press)); }
+
+/* The ember button.
+
+   background-color and background-image are BOTH set, and they are not
+   redundant. The colour is the fallback for anything that does not paint the
+   gradient, and it is the RED end — the worst end for contrast — so a
+   fallback can never be brighter than the thing it stands in for, and the
+   label is already sized for it either way.
+
+   Hover swaps the gradient outright, because background-image is not an
+   interpolable property: there is no cross-fade to be had from a transition
+   here, and pretending otherwise by transitioning `background` just produces
+   nothing. The change that IS smooth is the ember glow and the 1px lift, and
+   those carry the feel. Hover also goes LIGHTER, which is the only direction
+   available: dark ink gains contrast as the fill brightens (4.03 -> 5.17 at
+   the worst point), and a darker hover would quietly take the label below its
+   own floor.
+
+   Press therefore cannot darken either. It returns to the resting ember,
+   drops a pixel, and trades the glow for a tight inset — a pressed button
+   with no colour left to press into.
+
+   Disabled drops the gradient entirely rather than dimming it. `opacity: .55`
+   was measured on this exact ground and rejected: the fill collapses toward
+   #7F1A1E while the ink, which is the ground colour, does not move with it,
+   leaving 1.92. A flat raised fill with body type is 5.41 and stops looking
+   like a primary action, which is the actual job of a disabled state. */
+.btn-primary {
+  border-color: transparent;
+  background-color: rgb(var(--mo-primary));
+  background-image: var(--mo-ember);
+  color: rgb(var(--mo-on-primary));
+  box-shadow: var(--mo-ember-glow);
+}
+.btn-primary:hover {
+  background-color: rgb(var(--mo-primary-hover));
+  background-image: var(--mo-ember-hover);
+  box-shadow: var(--mo-ember-glow-hover);
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  background-color: rgb(var(--mo-primary));
+  background-image: var(--mo-ember);
+  transform: translateY(1px);
+  box-shadow: var(--mo-shadow-sm), inset 0 2px 6px rgba(0, 0, 0, .28);
+}
+
 .btn-outline { border-color: var(--mo-line-strong); color: rgb(var(--mo-ink)); }
-.btn-outline:hover { border-color: var(--mo-line-focus); background: rgb(var(--mo-ink) / .06); }
+.btn-outline:hover { border-color: rgb(var(--mo-cyan) / .65); background-color: rgb(var(--mo-ink) / .06); }
 
 .grid {
   display: grid;
@@ -151,6 +262,9 @@ a { color: inherit; }
   gap: var(--mo-space-4);
   margin-top: var(--mo-space-7);
 }
+/* The card is where the 1.19:1 surface-to-ground step gets paid for. The
+   hairline and the shadow are not trim — without them a #1F1D33 card on a
+   #0D0C14 page has no edge a person can see. */
 .card {
   display: flex;
   min-height: 172px;
@@ -165,24 +279,28 @@ a { color: inherit; }
   box-shadow: var(--mo-shadow);
   transition: transform var(--mo-slow) var(--mo-ease), border-color var(--mo-fast) var(--mo-ease), background var(--mo-fast) var(--mo-ease);
 }
-.card:hover { transform: translateY(-2px); border-color: var(--mo-line-strong); background: rgb(var(--mo-raised)); }
+/* Presence, not interaction: the card lifts and picks up a purple edge to say
+   "this one, now". Purple as a MARK — an edge is non-text, and at 3.87 on the
+   surface that is exactly the bar it has to clear. The word "Open" inside it
+   stays cyan, because that is the part you click. */
+.card:hover { transform: translateY(-2px); border-color: rgb(var(--mo-purple) / .55); background: rgb(var(--mo-raised)); }
 .card strong { font-family: var(--mo-font-display); font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
-.card span { color: rgb(var(--mo-muted)); font-size: 14px; }
-.card .action { margin-top: auto; color: rgb(var(--mo-ink)); font-size: 13px; font-weight: 700; }
+.card span { color: rgb(var(--mo-body)); font-size: 14px; }
+.card .action { margin-top: auto; color: rgb(var(--mo-cyan)); font-size: 13px; font-weight: 700; }
 
 .shell-foot {
   margin-top: var(--mo-space-8);
   border-top: 1px solid var(--mo-line);
   padding-top: var(--mo-space-5);
-  color: rgb(var(--mo-faint));
+  color: rgb(var(--mo-body));
   font-size: 13px;
 }
 
 /* ════════════════════════════════════════════════════════════════════ PROSE */
 .doc { max-width: 68ch; }
 .doc h2 { margin: var(--mo-space-6) 0 var(--mo-space-3); font-family: var(--mo-font-display); font-size: 22px; font-weight: 600; letter-spacing: -.015em; }
-.doc p { color: rgb(var(--mo-muted)); font-size: 15px; }
-.doc a { color: rgb(var(--mo-ink)); font-weight: 600; text-underline-offset: 3px; }
+.doc p { color: rgb(var(--mo-body)); font-size: 15px; }
+.doc a { color: rgb(var(--mo-cyan)); font-weight: 600; text-underline-offset: 3px; }
 
 /* ═══════════════════════════════════════════════════════════════════════ AUTH
 
@@ -194,20 +312,21 @@ a { color: inherit; }
    in lands on the shop. But signing in is not shopping. Gold is the money
    colour — price, checkout, payouts — and putting it on the door to the whole
    platform is precisely what would make the feed and the store read as two
-   products. Momentum's near-black and its one white button say "this is the
+   products. Momentum's violet-black and its one ember button say "this is the
    platform", and then hand you to whichever zone you asked for.
 
-   Contrast on this page, measured (full table in packages/tokens/tokens.css):
-     #FFFFFF ink   on #101214 card ......... 18.77:1  AAA
-     #A9B0B8 muted on #101214 card .........  8.57:1  AAA
-     #8B939C faint on #101214 card .........  6.04:1  AA
-     #08090A ink   on #FFFFFF button ....... 19.93:1  AAA
-     #FCA5A5 error on #101214 card .........  9.89:1  AAA
-   The primary button is white and therefore carries near-black type. No gold
-   appears anywhere on this page.
+   Contrast on this page, computed (full table in packages/tokens/tokens.css):
+     #F1EEF8 ink   on #1F1D33 card ......... 14.30  AAA
+     #A19CB9 body  on #1F1D33 card .........  6.22  AA
+     #A19CB9 body  on #08070E field ........  7.61  AAA  (incl. placeholders)
+     #06B6D4 cyan  on #1F1D33 card .........  6.75  AA   (links, focus ring)
+     #0D0C14 ink   on the ember button ......  4.03  AA at 19px/700, worst end
+     #FCA5A5 error on #1F1D33 card .........  8.63  AAA
+   The primary button is ember and therefore carries violet-black type at the
+   large-text size. No gold appears anywhere on this page.
 
-   The old per-zone accent swap went with the gold. The primary action is white
-   in every zone now, so tinting it per destination would mean inventing four
+   The old per-zone accent swap is still gone. The primary action is ember in
+   every zone now, so tinting it per destination would mean inventing four
    accent colours to say something the page already says in words — "Continue
    to the shop", "Continue to the admin console". `data-zone` stays on the card
    for anything that needs to hang behaviour off it.
@@ -224,8 +343,12 @@ a { color: inherit; }
   padding: var(--mo-space-5);
   place-items: center;
   /* Top-lit, faintly, so the card sits in a room rather than on a flat field.
-     Two stops only; a dark theme with a busy background looks cheap fast. */
-  background: radial-gradient(120% 80% at 50% -20%, rgb(var(--mo-raised)) 0%, rgb(var(--mo-bg)) 60%);
+     Two layers: a whisper of purple — presence, the brand's own light — over
+     the raised-to-ground fall. Both are behind an opaque card, so neither is
+     load-bearing for any contrast pair on this page. */
+  background:
+    radial-gradient(58% 42% at 50% -8%, rgb(var(--mo-purple) / .16) 0%, transparent 70%),
+    radial-gradient(120% 80% at 50% -20%, rgb(var(--mo-raised)) 0%, rgb(var(--mo-bg)) 60%);
 }
 
 .auth-card {
@@ -248,13 +371,15 @@ a { color: inherit; }
   letter-spacing: var(--mo-tracking-display);
   text-decoration: none;
 }
+/* Logotype — see the note on .brand i for why 16px is allowed here. */
 .auth-brand i {
   display: grid;
   width: 28px;
   height: 28px;
   place-items: center;
   border-radius: 8px;
-  background: rgb(var(--mo-primary));
+  background-color: rgb(var(--mo-primary));
+  background-image: var(--mo-ember);
   color: rgb(var(--mo-on-primary));
   font-family: var(--mo-font-display);
   font-size: 16px;
@@ -264,7 +389,7 @@ a { color: inherit; }
 
 .auth-kicker {
   margin: 26px 0 8px;
-  color: rgb(var(--mo-faint));
+  color: rgb(var(--mo-body));
   font-size: 11px;
   font-weight: 700;
   letter-spacing: var(--mo-tracking-eyebrow);
@@ -278,13 +403,13 @@ a { color: inherit; }
   line-height: 1.15;
   letter-spacing: var(--mo-tracking-display);
 }
-.auth-lede { margin: 0 0 22px; color: rgb(var(--mo-muted)); font-size: 14px; line-height: 1.6; }
+.auth-lede { margin: 0 0 22px; color: rgb(var(--mo-body)); font-size: 14px; line-height: 1.6; }
 .auth-lede strong { color: rgb(var(--mo-ink)); font-weight: 600; }
-.auth-note { margin: 20px 0 0; color: rgb(var(--mo-faint)); font-size: 13px; line-height: 1.6; }
+.auth-note { margin: 20px 0 0; color: rgb(var(--mo-body)); font-size: 13px; line-height: 1.6; }
 
 .auth-form, .auth-form label { display: flex; flex-direction: column; gap: 7px; }
 .auth-form { gap: var(--mo-space-4); }
-.auth-form label { color: rgb(var(--mo-muted)); font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+.auth-form label { color: rgb(var(--mo-body)); font-size: 12px; font-weight: 600; letter-spacing: .01em; }
 
 .auth-form input {
   min-width: 0;
@@ -298,12 +423,19 @@ a { color: inherit; }
   font-size: 15px;
   transition: border-color var(--mo-fast) var(--mo-ease), box-shadow var(--mo-fast) var(--mo-ease);
 }
-.auth-form input::placeholder { color: rgb(var(--mo-faint)); }
+/* Placeholders are text. On the old palette the third grey cleared AA in a
+   field; #6B658A does not (3.68 on this well), so placeholders read in body
+   colour at 7.61 and the distinction from a filled value is carried by the
+   value being --mo-ink at 17.50. */
+.auth-form input::placeholder { color: rgb(var(--mo-body)); }
 .auth-form input:hover:not(:focus) { border-color: rgb(var(--mo-ink) / .26); }
+/* Focus is cyan here too — the field border becomes the focus signal, and the
+   halo is the same hue at low alpha. 6.75 against the card, which is the pair
+   that matters for a border sitting on it. */
 .auth-form input:focus {
-  border-color: rgb(var(--mo-ink) / .7);
+  border-color: rgb(var(--mo-cyan) / .85);
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--mo-ink) / .10);
+  box-shadow: 0 0 0 3px rgb(var(--mo-cyan) / .18);
 }
 .auth-form input[aria-invalid="true"] { border-color: rgb(var(--mo-bad) / .7); }
 .auth-form input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgb(var(--mo-bad) / .16); }
@@ -316,7 +448,7 @@ a { color: inherit; }
   box-shadow: 0 0 0 1000px rgb(var(--mo-sunken)) inset;
 }
 
-.auth-hint { color: rgb(var(--mo-faint)); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.auth-hint { color: rgb(var(--mo-body)); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .auth-name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 /* The terms row is the one label that reads left to right: box, then sentence. */
@@ -324,12 +456,16 @@ a { color: inherit; }
   flex-direction: row;
   align-items: flex-start;
   gap: 10px;
-  color: rgb(var(--mo-muted));
+  color: rgb(var(--mo-body));
   font-size: 13px;
   font-weight: 400;
   line-height: 1.55;
   cursor: pointer;
 }
+/* accent-color takes one solid colour — it cannot take the gradient — so the
+   checked box is the ember red end, the same value --mo-primary falls back to
+   everywhere else. The tick the browser draws on it is white: 4.83, over the
+   3.0 bar a non-text control indicator has to clear. */
 .auth-form label.auth-terms input {
   width: 17px;
   min-height: 0;
@@ -339,23 +475,44 @@ a { color: inherit; }
   padding: 0;
   accent-color: rgb(var(--mo-primary));
 }
-.auth-terms a { color: rgb(var(--mo-ink)); font-weight: 600; text-underline-offset: 3px; }
+.auth-terms a { color: rgb(var(--mo-cyan)); font-weight: 600; text-underline-offset: 3px; }
 
+/* The submit button is the page's one ember action, full width. Same state
+   machine as .btn-primary — the comment there covers all of it. */
 .auth-form button {
-  min-height: 48px;
+  min-height: 52px;
   border: 0;
   border-radius: var(--mo-radius-sm);
-  background: rgb(var(--mo-primary));
+  background-color: rgb(var(--mo-primary));
+  background-image: var(--mo-ember);
   color: rgb(var(--mo-on-primary));
   font: inherit;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--mo-ember-label-size);
+  font-weight: var(--mo-ember-label-weight);
+  line-height: 1;
   cursor: pointer;
-  transition: background var(--mo-fast) var(--mo-ease);
+  box-shadow: var(--mo-ember-glow);
+  transition: box-shadow var(--mo-fast) var(--mo-ease), transform var(--mo-fast) var(--mo-ease);
 }
-.auth-form button:hover:not(:disabled) { background: rgb(var(--mo-primary-hover)); }
-.auth-form button:active:not(:disabled) { background: rgb(var(--mo-primary-press)); }
-.auth-form button:disabled { cursor: wait; opacity: .55; }
+.auth-form button:hover:not(:disabled) {
+  background-color: rgb(var(--mo-primary-hover));
+  background-image: var(--mo-ember-hover);
+  box-shadow: var(--mo-ember-glow-hover);
+}
+.auth-form button:active:not(:disabled) {
+  background-color: rgb(var(--mo-primary));
+  background-image: var(--mo-ember);
+  transform: translateY(1px);
+  box-shadow: var(--mo-shadow-sm), inset 0 2px 6px rgba(0, 0, 0, .28);
+}
+/* Flat, not dimmed. Dimming the gradient measures 1.92; this measures 5.41. */
+.auth-form button:disabled {
+  background-color: rgb(var(--mo-raised));
+  background-image: none;
+  color: rgb(var(--mo-body));
+  box-shadow: none;
+  cursor: wait;
+}
 
 .auth-field-error { margin: 0; color: rgb(var(--mo-bad)); font-size: 12px; font-weight: 600; line-height: 1.45; }
 .auth-error {
@@ -369,13 +526,13 @@ a { color: inherit; }
   line-height: 1.5;
 }
 
-.auth-dev { margin-top: 22px; border-top: 1px solid var(--mo-line); padding-top: 16px; color: rgb(var(--mo-faint)); font-size: 12px; }
-.auth-dev summary { color: rgb(var(--mo-muted)); font-weight: 600; cursor: pointer; }
+.auth-dev { margin-top: 22px; border-top: 1px solid var(--mo-line); padding-top: 16px; color: rgb(var(--mo-body)); font-size: 12px; }
+.auth-dev summary { color: rgb(var(--mo-ink)); font-weight: 600; cursor: pointer; }
 .auth-dev p { margin: 10px 0; line-height: 1.6; }
-.auth-dev code { display: block; border-radius: var(--mo-radius-sm); background: rgb(var(--mo-sunken)); padding: 10px; color: rgb(var(--mo-muted)); font-family: var(--mo-font-mono); font-size: 11px; word-break: break-all; }
+.auth-dev code { display: block; border-radius: var(--mo-radius-sm); background: rgb(var(--mo-sunken)); padding: 10px; color: rgb(var(--mo-body)); font-family: var(--mo-font-mono); font-size: 11px; word-break: break-all; }
 
-.auth-switch { margin: 24px 0 0; color: rgb(var(--mo-faint)); font-size: 13.5px; text-align: center; }
-.auth-switch a { color: rgb(var(--mo-ink)); font-weight: 600; text-underline-offset: 3px; }
+.auth-switch { margin: 24px 0 0; color: rgb(var(--mo-body)); font-size: 13.5px; text-align: center; }
+.auth-switch a { color: rgb(var(--mo-cyan)); font-weight: 600; text-underline-offset: 3px; }
 
 @media (max-width: 480px) {
   .auth-card { border-radius: var(--mo-radius); padding: 28px 22px; }

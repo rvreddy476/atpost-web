@@ -22,6 +22,22 @@
  * work, and it is the convention the shop's own scale already uses — so the
  * two vocabularies compose rather than compete.
  *
+ * ── The ember button is not a colour class ────────────────────────────────
+ * The primary action is a gradient, so `bg-mo-primary` gets you the RED END
+ * ONLY — the flat fallback, not the button. The real thing is
+ * `bg-mo-ember` / `bg-mo-ember-hover` under backgroundImage, and it comes
+ * with a size-and-weight obligation the utility cannot enforce: dark ink on
+ * the red end measures 4.03, which is legible only as large text. Use
+ * `text-mo-ember-label font-bold`, the `.mo-btn-primary` class in tokens.css,
+ * or set >=18.66px bold yourself. A `bg-mo-ember` with a 14px label is an
+ * accessibility bug that Tailwind will happily compile.
+ *
+ * ── mo-muted-lg carries its limit in its name ─────────────────────────────
+ * `text-mo-muted-lg` is 3.57 on the ground and 3.01 on a card: large text and
+ * non-text only, and it fails outright on `bg-mo-raised` (2.61). It replaced
+ * the old `mo-faint`, which was safe for small text on the old near-black and
+ * is not safe on this one. Small secondary text is `text-mo-body`.
+ *
  * `mo-gold*` is included, but the variables behind it are declared only under
  * `.mo-commerce`. A gold class used outside that subtree resolves to nothing
  * and renders transparent, which is a loud enough failure to catch in review
@@ -41,13 +57,22 @@ module.exports = {
           overlay: "rgb(var(--mo-overlay) / <alpha-value>)",
 
           ink: "rgb(var(--mo-ink) / <alpha-value>)",
-          muted: "rgb(var(--mo-muted) / <alpha-value>)",
-          faint: "rgb(var(--mo-faint) / <alpha-value>)",
+          body: "rgb(var(--mo-body) / <alpha-value>)",
+          // Large text (>=18.66px bold / >=24px) and non-text only. See above.
+          "muted-lg": "rgb(var(--mo-muted-lg) / <alpha-value>)",
 
+          // The flat ends of the ember ramp. `primary` is the red end, which
+          // is both the gradient's start and its solid fallback.
           primary: "rgb(var(--mo-primary) / <alpha-value>)",
+          "primary-to": "rgb(var(--mo-primary-to) / <alpha-value>)",
           "primary-hover": "rgb(var(--mo-primary-hover) / <alpha-value>)",
-          "primary-press": "rgb(var(--mo-primary-press) / <alpha-value>)",
+          "primary-hover-to": "rgb(var(--mo-primary-hover-to) / <alpha-value>)",
           "on-primary": "rgb(var(--mo-on-primary) / <alpha-value>)",
+
+          // One job each — cyan is interactive, purple is presence. The
+          // reasoning, and the measurements it rests on, are in tokens.css.
+          cyan: "rgb(var(--mo-cyan) / <alpha-value>)",
+          purple: "rgb(var(--mo-purple) / <alpha-value>)",
 
           good: "rgb(var(--mo-good) / <alpha-value>)",
           bad: "rgb(var(--mo-bad) / <alpha-value>)",
@@ -61,12 +86,23 @@ module.exports = {
           "on-gold": "rgb(var(--mo-on-gold) / <alpha-value>)",
         },
       },
+      backgroundImage: {
+        "mo-ember": "var(--mo-ember)",
+        "mo-ember-hover": "var(--mo-ember-hover)",
+      },
       borderColor: {
         mo: {
           DEFAULT: "var(--mo-line)",
           strong: "var(--mo-line-strong)",
+          focus: "var(--mo-focus)",
           gold: "var(--mo-gold-line)",
         },
+      },
+      outlineColor: {
+        mo: "var(--mo-focus)",
+      },
+      ringColor: {
+        mo: "var(--mo-focus)",
       },
       borderRadius: {
         mo: "var(--mo-radius)",
@@ -78,11 +114,20 @@ module.exports = {
         mo: "var(--mo-shadow)",
         "mo-sm": "var(--mo-shadow-sm)",
         "mo-lift": "var(--mo-shadow-lift)",
+        "mo-ember": "var(--mo-ember-glow)",
+        "mo-ember-hover": "var(--mo-ember-glow-hover)",
       },
       fontFamily: {
         "mo-display": "var(--mo-font-display)",
         "mo-sans": "var(--mo-font-sans)",
         "mo-mono": "var(--mo-font-mono)",
+      },
+      fontSize: {
+        // The minimum a label on the ember gradient may be set at.
+        "mo-ember-label": [
+          "var(--mo-ember-label-size)",
+          { lineHeight: "1", fontWeight: "var(--mo-ember-label-weight)" },
+        ],
       },
       letterSpacing: {
         "mo-display": "var(--mo-tracking-display)",
