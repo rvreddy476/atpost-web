@@ -82,11 +82,32 @@ async function mockCommerce(page: Page, options: { delivered?: boolean; prepaidP
     const url = new URL(request.url())
     const path = url.pathname.replace(/^\/shop/, '')
     const method = request.method()
+    // The cart as commerce-service actually answers it: flat, snake_case, and
+    // in integer paise. This mock used to hand-write the nested PascalCase
+    // shape the app's own type had invented, so the suite ran green while the
+    // real storefront crashed for every signed-in shopper. A fixture is only
+    // worth having if it is the wire.
     const cart = {
-      CartID: 'cart-1',
-      Items: quantity ? [{ Item: { id: 'item-1', cart_id: 'cart-1', variant_id: variant.id, product_id: product.id, quantity, price_snapshot: 2499 }, Product: product, Variant: variant }] : [],
-      Subtotal: quantity * 2499,
-      ItemCount: quantity,
+      cart_id: '4e81396f-c19e-4928-865a-db8377b70a17',
+      items: quantity
+        ? [{
+            variant_id: variant.id,
+            product_id: product.id,
+            title: product.title,
+            sku: variant.sku,
+            quantity,
+            unit_price_minor: 249900,
+            line_total_minor: quantity * 249900,
+            available_qty: product.total_stock,
+            seller_id: product.seller_id,
+            seller_name: 'Sound Store',
+            sellable: true,
+          }]
+        : [],
+      subtotal_minor: quantity * 249900,
+      item_count: quantity,
+      // Set only for a single-seller cart, exactly as the service does.
+      ...(quantity ? { seller_id: product.seller_id, seller_name: 'Sound Store' } : {}),
     }
 
     if (path === '/v1/commerce/categories') return json(route, [{ id: product.category_id, name: 'Electronics', slug: 'electronics' }])

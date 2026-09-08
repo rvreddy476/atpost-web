@@ -150,6 +150,82 @@ export interface OnboardingPayoutPayload {
   upi_id?: string
 }
 
+// ── Cart ────────────────────────────────────────────────────────
+
+// The cart as `GET /v1/commerce/cart` actually sends it — flat, snake_case,
+// and every money field integer paise.
+//
+// It lives here, in the shared package, and not in the zone that renders it.
+// The previous type was declared inside apps/commerce and described a shape
+// the service has never sent (`CartID`, `Items: [{Item, Product, Variant}]`,
+// rupee floats). Nothing deserialised, so a signed-in shopper's `cart.Items`
+// was `undefined` and `.find` on it took the whole storefront down. There was
+// no shared contract for it to drift FROM; that is the actual defect, so the
+// fix is to put one here rather than to correct field names in place.
+//
+// Mirrors commerce-service's `postgres.CartView` / `CartViewLine`, which the
+// route-level contract test in `internal/http/cart_contract_integration_test.go`
+// pins key by key. Optionality mirrors Go's `omitempty`: a field marked
+// optional here is ABSENT from the payload, never null.
+
+/** One line of the cart. Flat — there is no nested product or variant object. */
+export interface CartViewLine {
+  variant_id: string
+  product_id: string
+  title: string
+  sku?: string
+
+  image_media_id?: string
+  /**
+   * Resolved server-side; absent when media-service could not answer, which
+   * the client renders as a placeholder rather than as a broken image.
+   */
+  image_url?: string
+  thumbnail_url?: string
+
+  quantity: number
+  /** Integer paise. What the catalogue charges NOW — checkout re-prices to this. */
+  unit_price_minor: number
+  /** Integer paise: `unit_price_minor * quantity`, computed by the service. */
+  line_total_minor: number
+  /**
+   * Integer paise, present ONLY when the catalogue price moved since the line
+   * was added — the same disagreement checkout refuses with `PRICE_CHANGED`.
+   * Absent is the ordinary case and means "nothing to warn about"; it is
+   * distinct from zero, which would render as "was ₹0.00".
+   */
+  price_was_minor?: number
+
+  /** Stock the buyer may still take, after reservations. The stepper's ceiling. */
+  available_qty: number
+  seller_id: string
+  seller_name?: string
+  /**
+   * False when the product or variant has left the catalogue since it was
+   * added — archived, paused, or un-approved. Checkout refuses these with
+   * `ErrProductUnavailable`; the cart says so first.
+   */
+  sellable: boolean
+}
+
+export interface CartView {
+  cart_id: string
+  /** Always an array — the service sends `[]` for an empty cart, never null. */
+  items: CartViewLine[]
+  /** Integer paise: the sum of every `line_total_minor`. */
+  subtotal_minor: number
+  /** Total units across the lines, not the number of lines. */
+  item_count: number
+  /**
+   * Set ONLY when every line comes from one seller. A mixed cart cannot check
+   * out (`ErrMultipleSellers`), and naming one of two sellers would tell the
+   * buyer the wrong thing about why — so absent here means "mixed", and the
+   * screen has to say that rather than pick whichever seller came first.
+   */
+  seller_id?: string
+  seller_name?: string
+}
+
 // ── Catalogue: categories ───────────────────────────────────────
 
 // The category tree the shop browses and a listing is filed under. `children`

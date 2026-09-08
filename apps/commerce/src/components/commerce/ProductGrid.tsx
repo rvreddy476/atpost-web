@@ -6,6 +6,7 @@ import { Minus, Plus, Store } from 'lucide-react'
 import { useAddToCart, useCart, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
 import { ProductPhoto } from './ProductPhoto'
 import { productImage } from '@/lib/media'
+import { inr } from '@/lib/money'
 
 export type ProductCardData = {
   id: string
@@ -37,8 +38,11 @@ type Props = {
   tail?: React.ReactNode
 }
 
-export const inr = (value: number) =>
-  `₹${value.toLocaleString('en-IN', { maximumFractionDigits: value % 1 === 0 ? 0 : 2 })}`
+// Re-exported so the four screens that already say `import { inr } from
+// '@/components/commerce/ProductGrid'` keep working. It is defined in
+// `@/lib/money` alongside `inrMinor`, because a shop that formats rupees in
+// one place and paise in another eventually formats one of them wrong.
+export { inr }
 
 export function ProductGrid({ products, isLoading, emptyLabel = 'No products', tail }: Props) {
   const addToCart = useAddToCart()
@@ -97,24 +101,17 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
   return (
     <div className="product-grid">
       {products.map((p) => {
-        // `cart?.Items` and not `cart.Items`: the optional chain has to cover
-        // the FIELD, not just the object.
-        //
-        // commerce-service answers GET /v1/commerce/cart with a flat snake_case
-        // body — { cart_id, items: [{ variant_id, quantity, unit_price_minor,
-        // … }], item_count, subtotal_minor } — and this zone's `CartSummary`
-        // describes an older nested PascalCase shape ({ CartID, Items: [{ Item,
-        // Product, Variant }], ItemCount, Subtotal }). So `cart` is a defined
-        // object whose `Items` is undefined, and `.find` on it threw, taking
-        // the whole storefront down with "Application error: a client-side
-        // exception has occurred" for anyone signed in.
-        //
-        // This guard stops the crash; it does not fix the divergence, which is
-        // real and wider than this line — the cart and checkout screens read
-        // Product/Variant sub-objects the service does not send at all. That
-        // needs someone to decide which side is wrong before either is edited.
-        const cartItem = cart?.Items?.find((item) => item.Item.variant_id === p.default_variant_id)
-        const quantity = cartItem?.Item.quantity ?? (addedId === p.id ? 1 : 0)
+        // The line, read off the flat shape the service actually sends. The
+        // `?.` covers only the cart being absent while it loads or while the
+        // shopper is signed out; `items` itself is always an array.
+        const line = cart?.items.find((item) => item.variant_id === p.default_variant_id)
+        const quantity = line?.quantity ?? (addedId === p.id ? 1 : 0)
+        // The stepper's ceiling is the stock the service says is left for this
+        // line, not a hard-coded 10 — asking for more than available_qty is a
+        // request checkout will refuse.
+        // Until the line comes back from the service, the catalogue's own
+        // stock figure is the best ceiling there is — the previous behaviour.
+        const maxQuantity = line ? line.available_qty : (p.total_stock ?? 99)
         const isPending = addingId === p.id
         const outOfStock = p.total_stock === 0
         const lowStock = !outOfStock && p.total_stock != null && p.total_stock <= 5
@@ -157,7 +154,7 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
                 <div className="bag-stepper" aria-label={`${p.title} quantity in bag`}>
                   <button type="button" onClick={() => changeQuantity(p, quantity - 1)} disabled={isPending} aria-label={`Decrease ${p.title} quantity`}><Minus size={15} /></button>
                   <span>{isPending ? '·' : quantity}</span>
-                  <button type="button" onClick={() => changeQuantity(p, quantity + 1)} disabled={isPending || quantity >= (p.total_stock ?? 99)} aria-label={`Increase ${p.title} quantity`}><Plus size={15} /></button>
+                  <button type="button" onClick={() => changeQuantity(p, quantity + 1)} disabled={isPending || quantity >= maxQuantity} aria-label={`Increase ${p.title} quantity`}><Plus size={15} /></button>
                 </div>
               ) : (
                 <button

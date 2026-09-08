@@ -17,7 +17,8 @@ import { Building2, CreditCard, Lock, MapPin, Plus, ShieldCheck, ShoppingBag, Ta
 import { AddressForm } from '@/components/commerce/AddressForm'
 import { StoreHeader } from '@/components/StoreHeader'
 import { StoreFooter } from '@/components/StoreFooter'
-import { inr } from '@/components/commerce/ProductGrid'
+import { inr, inrMinor } from '@/lib/money'
+import { cartBlockReason } from '@/lib/cart'
 import { getCheckoutBlockReason } from '@/lib/checkout'
 import { completeOrderPayment } from '@/lib/orderPayment'
 
@@ -67,7 +68,10 @@ function CheckoutContent() {
     coupon_code: couponCode.trim() || undefined,
   } : null
   const quote = useCheckoutQuote(quoteInput)
-  const checkoutBlockReason = getCheckoutBlockReason({
+  // What the BAG already rules out — an unsellable line, a mixed-seller cart,
+  // a quantity above available_qty — comes first, because none of it depends
+  // on an address or a quote, and checkout would refuse it either way.
+  const checkoutBlockReason = cartBlockReason(cart) ?? getCheckoutBlockReason({
     selectedAddress: selectedAddr,
     isProcessing,
     isQuoteFetching: quote.isFetching,
@@ -130,7 +134,7 @@ function CheckoutContent() {
     }
   }
 
-  if (!cart || cart.ItemCount === 0)
+  if (!cart || cart.item_count === 0)
     return (
       <div className="flex min-h-screen flex-col">
         <StoreHeader />
@@ -282,13 +286,21 @@ function CheckoutContent() {
 
           <aside className="vbag-summary lg:sticky lg:top-[150px]">
             <span className="shop-eyebrow">Order summary</span>
-            <h2>{cart.ItemCount} {cart.ItemCount === 1 ? 'item' : 'items'}</h2>
+            <h2>{cart.item_count} {cart.item_count === 1 ? 'item' : 'items'}</h2>
+            {cart.seller_name ? <p className="mt-2 text-xs text-shop-faint">Sold by {cart.seller_name}</p> : null}
 
             <div className="mt-6 flex flex-col gap-2.5">
-              {cart.Items.map((ci) => (
-                <div key={ci.Item.id} className="flex justify-between gap-3 text-sm text-shop-muted">
-                  <span className="min-w-0 truncate">{ci.Product?.title ?? 'Product'} × {ci.Item.quantity}</span>
-                  <span className="whitespace-nowrap font-semibold text-shop-ink">{inr(ci.Item.price_snapshot * ci.Item.quantity)}</span>
+              {/* The flat line, keyed on variant_id: there is one line per
+                  variant and the service sends no line id. `line_total_minor`
+                  is the service's own multiplication, so this screen does not
+                  redo it — and never in floats. */}
+              {cart.items.map((line) => (
+                <div key={line.variant_id} className="flex justify-between gap-3 text-sm text-shop-muted">
+                  <span className="min-w-0 truncate">
+                    {line.title} × {line.quantity}
+                    {!line.sellable ? <span className="text-shop-bad"> · unavailable</span> : null}
+                  </span>
+                  <span className="whitespace-nowrap font-semibold text-shop-ink">{inrMinor(line.line_total_minor)}</span>
                 </div>
               ))}
             </div>
@@ -300,14 +312,22 @@ function CheckoutContent() {
               <input placeholder="Coupon code" aria-label="Coupon code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} />
             </div>
 
+            {/* The quote's totals are rupee floats; the cart's are integer
+                paise. The fallback crosses that line, so each side is
+                formatted by its own function — `inr(quote…)` or
+                `inrMinor(cart.subtotal_minor)` — and neither amount is
+                converted into the other's units to share one call. */}
             <div className="summary-lines">
-              <div><span>Subtotal</span><strong>{inr(quote.data?.subtotal ?? cart.Subtotal)}</strong></div>
+              <div>
+                <span>Subtotal</span>
+                <strong>{quote.data ? inr(quote.data.subtotal) : inrMinor(cart.subtotal_minor)}</strong>
+              </div>
               {!!quote.data?.coupon_discount && <div><span>Discount</span><strong className="is-saving">−{inr(quote.data.coupon_discount)}</strong></div>}
               {!!quote.data?.shipping && <div><span>Delivery</span><strong>{inr(quote.data.shipping)}</strong></div>}
               {!!quote.data?.tax && <div><span>Tax</span><strong>{inr(quote.data.tax)}</strong></div>}
               <div className="summary-total">
                 <span>Order total<small>Inclusive of all taxes</small></span>
-                <strong>{inr(quote.data?.grand_total ?? cart.Subtotal)}</strong>
+                <strong>{quote.data ? inr(quote.data.grand_total) : inrMinor(cart.subtotal_minor)}</strong>
               </div>
             </div>
 

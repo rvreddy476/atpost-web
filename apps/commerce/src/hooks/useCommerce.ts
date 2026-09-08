@@ -1,35 +1,15 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@atpost/api-client'
 import { useSession as usePlatformSession } from '@atpost/api-client/session'
+import type { CartView } from '@atpost/types/commerce'
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-export type CartItem = {
-  Item: {
-    id: string
-    cart_id: string
-    variant_id: string
-    product_id: string
-    quantity: number
-    price_snapshot: number
-  }
-  Product: {
-    id: string
-    title: string
-    slug: string
-    primary_image_media_id?: string | null
-    source_image_url?: string | null
-    retailer_name?: string | null
-  } | null
-  Variant: { id: string; sku: string; mrp: number; selling_price: number; image_media_id?: string | null } | null
-}
-
-export type CartSummary = {
-  CartID: string
-  Items: CartItem[]
-  Subtotal: number
-  ItemCount: number
-}
+// The cart's shape is NOT declared here. `CartView` / `CartViewLine` live in
+// `@atpost/types/commerce`, mirroring commerce-service's own projection, and
+// are re-exported so this hook stays the zone's single import point for
+// commerce data. A cart type invented in this file is what drifted last time.
+export type { CartView, CartViewLine } from '@atpost/types/commerce'
 
 export type Address = {
   id: string
@@ -484,7 +464,7 @@ export function useSession(): { signedIn: boolean; known: boolean } {
 
 export function useCart() {
   const { signedIn, known } = useSession()
-  return useQuery<CartSummary>({
+  return useQuery<CartView>({
     queryKey: ['commerce', 'cart'],
     queryFn: async () => (await api.get('/v1/commerce/cart')).data.data,
     // A signed-out shopper has no bag to fetch, so do not ask.

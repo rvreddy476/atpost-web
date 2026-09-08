@@ -104,7 +104,10 @@ export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
   // Renders nothing at all for a shopper with no other hat, which is almost
   // everyone — and nothing while signed out, because the query never runs.
   const { destinations } = useCapabilities()
-  const count = cart?.ItemCount ?? 0
+  // `item_count`, the field the payload actually carries. The badge read
+  // `ItemCount`, which nothing sends, so it was silently always 0 — a shopper
+  // with a full bag saw an empty one.
+  const count = cart?.item_count ?? 0
   const rail = categories.length ? categories.slice(0, 10) : FALLBACK_CATEGORIES
 
   return (
