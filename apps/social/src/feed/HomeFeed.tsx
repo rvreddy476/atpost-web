@@ -357,10 +357,18 @@ export function HomeFeed() {
 }
 
 /**
- * The column, and the one global control.
+ * The feed's own heading, and the one global control.
  *
- * A single narrow column rather than a grid: this is a reading surface, and
- * `max-w-xl` keeps a line of text at a length someone can actually follow.
+ * This used to BE the column — `<main className="mx-auto max-w-xl">`, its own
+ * width, its own centring, its own page padding. It is not any more: the zone
+ * grew a three-column frame (src/chrome/AppFrame.tsx) and that frame owns the
+ * `<main>`, the centre track's 600px cap and the page's rhythm. Two things
+ * deciding how wide the feed is would have been two things to disagree, and
+ * the nested `<main>` would have been a second landmark of the same kind
+ * inside the first.
+ *
+ * What is left here is what only the feed can decide: what the column is
+ * called, and whether the videos in it have sound.
  */
 function Shell({
   children,
@@ -374,7 +382,7 @@ function Shell({
   showMute: boolean
 }) {
   return (
-    <main className="mx-auto min-h-screen w-full max-w-xl px-4 py-6">
+    <div>
       <header className="mb-5 flex items-center justify-between">
         <h1 className="font-mo-display text-2xl font-semibold tracking-mo-display text-mo-ink">
           Home
@@ -398,6 +406,6 @@ function Shell({
         )}
       </header>
       {children}
-    </main>
+    </div>
   )
 }

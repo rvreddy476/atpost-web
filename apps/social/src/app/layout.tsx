@@ -3,6 +3,7 @@ import { Figtree, Outfit } from "next/font/google"
 import { BRAND, zoneTitle } from "@momentum/brand"
 import { readServerSession } from "@atpost/api-client/server"
 import { SessionProvider } from "@atpost/api-client/session"
+import { AppFrame } from "@/chrome/AppFrame"
 import "./globals.css"
 
 /**
@@ -43,6 +44,13 @@ export const metadata: Metadata = {
  * the front door would render a feed shell and then replace it with a sign-in
  * prompt a beat later — exactly the flash the session provider exists to
  * remove.
+ *
+ * The chrome lives here rather than on the page for the same reason: the
+ * header and the two rails are the same on every route this zone will ever
+ * serve, and a layout that already knows whether anyone is signed in is
+ * exactly where a header that renders differently for the two should be
+ * mounted. `AppFrame` is the one client component in the tree; the page under
+ * it stays a mount point.
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { signedIn } = await readServerSession()
@@ -52,7 +60,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       {/* mo-root is the whole theme: ground, ink, font, the one focus ring,
           and color-scheme: dark so native controls and the scrollbar follow. */}
       <body className="mo-root">
-        <SessionProvider initialSignedIn={signedIn}>{children}</SessionProvider>
+        <SessionProvider initialSignedIn={signedIn}>
+          <AppFrame>{children}</AppFrame>
+        </SessionProvider>
       </body>
     </html>
   )
