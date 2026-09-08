@@ -1,15 +1,22 @@
 import type { NextConfig, Rewrite } from "next"
 
+/**
+ * The zones this shell routes to. One row per app that actually exists.
+ *
+ * Six rows were removed — /match, /community, /creator, /messenger, /live and
+ * /memories — because the apps behind them were deleted. A rewrite to a port
+ * nothing is listening on does not 404 cleanly: it hangs until the proxy gives
+ * up and then answers 500, which reads as "the platform is broken" rather than
+ * "that does not exist". Keeping this table equal to `ls apps/` is the whole
+ * discipline.
+ *
+ * `apps/shell/src/lib/moduleRedirect.ts` holds the same list for the
+ * post-login `?redirect=` allowlist. The two move together.
+ */
 const zones = [
   ["/shop", "COMMERCE_ZONE_URL", "http://localhost:3001"],
   ["/admin", "ADMIN_ZONE_URL", "http://localhost:3002"],
-  ["/match", "DATING_ZONE_URL", "http://localhost:3003"],
   ["/social", "SOCIAL_ZONE_URL", "http://localhost:3004"],
-  ["/community", "COMMUNITY_ZONE_URL", "http://localhost:3005"],
-  ["/creator", "CREATOR_ZONE_URL", "http://localhost:3006"],
-  ["/messenger", "MESSENGER_ZONE_URL", "http://localhost:3007"],
-  ["/live", "LIVE_ZONE_URL", "http://localhost:3008"],
-  ["/memories", "MEMORIES_ZONE_URL", "http://localhost:3009"],
   ["/apps", "MINIAPPS_ZONE_URL", "http://localhost:3010"],
 ] as const
 

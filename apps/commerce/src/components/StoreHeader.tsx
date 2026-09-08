@@ -2,10 +2,9 @@
 
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useState } from "react"
 import { Search, ShoppingBag, Package, User, Store, LayoutGrid, ShieldCheck } from "lucide-react"
-import { useCart } from "@/hooks/useCommerce"
-import { getCurrentUserId } from "@atpost/api-client"
+import { useCart, useSession } from "@/hooks/useCommerce"
 import { useCapabilities } from "@atpost/api-client/capabilities"
 import { RoleSwitcher } from "@atpost/ui"
 
@@ -97,15 +96,16 @@ const FALLBACK_CATEGORIES: Category[] = [
 ]
 
 export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
-  const [userId, setUserId] = useState<string | null>(null)
+  // Right on the FIRST paint, not one effect later. The zone's layout seeds
+  // the session from the request's own cookies, so a signed-in shopper never
+  // watches "Sign in" flash in their own header before it corrects itself.
+  const { signedIn } = useSession()
   const { data: cart } = useCart()
   // Renders nothing at all for a shopper with no other hat, which is almost
   // everyone — and nothing while signed out, because the query never runs.
   const { destinations } = useCapabilities()
   const count = cart?.ItemCount ?? 0
   const rail = categories.length ? categories.slice(0, 10) : FALLBACK_CATEGORIES
-
-  useEffect(() => setUserId(getCurrentUserId()), [])
 
   return (
     <header className="marketplace-header">
@@ -121,8 +121,8 @@ export function StoreHeader({ categories = [] }: { categories?: Category[] }) {
         </Suspense>
         <nav className="header-actions" aria-label="Account and shopping">
           <RoleSwitcher destinations={destinations} label="Switch" className="mr-1" />
-          <a href={userId ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action" aria-label={userId ? "Account" : "Sign in"}>
-            <User size={19} aria-hidden="true" /><span>{userId ? "Account" : "Sign in"}</span>
+          <a href={signedIn ? "/shop/orders" : "/login?redirect=%2Fshop"} className="header-action" aria-label={signedIn ? "Account" : "Sign in"}>
+            <User size={19} aria-hidden="true" /><span>{signedIn ? "Account" : "Sign in"}</span>
           </a>
           <Link href="/orders" className="header-action" aria-label="Orders">
             <Package size={19} aria-hidden="true" /><span>Orders</span>

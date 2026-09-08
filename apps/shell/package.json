@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@atpost/api-client": "workspace:*",
+    "@momentum/tokens": "workspace:*",
     "next": "15.5.19",
     "react": "19.2.4",
     "react-dom": "19.2.4"

@@ -4,9 +4,19 @@ import { DEFAULT_LANDING, moduleHome, moduleLabel, requestedModule } from './mod
 describe('moduleHome', () => {
   it.each([
     ['/shop', '/shop'], ['/shop/cart', '/shop'], ['/admin/products', '/admin'],
-    ['/match/profile', '/match'], ['/messenger?thread=1', '/messenger'],
+    ['/social/feed', '/social'], ['/apps?id=1', '/apps'],
   ])('keeps the explicit destination %s, landing on %s', (requested, expected) =>
     expect(moduleHome(requested)).toBe(expected))
+
+  // The six deleted zones are no longer allowlisted destinations. Accepting
+  // one would sign someone in and then hand them a 404 in a zone that is gone.
+  it.each(['/match/profile', '/messenger?thread=1', '/community', '/creator', '/live', '/memories'])(
+    'refuses %s, a zone that no longer exists, and lands on the shop',
+    (requested) => {
+      expect(requestedModule(requested)).toBeNull()
+      expect(moduleHome(requested)).toBe('/shop')
+    },
+  )
 
   // Everything that is not an explicit, allowlisted destination lands on the
   // shop — including an admin who opened /login themselves. Nobody arrives

@@ -1,13 +1,13 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { getCurrentUserId } from "@atpost/api-client"
 import type { Category } from "@atpost/types/commerce"
 import { StoreHeader } from "@/components/StoreHeader"
 import { CategoryPicker } from "@/components/sell/CategoryPicker"
 import { ListingForm } from "@/components/sell/ListingForm"
+import { useSession } from "@/hooks/useCommerce"
 import { useAttributeSchema, useCategoryTree } from "@/hooks/useListing"
 import { apiMessage } from "@/lib/listing"
 
@@ -42,15 +42,13 @@ function GuidedListing() {
   const categoryId = params.get("category")
   const productId = params.get("product")
 
-  const [authed, setAuthed] = useState<boolean | null>(null)
+  // Redirect only once the session is KNOWN. It is known on the first paint
+  // now that the layout seeds it from the request's cookies; bouncing on a
+  // question nobody has answered yet would send a signed-in seller to login.
+  const { signedIn, known } = useSession()
   useEffect(() => {
-    if (getCurrentUserId()) {
-      setAuthed(true)
-    } else {
-      setAuthed(false)
-      window.location.replace("/login?redirect=%2Fshop%2Fsell")
-    }
-  }, [])
+    if (known && !signedIn) window.location.replace("/login?redirect=%2Fshop%2Fsell")
+  }, [known, signedIn])
 
   const tree = useCategoryTree()
   const category = useMemo(
@@ -62,8 +60,12 @@ function GuidedListing() {
   // twice would mean two ETags and two chances to disagree.
   const schema = useAttributeSchema(category ? category.id : null, "all")
 
-  if (authed !== true) {
-    return <p className="mt-6 text-sm text-shop-faint">Redirecting to sign in…</p>
+  if (!signedIn) {
+    return (
+      <p className="mt-6 text-sm text-shop-faint">
+        {known ? "Redirecting to sign in…" : "Checking your account…"}
+      </p>
+    )
   }
 
   if (!categoryId) {

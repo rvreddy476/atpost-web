@@ -97,7 +97,23 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
   return (
     <div className="product-grid">
       {products.map((p) => {
-        const cartItem = cart?.Items.find((item) => item.Item.variant_id === p.default_variant_id)
+        // `cart?.Items` and not `cart.Items`: the optional chain has to cover
+        // the FIELD, not just the object.
+        //
+        // commerce-service answers GET /v1/commerce/cart with a flat snake_case
+        // body — { cart_id, items: [{ variant_id, quantity, unit_price_minor,
+        // … }], item_count, subtotal_minor } — and this zone's `CartSummary`
+        // describes an older nested PascalCase shape ({ CartID, Items: [{ Item,
+        // Product, Variant }], ItemCount, Subtotal }). So `cart` is a defined
+        // object whose `Items` is undefined, and `.find` on it threw, taking
+        // the whole storefront down with "Application error: a client-side
+        // exception has occurred" for anyone signed in.
+        //
+        // This guard stops the crash; it does not fix the divergence, which is
+        // real and wider than this line — the cart and checkout screens read
+        // Product/Variant sub-objects the service does not send at all. That
+        // needs someone to decide which side is wrong before either is edited.
+        const cartItem = cart?.Items?.find((item) => item.Item.variant_id === p.default_variant_id)
         const quantity = cartItem?.Item.quantity ?? (addedId === p.id ? 1 : 0)
         const isPending = addingId === p.id
         const outOfStock = p.total_stock === 0

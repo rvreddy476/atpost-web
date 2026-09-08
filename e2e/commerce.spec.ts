@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { seedSessionCookie } from './session'
 
 const product = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -178,9 +179,8 @@ test('customer can retry a payment-pending prepaid order', async ({ page }) => {
 
 test('seller can create a draft product and submit it for approval', async ({ page }) => {
   const state = await mockCommerce(page)
-  await page.addInitScript(() => {
-    localStorage.setItem('postbook_session', JSON.stringify({ id: '66666666-6666-4666-8666-666666666666' }))
-  })
+  // A session is a cookie now, not a localStorage record. See e2e/session.ts.
+  await seedSessionCookie(page)
   await page.goto('/shop/sell')
 
   await expect(page.getByRole('heading', { name: 'My products' })).toBeVisible()

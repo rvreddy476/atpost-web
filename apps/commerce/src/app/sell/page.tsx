@@ -6,7 +6,7 @@ import { StoreHeader } from "@/components/StoreHeader"
 import { useOnboardingStatus, useStartOnboarding } from "@/hooks/useSellerOnboarding"
 import { useMyProducts, useSubmitProduct } from "@/hooks/useSellerDashboard"
 import { Button, Input, Table, TBody, TD, TH, THead, TR } from "@atpost/ui"
-import { getCurrentUserId } from "@atpost/api-client"
+import { useSession } from "@/hooks/useCommerce"
 
 function OnboardingForm() {
   const start = useStartOnboarding()
@@ -108,18 +108,19 @@ function MyProducts() {
 }
 
 export default function SellPage() {
-  const [authed, setAuthed] = useState<boolean | null>(null)
+  // Selling requires an account. If nobody is signed in, send them to the one
+  // auth page and bring them straight back here afterwards.
+  //
+  // `known` is the guard that matters: it is true on the first paint now that
+  // the layout seeds the session from the request's cookies, so a signed-in
+  // seller no longer sees "Redirecting to sign in…" for a frame. It can still
+  // be false in a zone that has not wired the provider, and redirecting on a
+  // question nobody has answered yet would bounce a signed-in seller to login.
+  const { signedIn, known } = useSession()
 
-  // Selling requires an account. If not signed in, send them to login and
-  // bring them straight back to /sell afterwards.
   useEffect(() => {
-    if (getCurrentUserId()) {
-      setAuthed(true)
-    } else {
-      setAuthed(false)
-      window.location.replace("/login?redirect=%2Fshop")
-    }
-  }, [])
+    if (known && !signedIn) window.location.replace("/login?redirect=%2Fshop")
+  }, [known, signedIn])
 
   const status = useOnboardingStatus()
 
@@ -127,8 +128,10 @@ export default function SellPage() {
     <div className="min-h-screen bg-shop-bg">
       <StoreHeader />
       <main className="shop-page-narrow">
-        {authed !== true ? (
-          <p className="text-shop-faint">Redirecting to sign in…</p>
+        {!signedIn ? (
+          <p className="text-shop-faint">
+            {known ? "Redirecting to sign in…" : "Checking your account…"}
+          </p>
         ) : status.isLoading ? (
           <p className="text-shop-faint">Loading…</p>
         ) : status.data && !status.isError ? (

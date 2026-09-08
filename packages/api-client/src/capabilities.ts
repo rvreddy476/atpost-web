@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type {
   Capabilities,
@@ -8,7 +8,8 @@ import type {
   RoleDestination,
   RoleName,
 } from "@atpost/types/auth"
-import api, { getCurrentUserId } from "./client"
+import api, { SESSION_CHANGE_EVENT } from "./client"
+import { useSession } from "./session"
 
 /**
  * "Who am I allowed to be?", asked of the server rather than guessed.
@@ -16,10 +17,10 @@ import api, { getCurrentUserId } from "./client"
  * ── Why this lives in @atpost/api-client ──────────────────────────────────
  *
  * Capabilities are a property of the *session*, and this package already owns
- * the session: the storage slots, `getCurrentUserId`, the 401→refresh
- * interceptor, and the `postbook:session-changed` event this hook has to
- * listen to. Splitting "who is signed in" from "what they may do" across two
- * packages is how the two drift.
+ * the session: the cookie the presence signal is read from, `useSession`, the
+ * 401→refresh interceptor, and the `postbook:session-changed` event this hook
+ * has to listen to. Splitting "who is signed in" from "what they may do"
+ * across two packages is how the two drift.
  *
  * The alternatives were worse. `@atpost/ui` is a design system with no data
  * layer at all — putting an axios call there would make every consumer of
@@ -42,8 +43,6 @@ import api, { getCurrentUserId } from "./client"
  * call; caching it for minutes would trade the endpoint's whole point for
  * nothing.
  */
-
-const SESSION_CHANGE_EVENT = "postbook:session-changed"
 
 export const capabilityKeys = {
   me: ["auth", "capabilities"] as const,
@@ -212,13 +211,14 @@ export interface UseCapabilitiesResult {
   /** The places this person could go. Empty until the response arrives. */
   destinations: RoleDestination[]
   /**
-   * False on the server and on the first client render — localStorage cannot
-   * be read during render without a hydration mismatch, so "signed in?" is
-   * genuinely unknown until an effect has run. Callers must not draw a
-   * conclusion while this is false.
+   * Whether "signed in?" has an answer yet.
+   *
+   * True from the first paint in a zone whose layout seeded `SessionProvider`
+   * from the request's cookies, and only after an effect in one that did not.
+   * Callers must not read `false` as "signed out".
    */
   sessionKnown: boolean
-  /** Known to be nobody: no stored session, or the API answered 401. */
+  /** Known to be nobody: no session cookie, or the API answered 401. */
   signedOut: boolean
   /** The request is in flight (or has not started because we do not know yet). */
   isLoading: boolean
@@ -231,17 +231,15 @@ export interface UseCapabilitiesResult {
 export function useCapabilities(): UseCapabilitiesResult {
   const queryClient = useQueryClient()
 
-  // Null means "not read yet". Same sequence as the shop's useSession: the
-  // session lives in localStorage, which the server cannot see, so reading it
-  // during render answers differently on the two sides and React tears the
-  // tree down over it.
-  const [hasSession, setHasSession] = useState<boolean | null>(null)
+  // "Is anyone signed in" is not this hook's question, and it is no longer
+  // answered by reading storage during render. useSession owns it: seeded on
+  // the server from the request's cookies where the zone wired that up, so
+  // `known` can be true on the very first paint instead of only after an
+  // effect, and settled from the cookie otherwise.
+  const { signedIn, known } = useSession()
 
   useEffect(() => {
-    setHasSession(!!getCurrentUserId())
-
     const onSessionChange = () => {
-      setHasSession(!!getCurrentUserId())
       // Throw the cached answer away rather than merely marking it stale.
       //
       // On sign-out the query is disabled, so an invalidate would leave the
@@ -260,7 +258,7 @@ export function useCapabilities(): UseCapabilitiesResult {
     queryKey: capabilityKeys.me,
     // Nothing to ask about a person who is not signed in, and asking would
     // 401 on every mount of every page that renders the header.
-    enabled: hasSession === true,
+    enabled: signedIn,
     // See "Freshness" above: never cached as fresh, always re-read on mount.
     staleTime: 0,
     refetchOnMount: "always",
@@ -275,11 +273,11 @@ export function useCapabilities(): UseCapabilitiesResult {
     void queryRefetch()
   }, [queryRefetch])
 
-  const sessionKnown = hasSession !== null
-  // A 401 here outranks storage: the stored user record can outlive the
-  // credentials (the interceptor keeps it when a refresh is merely
-  // unreachable), and the server has just said it does not know this caller.
-  const signedOut = sessionKnown && (hasSession === false || statusOf(query.error) === 401)
+  const sessionKnown = known
+  // A 401 here outranks the cookie: the readable presence cookie can outlive
+  // the credentials it stands for, and the server has just said it does not
+  // know this caller.
+  const signedOut = sessionKnown && (!signedIn || statusOf(query.error) === 401)
 
   const data = query.data
   return {
@@ -288,7 +286,7 @@ export function useCapabilities(): UseCapabilitiesResult {
     destinations: destinationsFor(data),
     sessionKnown,
     signedOut,
-    isLoading: !sessionKnown || (hasSession === true && query.isPending),
+    isLoading: !sessionKnown || (signedIn && query.isPending),
     isError: query.isError && statusOf(query.error) !== 401,
     error: query.error,
     refetch,

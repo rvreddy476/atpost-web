@@ -1,19 +1,23 @@
 {
   "name": "@atpost/api-client",
   "version": "0.1.0",
-  "description": "atPost shared gateway client — axios client + same-origin proxy + token refresh (httpOnly-cookie aware) + the session's capabilities.",
+  "description": "atPost shared gateway client — cookie-session axios client + same-origin proxy + token refresh + the session's identity and capabilities.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./proxy": "./src/proxy.ts",
     "./refresh": "./src/refresh.ts",
     "./health": "./src/health.ts",
-    "./capabilities": "./src/capabilities.ts"
+    "./capabilities": "./src/capabilities.ts",
+    "./session": "./src/session.tsx",
+    "./server": "./src/server.ts"
   },
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/client.ts"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts --max-warnings=0",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
     "test": "vitest run"
   },
   "dependencies": {

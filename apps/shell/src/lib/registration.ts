@@ -123,9 +123,11 @@ function asString(value: unknown): string | null {
 /**
  * A login or register body that genuinely carries a usable session, or null.
  *
- * "Usable" means both a token and a user id: half of a session is worse than
- * none, because the interceptor would start sending an Authorization header
- * with no X-User-Id behind it.
+ * "Usable" means both a token and a user id. Neither is stored any more — the
+ * session travels as the cookies auth-service set on the very same response —
+ * but both are still REQUIRED, because a body missing either came from a
+ * server that did not actually authenticate anybody, and calling that a
+ * success would redirect someone into a zone that is about to 401 them.
  */
 export function readSession(body: unknown): SessionResult | null {
   const data = unwrap(body)

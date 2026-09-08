@@ -1,7 +1,14 @@
-const moduleHomes = [
-  '/shop', '/admin', '/match', '/social', '/community', '/creator',
-  '/messenger', '/live', '/memories', '/apps',
-] as const
+/**
+ * The zones that exist.
+ *
+ * This list carried ten entries, six of which named zones that have since been
+ * deleted — /match, /community, /creator, /messenger, /live and /memories. An
+ * allowlist is only worth having if everything on it is real: each dead entry
+ * was a `?redirect=` this page would accept, sign someone in for, and then
+ * hand them a 404. When a zone comes back it comes back here and in the
+ * shell's `zones` rewrite table together, or the two drift again.
+ */
+const moduleHomes = ['/shop', '/admin', '/social', '/apps'] as const
 
 export type ModuleHome = (typeof moduleHomes)[number]
 
@@ -57,13 +64,7 @@ export function moduleHome(value: string | null | undefined): string {
 const moduleLabels: Record<ModuleHome, string> = {
   '/shop': 'the shop',
   '/admin': 'the admin console',
-  '/match': 'match',
   '/social': 'your feed',
-  '/community': 'communities',
-  '/creator': 'the creator studio',
-  '/messenger': 'messages',
-  '/live': 'live',
-  '/memories': 'memories',
   '/apps': 'mini apps',
 }
 

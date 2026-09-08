@@ -19,10 +19,16 @@ test('live customer can place a COD order through the real gateway', async ({ pa
 
   const userId = randomUUID()
   const accessToken = localAccessToken(userId)
-  await page.addInitScript(({ id, token }) => {
-    localStorage.setItem('postbook_session', JSON.stringify({ id, email: `live-${id.slice(0, 8)}@example.com` }))
-    localStorage.setItem('postbook_auth_tokens', JSON.stringify({ accessToken: token, refreshToken: 'unused-live-test' }))
-  }, { id: userId, token: accessToken })
+  // The session is cookies now, exactly as auth-service sets them. access_token
+  // is what the zone's proxy forwards to the gateway, which resolves a JWT from
+  // that cookie on every route; csrf_token is the readable half the client
+  // echoes on writes and reads to know it is signed in. Neither can live in
+  // localStorage any more, and the client would not look there if they did.
+  await page.context().addCookies([
+    { name: 'access_token', value: accessToken, domain: '127.0.0.1', path: '/', httpOnly: true },
+    { name: 'refresh_token', value: 'unused-live-test', domain: '127.0.0.1', path: '/', httpOnly: true },
+    { name: 'csrf_token', value: randomUUID(), domain: '127.0.0.1', path: '/' },
+  ])
 
   await page.goto('/shop')
   const firstProduct = page.locator('a[href*="/products/"]').first()

@@ -1,126 +1,390 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   apps/shell — the Momentum chrome, in plain CSS.
+
+   ── Why no Tailwind here ──────────────────────────────────────────────────
+
+   The shell is four pages: a home, a sign-in, a sign-up and a terms page. It
+   has no PostCSS pipeline, no Tailwind config and no @atpost/ui, and adding
+   all three in order to style a form would be exactly the weight the "thin
+   zones" rule exists to prevent — a zone whose job is routing and layout
+   should not take on a build step it needs for one card.
+
+   The theme is not forked to buy that, though. @momentum/tokens is a
+   stylesheet of custom properties, so this zone drinks from the same well the
+   Tailwind zones do; one `@import` instead of a preset. Change a colour in
+   packages/tokens/tokens.css and it changes here and in commerce at once.
+   That is the whole reason the token package has no JavaScript in it.
+
+   Everything below resolves to a --mo-* variable. A hex code in this file
+   outside a comment is a bug.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import "@momentum/tokens/tokens.css";
+
+/* The webfonts, self-hosted by next/font (see layout.tsx), pointed at the two
+   family variables the token sheet documents as its hook. Outfit sets display
+   type, Figtree everything read at length — the Momentum pairing, and the same
+   one as the Android app. */
+:root {
+  --mo-font-display: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mo-font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
 * { box-sizing: border-box; }
-html { color-scheme: light; }
-body { margin: 0; background: #f8fafc; color: #111827; font-family: Arial, sans-serif; }
-main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 72px 0; }
-.hero { max-width: 720px; }
-.eyebrow { font-size: 13px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
-h1 { margin: 16px 0; font-size: clamp(40px, 7vw, 72px); line-height: 1.02; letter-spacing: -.04em; }
-.hero p { color: #475569; font-size: 18px; line-height: 1.7; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 48px; }
-.card { min-height: 190px; display: flex; flex-direction: column; gap: 12px; padding: 24px; border: 1px solid #e2e8f0; border-radius: 20px; background: white; color: inherit; text-decoration: none; transition: transform .2s, box-shadow .2s; }
-.card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(15, 23, 42, .1); }
-.card strong { font-size: 22px; }
-.card span { color: #64748b; line-height: 1.5; }
-.card .action { margin-top: auto; color: #111827; font-weight: 700; }
+html { color-scheme: dark; }
 
-/* ─────────────────────────────────────────────────────────────────── prose */
-.doc { max-width: 720px; }
-.doc h2 { margin: 40px 0 12px; font-size: 22px; letter-spacing: -.01em; }
-.doc p { color: #475569; font-size: 16px; line-height: 1.75; }
-.doc a { color: #111827; font-weight: 700; }
+body {
+  margin: 0;
+  background: rgb(var(--mo-bg));
+  color: rgb(var(--mo-ink));
+  font-family: var(--mo-font-sans);
+  font-size: 15px;
+  line-height: var(--mo-leading-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
-/* ═══════════════════════════════════════════════════════════════════ AUTH
+*:focus-visible {
+  outline: 2px solid rgb(var(--mo-ink));
+  outline-offset: 2px;
+}
+
+::selection { background: rgb(var(--mo-ink) / .22); }
+
+a { color: inherit; }
+
+/* ═════════════════════════════════════════════════════════════════════ HOME */
+
+.shell-page {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: var(--mo-space-7) 0 var(--mo-space-8);
+}
+
+.shell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mo-space-4);
+  padding-bottom: var(--mo-space-7);
+}
+.shell-top nav { display: flex; align-items: center; gap: 10px; }
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mo-font-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: var(--mo-tracking-display);
+  text-decoration: none;
+}
+/* The mark: a white square with the wordmark's initial cut out of it in the
+   ground colour. One shape, no asset, and it is the primary-action pairing —
+   white fill, near-black type — used as an identity. */
+.brand i {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: rgb(var(--mo-primary));
+  color: rgb(var(--mo-on-primary));
+  font-family: var(--mo-font-display);
+  font-size: 17px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.hero { max-width: 760px; }
+.eyebrow {
+  color: rgb(var(--mo-faint));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--mo-tracking-eyebrow);
+  text-transform: uppercase;
+}
+.hero h1 {
+  margin: var(--mo-space-4) 0;
+  font-family: var(--mo-font-display);
+  font-size: clamp(38px, 6.2vw, 64px);
+  font-weight: 600;
+  line-height: var(--mo-leading-display);
+  letter-spacing: var(--mo-tracking-display);
+}
+.hero p {
+  max-width: 62ch;
+  margin: 0;
+  color: rgb(var(--mo-muted));
+  font-size: 17px;
+}
+
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: var(--mo-space-6); }
+
+/* One white button per screen; anything beside it is an outline. */
+.btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--mo-radius-sm);
+  padding: 0 20px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--mo-fast) var(--mo-ease), border-color var(--mo-fast) var(--mo-ease), color var(--mo-fast) var(--mo-ease);
+}
+.btn-primary { background: rgb(var(--mo-primary)); color: rgb(var(--mo-on-primary)); }
+.btn-primary:hover { background: rgb(var(--mo-primary-hover)); }
+.btn-primary:active { background: rgb(var(--mo-primary-press)); }
+.btn-outline { border-color: var(--mo-line-strong); color: rgb(var(--mo-ink)); }
+.btn-outline:hover { border-color: var(--mo-line-focus); background: rgb(var(--mo-ink) / .06); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
+  gap: var(--mo-space-4);
+  margin-top: var(--mo-space-7);
+}
+.card {
+  display: flex;
+  min-height: 172px;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-radius-lg);
+  background: rgb(var(--mo-surface));
+  padding: var(--mo-space-5);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--mo-shadow);
+  transition: transform var(--mo-slow) var(--mo-ease), border-color var(--mo-fast) var(--mo-ease), background var(--mo-fast) var(--mo-ease);
+}
+.card:hover { transform: translateY(-2px); border-color: var(--mo-line-strong); background: rgb(var(--mo-raised)); }
+.card strong { font-family: var(--mo-font-display); font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.card span { color: rgb(var(--mo-muted)); font-size: 14px; }
+.card .action { margin-top: auto; color: rgb(var(--mo-ink)); font-size: 13px; font-weight: 700; }
+
+.shell-foot {
+  margin-top: var(--mo-space-8);
+  border-top: 1px solid var(--mo-line);
+  padding-top: var(--mo-space-5);
+  color: rgb(var(--mo-faint));
+  font-size: 13px;
+}
+
+/* ════════════════════════════════════════════════════════════════════ PROSE */
+.doc { max-width: 68ch; }
+.doc h2 { margin: var(--mo-space-6) 0 var(--mo-space-3); font-family: var(--mo-font-display); font-size: 22px; font-weight: 600; letter-spacing: -.015em; }
+.doc p { color: rgb(var(--mo-muted)); font-size: 15px; }
+.doc a { color: rgb(var(--mo-ink)); font-weight: 600; text-underline-offset: 3px; }
+
+/* ═══════════════════════════════════════════════════════════════════════ AUTH
 
    The platform's single sign-in surface, for every zone.
 
-   It wears the shop's palette — #041122 ground, #0B1B2E card, #D4AF37 gold —
-   deliberately, and the tokens below are copied from
-   apps/commerce/src/app/globals.css rather than reinvented. Everyone who signs
-   in lands on the shop (apps/shell/src/lib/moduleRedirect.ts), so this page is
-   the first half of that screen; handing a visitor a pale indigo form and then
-   dropping them onto a navy storefront reads as two different products.
+   It wears the Momentum theme rather than the shop's, and that is the change
+   worth recording. It used to be navy and gold, copied from
+   apps/commerce/src/app/globals.css on the reasoning that everyone who signs
+   in lands on the shop. But signing in is not shopping. Gold is the money
+   colour — price, checkout, payouts — and putting it on the door to the whole
+   platform is precisely what would make the feed and the store read as two
+   products. Momentum's near-black and its one white button say "this is the
+   platform", and then hand you to whichever zone you asked for.
 
-   Contrast, measured, same figures as the commerce sheet:
-     #FFFFFF on #0B1B2E surface ......... 17.35:1  AAA
-     #B2C3D6 muted  on #0B1B2E ..........  9.64:1  AAA
-     #8FA5BE faint  on #0B1B2E ..........  6.85:1  AA
-     #D4AF37 gold   on #041122 ..........  9.01:1  AAA  (gold as text)
-     #041122 navy   on #D4AF37 gold .....  9.01:1  AAA  (gold as button)
-     #FFFFFF white  on #D4AF37 gold .....   2.10:1 FAILS — appears nowhere
-     #FCA5A5 error  on #0B1B2E ..........  9.14:1  AAA
-   The primary button is gold and therefore carries NAVY type, never white.
+   Contrast on this page, measured (full table in packages/tokens/tokens.css):
+     #FFFFFF ink   on #101214 card ......... 18.77:1  AAA
+     #A9B0B8 muted on #101214 card .........  8.57:1  AAA
+     #8B939C faint on #101214 card .........  6.04:1  AA
+     #08090A ink   on #FFFFFF button ....... 19.93:1  AAA
+     #FCA5A5 error on #101214 card .........  9.89:1  AAA
+   The primary button is white and therefore carries near-black type. No gold
+   appears anywhere on this page.
 
-   Zone awareness is one token deep, on purpose. `data-zone` on the card swaps
-   the accent so continuing into the admin console does not look identical to
-   continuing into the shop, and that is the whole of it: same component, same
-   skeleton, no fork, nothing to drift.
-   ═══════════════════════════════════════════════════════════════════════ */
+   The old per-zone accent swap went with the gold. The primary action is white
+   in every zone now, so tinting it per destination would mean inventing four
+   accent colours to say something the page already says in words — "Continue
+   to the shop", "Continue to the admin console". `data-zone` stays on the card
+   for anything that needs to hang behaviour off it.
+   ═════════════════════════════════════════════════════════════════════════ */
+
 .auth-page {
-  --auth-bg: #041122;
-  --auth-surface: #0B1B2E;
-  --auth-sunken: #020B17;
-  --auth-ink: #FFFFFF;
-  --auth-muted: #B2C3D6;
-  --auth-faint: #8FA5BE;
-  --auth-accent: #D4AF37;
-  --auth-accent-deep: #C9A227;
-  --auth-bad: #FCA5A5;
-  --auth-line: rgba(255, 255, 255, .10);
-  --auth-line-strong: rgba(255, 255, 255, .20);
-  --auth-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, "Times New Roman", serif;
-
-  /* Full-bleed: the shared `main` rule above is a 1120px reading column, which
-     would leave this gradient floating in a box. */
+  /* Full-bleed: the .shell-page reading column above would leave this gradient
+     floating in a box. */
+  display: grid;
   width: 100%;
   max-width: none;
-  margin: 0;
   min-height: 100vh;
-  display: grid;
+  margin: 0;
+  padding: var(--mo-space-5);
   place-items: center;
-  padding: 24px;
-  /* Tells the browser to render the native date picker and its icon dark. */
-  color-scheme: dark;
-  background: radial-gradient(120% 90% at 50% -10%, var(--auth-surface) 0%, var(--auth-bg) 55%);
-  color: var(--auth-ink);
+  /* Top-lit, faintly, so the card sits in a room rather than on a flat field.
+     Two stops only; a dark theme with a busy background looks cheap fast. */
+  background: radial-gradient(120% 80% at 50% -20%, rgb(var(--mo-raised)) 0%, rgb(var(--mo-bg)) 60%);
 }
-
-/* Steel rather than gold when the destination is the console: a different
-   errand, plainly, without being a different page. */
-.auth-card[data-zone="/admin"] { --auth-accent: #9FC1E8; --auth-accent-deep: #7FA8D6; }
 
 .auth-card {
-  width: min(100%, 460px);
-  padding: 36px;
-  border: 1px solid var(--auth-line);
-  border-radius: 24px;
-  background: var(--auth-surface);
-  box-shadow: 0 26px 54px -20px rgba(0, 0, 0, .9);
+  width: min(100%, 440px);
+  border: 1px solid var(--mo-line);
+  border-radius: var(--mo-radius-lg);
+  background: rgb(var(--mo-surface));
+  padding: 40px 36px;
+  box-shadow: var(--mo-shadow-lift);
 }
-.auth-brand { display: inline-block; color: var(--auth-ink); font-family: var(--auth-display); font-size: 22px; font-weight: 600; letter-spacing: -.01em; text-decoration: none; }
-.auth-kicker { margin: 22px 0 6px; color: var(--auth-accent); font-size: 11px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
-.auth-card h1 { margin: 0 0 10px; font-family: var(--auth-display); font-size: 30px; font-weight: 600; line-height: 1.15; letter-spacing: -.02em; }
-.auth-lede { margin: 0 0 18px; color: var(--auth-muted); font-size: 14px; line-height: 1.65; }
-.auth-lede strong { color: var(--auth-ink); }
-.auth-note { margin: 18px 0 0; color: var(--auth-faint); font-size: 13px; line-height: 1.6; }
 
-.auth-form, .auth-form label { display: flex; flex-direction: column; gap: 8px; }
-.auth-form { gap: 16px; margin-top: 6px; }
-.auth-form label { color: var(--auth-muted); font-size: 13px; font-weight: 700; }
-.auth-form input { min-width: 0; border: 1px solid var(--auth-line-strong); border-radius: 12px; padding: 12px 14px; background: var(--auth-sunken); color: var(--auth-ink); font: inherit; }
-.auth-form input::placeholder { color: var(--auth-faint); }
-.auth-form input:focus-visible { border-color: var(--auth-accent); outline: 2px solid var(--auth-accent); outline-offset: 1px; }
-.auth-form input[aria-invalid="true"] { border-color: var(--auth-bad); }
-.auth-hint { color: var(--auth-faint); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: rgb(var(--mo-ink));
+  font-family: var(--mo-font-display);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: var(--mo-tracking-display);
+  text-decoration: none;
+}
+.auth-brand i {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgb(var(--mo-primary));
+  color: rgb(var(--mo-on-primary));
+  font-family: var(--mo-font-display);
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.auth-kicker {
+  margin: 26px 0 8px;
+  color: rgb(var(--mo-faint));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--mo-tracking-eyebrow);
+  text-transform: uppercase;
+}
+.auth-card h1 {
+  margin: 0 0 10px;
+  font-family: var(--mo-font-display);
+  font-size: 29px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: var(--mo-tracking-display);
+}
+.auth-lede { margin: 0 0 22px; color: rgb(var(--mo-muted)); font-size: 14px; line-height: 1.6; }
+.auth-lede strong { color: rgb(var(--mo-ink)); font-weight: 600; }
+.auth-note { margin: 20px 0 0; color: rgb(var(--mo-faint)); font-size: 13px; line-height: 1.6; }
+
+.auth-form, .auth-form label { display: flex; flex-direction: column; gap: 7px; }
+.auth-form { gap: var(--mo-space-4); }
+.auth-form label { color: rgb(var(--mo-muted)); font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+
+.auth-form input {
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid var(--mo-line-strong);
+  border-radius: var(--mo-radius-sm);
+  background: rgb(var(--mo-sunken));
+  padding: 0 14px;
+  color: rgb(var(--mo-ink));
+  font: inherit;
+  font-size: 15px;
+  transition: border-color var(--mo-fast) var(--mo-ease), box-shadow var(--mo-fast) var(--mo-ease);
+}
+.auth-form input::placeholder { color: rgb(var(--mo-faint)); }
+.auth-form input:hover:not(:focus) { border-color: rgb(var(--mo-ink) / .26); }
+.auth-form input:focus {
+  border-color: rgb(var(--mo-ink) / .7);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--mo-ink) / .10);
+}
+.auth-form input[aria-invalid="true"] { border-color: rgb(var(--mo-bad) / .7); }
+.auth-form input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgb(var(--mo-bad) / .16); }
+/* Chrome paints its own near-white slab over an autofilled field. An enormous
+   inset shadow is still the only thing that beats it. */
+.auth-form input:-webkit-autofill,
+.auth-form input:-webkit-autofill:hover,
+.auth-form input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--mo-ink));
+  box-shadow: 0 0 0 1000px rgb(var(--mo-sunken)) inset;
+}
+
+.auth-hint { color: rgb(var(--mo-faint)); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .auth-name-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-/* The terms row is the one label that reads left-to-right: box, then sentence. */
-.auth-form label.auth-terms { flex-direction: row; align-items: flex-start; gap: 10px; color: var(--auth-muted); font-size: 13px; font-weight: 400; line-height: 1.55; cursor: pointer; }
-.auth-form label.auth-terms input { flex: none; width: 18px; height: 18px; margin-top: 1px; padding: 0; accent-color: var(--auth-accent); }
-.auth-terms a { color: var(--auth-accent); font-weight: 700; }
+/* The terms row is the one label that reads left to right: box, then sentence. */
+.auth-form label.auth-terms {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  color: rgb(var(--mo-muted));
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.55;
+  cursor: pointer;
+}
+.auth-form label.auth-terms input {
+  width: 17px;
+  min-height: 0;
+  height: 17px;
+  flex: none;
+  margin-top: 2px;
+  padding: 0;
+  accent-color: rgb(var(--mo-primary));
+}
+.auth-terms a { color: rgb(var(--mo-ink)); font-weight: 600; text-underline-offset: 3px; }
 
-.auth-form button { border: 0; border-radius: 12px; padding: 14px; background: var(--auth-accent); color: var(--auth-bg); font: inherit; font-weight: 800; cursor: pointer; }
-.auth-form button:hover:not(:disabled) { background: var(--auth-accent-deep); }
-.auth-form button:disabled { cursor: wait; opacity: .6; }
+.auth-form button {
+  min-height: 48px;
+  border: 0;
+  border-radius: var(--mo-radius-sm);
+  background: rgb(var(--mo-primary));
+  color: rgb(var(--mo-on-primary));
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--mo-fast) var(--mo-ease);
+}
+.auth-form button:hover:not(:disabled) { background: rgb(var(--mo-primary-hover)); }
+.auth-form button:active:not(:disabled) { background: rgb(var(--mo-primary-press)); }
+.auth-form button:disabled { cursor: wait; opacity: .55; }
 
-.auth-field-error { margin: 0; color: var(--auth-bad); font-size: 12px; font-weight: 600; line-height: 1.45; }
-.auth-error { margin: 0; padding: 10px 12px; border: 1px solid rgba(252, 165, 165, .4); border-radius: 10px; background: rgba(252, 165, 165, .08); color: var(--auth-bad); font-size: 14px; line-height: 1.5; }
+.auth-field-error { margin: 0; color: rgb(var(--mo-bad)); font-size: 12px; font-weight: 600; line-height: 1.45; }
+.auth-error {
+  margin: 0;
+  border: 1px solid rgb(var(--mo-bad) / .35);
+  border-radius: var(--mo-radius-sm);
+  background: rgb(var(--mo-bad) / .08);
+  padding: 11px 13px;
+  color: rgb(var(--mo-bad));
+  font-size: 13.5px;
+  line-height: 1.5;
+}
 
-.auth-dev { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--auth-line); color: var(--auth-faint); font-size: 12px; }
-.auth-dev summary { color: var(--auth-muted); font-weight: 700; cursor: pointer; }
+.auth-dev { margin-top: 22px; border-top: 1px solid var(--mo-line); padding-top: 16px; color: rgb(var(--mo-faint)); font-size: 12px; }
+.auth-dev summary { color: rgb(var(--mo-muted)); font-weight: 600; cursor: pointer; }
 .auth-dev p { margin: 10px 0; line-height: 1.6; }
-.auth-dev code { display: block; padding: 10px; border-radius: 8px; background: var(--auth-sunken); color: var(--auth-muted); font-size: 11px; word-break: break-all; }
+.auth-dev code { display: block; border-radius: var(--mo-radius-sm); background: rgb(var(--mo-sunken)); padding: 10px; color: rgb(var(--mo-muted)); font-family: var(--mo-font-mono); font-size: 11px; word-break: break-all; }
 
-.auth-switch { margin: 22px 0 0; color: var(--auth-faint); font-size: 14px; text-align: center; }
-.auth-switch a { color: var(--auth-accent); font-weight: 700; }
+.auth-switch { margin: 24px 0 0; color: rgb(var(--mo-faint)); font-size: 13.5px; text-align: center; }
+.auth-switch a { color: rgb(var(--mo-ink)); font-weight: 600; text-underline-offset: 3px; }
 
-@media (max-width: 480px) { .auth-card { padding: 24px; } .auth-name-row { grid-template-columns: 1fr; } }
+@media (max-width: 480px) {
+  .auth-card { border-radius: var(--mo-radius); padding: 28px 22px; }
+  .auth-name-row { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}

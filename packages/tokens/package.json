@@ -1,0 +1,18 @@
+{
+  "name": "@momentum/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Momentum design tokens — one CSS custom-property sheet plus a Tailwind preset that reads it. No JavaScript runtime, so a zone can wear the theme without taking on a dependency it has to render through.",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    "./tokens.css": "./tokens.css",
+    "./tailwind-preset": "./tailwind-preset.js",
+    "./tailwind-preset.js": "./tailwind-preset.js"
+  },
+  "files": [
+    "tokens.css",
+    "tailwind-preset.js"
+  ]
+}

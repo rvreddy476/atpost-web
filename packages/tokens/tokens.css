@@ -1,0 +1,221 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   @momentum/tokens — the Momentum dark theme, as CSS custom properties.
+
+   This file is the whole package. There is deliberately no JavaScript: a zone
+   wears the theme by importing one stylesheet, so `apps/shell` (plain CSS, no
+   Tailwind) and `apps/commerce` (Tailwind) can drink from the same well
+   without one of them taking on the other's toolchain. The Tailwind preset
+   next to this file only names these variables; it never redefines a colour.
+
+   ── The shape of it ───────────────────────────────────────────────────────
+   Near-black ground, white type, ONE white button per screen. Depth comes
+   from elevation — a surface a step lighter than the ground, a hairline of
+   white at low alpha, a drop shadow — rather than from drawing a border round
+   everything. Pure black was rejected on purpose: it crushes elevation (every
+   surface above it has to be a big jump to read as raised at all) and on OLED
+   it reads as a hole in the screen rather than as a considered dark surface.
+
+   ── Colour families ───────────────────────────────────────────────────────
+   --mo-*      the Momentum vocabulary. Space-separated RGB triplets so
+               Tailwind can do `rgb(var(--mo-bg) / <alpha-value>)`, which is
+               the convention the shop's sheet already uses. Hairlines and
+               shadows are full colour values because alpha is baked in.
+   --brand-*   the contract @atpost/ui reads. Pointed at the Momentum values
+               here, LAST, so importing this sheet also restyles Button/Input/
+               Select/Table. A zone that wants something else (the shop's
+               navy, the console's light) redefines --brand-* after the
+               import and wins on source order.
+
+   ── Gold is not part of the theme ─────────────────────────────────────────
+   #D4AF37 lives under `.mo-commerce` and nowhere else. It is the storefront's
+   money colour — price, checkout, payouts — and the single most effective
+   thing keeping the social surface and the shop from looking like two
+   products stapled together is that gold does not appear outside the shop.
+   It always carries navy type; see the measurements below for why never
+   white.
+
+   ── Contrast (WCAG 2.1 relative luminance, measured, not assumed) ─────────
+     #FFFFFF ink    on #08090A ground .......... 19.93:1  AAA
+     #FFFFFF ink    on #101214 surface ......... 18.77:1  AAA
+     #FFFFFF ink    on #17191D raised .......... 17.60:1  AAA
+     #A9B0B8 muted  on #101214 surface ..........  8.57:1  AAA
+     #A9B0B8 muted  on #08090A ground ...........  9.10:1  AAA
+     #8B939C faint  on #101214 surface ..........  6.04:1  AA   (AAA at 18.66px+ / 14px bold)
+     #8B939C faint  on #08090A ground ...........  6.41:1  AA
+     #08090A ink    on #FFFFFF primary fill ..... 19.93:1  AAA  (the white button)
+     #08090A ink    on #E6E8EB primary hover .... 16.23:1  AAA
+     #6EE7A8 good   on #101214 surface .......... 12.21:1  AAA
+     #FCA5A5 bad    on #101214 surface ...........  9.89:1  AAA
+     #FCD376 warn   on #101214 surface .......... 13.16:1  AAA
+     #9FC1E8 info   on #101214 surface .......... 10.07:1  AAA
+     #D4AF37 gold   on #08090A ground ............  9.48:1  AAA  (gold as TEXT)
+     #041122 navy   on #D4AF37 gold ..............  9.01:1  AAA  (gold as BUTTON)
+     #FFFFFF white  on #D4AF37 gold ..............  2.10:1  FAILS — appears nowhere.
+   Gold buttons therefore carry navy type, never white. Every pair above is a
+   pair this sheet actually produces; nothing here is aspirational.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Ground and surfaces ────────────────────────────────────────────────
+     Four steps, each one used for a different reason. bg is the page; surface
+     is anything that lifts off it; raised is a hover or a panel nested inside
+     a panel; sunken is a well — an input, a code block, a footer. */
+  --mo-bg: 8 9 10;               /* #08090A near-black ground              */
+  --mo-surface: 16 18 20;        /* #101214 raised card                    */
+  --mo-raised: 23 25 29;         /* #17191D hover / nested surface         */
+  --mo-sunken: 5 5 6;            /* #050506 wells, inset fields            */
+  --mo-overlay: 34 38 43;        /* #22262B menus, tooltips, popovers      */
+
+  /* ── Type ───────────────────────────────────────────────────────────────
+     Three weights of voice, not five. A fourth greyer step is where dark
+     themes start failing AA without anyone noticing. */
+  --mo-ink: 255 255 255;         /* #FFFFFF primary                        */
+  --mo-muted: 169 176 184;       /* #A9B0B8 secondary                      */
+  --mo-faint: 139 147 156;       /* #8B939C tertiary / metadata            */
+
+  /* ── The primary action ─────────────────────────────────────────────────
+     White fill, near-black type. There is exactly one of these on a screen;
+     everything else is an outline or a ghost. Restraint is the whole idea —
+     a white button on near-black cannot be missed, so it does not need to be
+     repeated to be noticed. */
+  --mo-primary: 255 255 255;     /* #FFFFFF fill                           */
+  --mo-primary-hover: 230 232 235; /* #E6E8EB                              */
+  --mo-primary-press: 216 219 223; /* #D8DBDF                              */
+  --mo-on-primary: 8 9 10;       /* #08090A type ON the white fill         */
+
+  /* ── Semantic ───────────────────────────────────────────────────────────
+     Carried over from the shop's sheet rather than reinvented: same hues,
+     same names, so a status pill means the same thing in both zones. */
+  --mo-good: 110 231 168;        /* #6EE7A8 success / delivered            */
+  --mo-bad: 252 165 165;         /* #FCA5A5 error                          */
+  --mo-warn: 252 211 118;        /* #FCD376 pending                        */
+  --mo-info: 159 193 232;        /* #9FC1E8 neutral notice / admin accent  */
+
+  /* ── Hairlines ──────────────────────────────────────────────────────────
+     White at low alpha, because on a dark ground a light line reads as an
+     edge catching the light, whereas a darker line just reads as a gap. */
+  --mo-line: rgba(255, 255, 255, .08);
+  --mo-line-strong: rgba(255, 255, 255, .16);
+  --mo-line-focus: rgba(255, 255, 255, .55);
+
+  /* ── Elevation ──────────────────────────────────────────────────────────
+     Long, soft, and very dark — a shadow on near-black has to be mostly
+     spread or it is invisible. Paired with the surface step above; neither
+     alone reads as lift. */
+  --mo-shadow-sm: 0 1px 2px rgba(0, 0, 0, .6);
+  --mo-shadow: 0 18px 40px -22px rgba(0, 0, 0, .9);
+  --mo-shadow-lift: 0 28px 60px -24px rgba(0, 0, 0, .95);
+
+  /* ── Radius, spacing rhythm, motion ─────────────────────────────────────
+     A 4px rhythm, and three radii. Anything needing a fourth radius is
+     usually two components pretending to be one. */
+  --mo-radius-sm: 10px;
+  --mo-radius: 14px;
+  --mo-radius-lg: 22px;
+  --mo-radius-pill: 999px;
+
+  --mo-space-1: 4px;
+  --mo-space-2: 8px;
+  --mo-space-3: 12px;
+  --mo-space-4: 16px;
+  --mo-space-5: 24px;
+  --mo-space-6: 32px;
+  --mo-space-7: 48px;
+  --mo-space-8: 72px;
+
+  --mo-ease: cubic-bezier(.2, .7, .3, 1);
+  --mo-fast: .15s;
+  --mo-slow: .32s;
+
+  /* ── Type stacks ────────────────────────────────────────────────────────
+     Outfit for display, Figtree for everything read at length — the Momentum
+     choice, matching the Android app. Both are declared as the FIRST family
+     with a full system fallback behind them, so a zone that has not loaded
+     the webfont still renders correctly and a zone that has (next/font sets
+     --mo-font-display / --mo-font-sans to its own generated family) gets the
+     real thing without this file knowing how it was loaded. */
+  --mo-font-display: "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Display type is set tight; body type is not. */
+  --mo-tracking-display: -.025em;
+  --mo-tracking-eyebrow: .18em;
+  --mo-leading-display: 1.08;
+  --mo-leading-body: 1.65;
+
+  /* ── The @atpost/ui contract, pointed at Momentum ───────────────────────
+     Declared last so a zone can override any of them after importing this
+     file. See the header note. */
+  --brand-bg: var(--mo-bg);
+  --brand-text: var(--mo-ink);
+  --brand-accent: var(--mo-primary);
+  --brand-secondary: var(--mo-raised);
+  --brand-highlight: var(--mo-primary);
+  --brand-divider: var(--mo-line);
+  --brand-card: var(--mo-surface);
+}
+
+/* ═════════════════════════════════════════════════════════════ COMMERCE ONLY
+
+   Gold, scoped. Put `class="mo-commerce"` on the shop's own subtree — a
+   checkout panel, a payout table, a price — and gold becomes available inside
+   it. Outside it these variables do not exist, which is what makes "gold is
+   reserved for money" a fact about the stylesheet rather than a rule someone
+   has to remember.
+
+   --mo-on-gold is NAVY, not white, and the header records the measurement:
+   white on gold is 2.10:1 and fails at every size. The navy is the shop's own
+   ground colour, so a gold button reads as belonging to the storefront even
+   when it appears on Momentum's near-black.
+   ═════════════════════════════════════════════════════════════════════════ */
+.mo-commerce {
+  --mo-gold: 212 175 55;         /* #D4AF37 the money colour               */
+  --mo-gold-deep: 201 162 39;    /* #C9A227 pressed                        */
+  --mo-gold-light: 228 199 102;  /* #E4C766 hover, and gold as small text  */
+  --mo-on-gold: 4 17 34;         /* #041122 navy — the ONLY type on gold   */
+  --mo-gold-line: rgba(212, 175, 55, .38);
+}
+
+/* ══════════════════════════════════════════════════════════════ PRIMITIVES
+
+   Three classes, because these three are where a hand-rolled dark theme goes
+   wrong most often and they are worth having one right answer for. Everything
+   else is left to the zone: this package is tokens, not a component library.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* Body defaults. Applied by a zone as `class="mo-root"` on <body>, or copied. */
+.mo-root {
+  background: rgb(var(--mo-bg));
+  color: rgb(var(--mo-ink));
+  font-family: var(--mo-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Tells the browser to draw native controls — date pickers, scrollbars,
+     autofill — dark. Without it a date input on a dark form arrives as a
+     white slab. */
+  color-scheme: dark;
+}
+
+/* One visible focus treatment for the whole product. White, offset, and never
+   removed — a dark theme with a subtle focus ring is a dark theme nobody can
+   navigate by keyboard. */
+.mo-root *:focus-visible {
+  outline: 2px solid rgb(var(--mo-ink));
+  outline-offset: 2px;
+}
+
+.mo-root ::selection {
+  background: rgb(var(--mo-ink) / .22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mo-root *,
+  .mo-root *::before,
+  .mo-root *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

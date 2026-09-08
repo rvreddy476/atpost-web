@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import api, { saveSession } from '@atpost/api-client'
+import api, { markSignedIn } from '@atpost/api-client'
 import { moduleHome, moduleLabel, requestedModule } from '@/lib/moduleRedirect'
 import { fieldError, readAuthFailure, type AuthFailure } from '@/lib/authErrors'
 import {
@@ -107,10 +107,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
           return
         }
         if (outcome?.kind === 'session') {
-          saveSession(
-            { accessToken: outcome.session.accessToken, refreshToken: outcome.session.refreshToken },
-            outcome.session.user,
-          )
+          markSignedIn()
           window.location.assign(destination)
           return
         }
@@ -122,12 +119,18 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       }
 
       const response = await api.post('/v1/auth/login', { identifier, password, platform: 'web' })
+      // The body is still read, and still has to contain a real session, but
+      // nothing in it is kept. auth-service set access_token, refresh_token and
+      // csrf_token on this very response and the zone's proxy forwarded them,
+      // so by the time this line runs the browser already holds the session —
+      // for every zone and every tab at once, because cookies ignore the port.
+      // `readSession` is now purely a check that the server did what it said.
       const session = readSession(response.data)
       if (!session) {
         setFailure({ message: 'Authentication response was incomplete.', fields: {} })
         return
       }
-      saveSession({ accessToken: session.accessToken, refreshToken: session.refreshToken }, session.user)
+      markSignedIn()
       window.location.assign(destination)
     } catch (cause) {
       setFailure(readAuthFailure(cause, isRegister ? 'We could not create your account.' : 'Authentication failed.'))
@@ -149,7 +152,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
     return (
       <main className="auth-page">
         <section className="auth-card" data-zone={zone ?? 'platform'}>
-          <Link href="/" className="auth-brand">{BRAND}</Link>
+          <Link href="/" className="auth-brand"><i aria-hidden="true">M</i>{BRAND}</Link>
           <p className="auth-kicker">Almost there</p>
           <h1>Confirm your email</h1>
           <p className="auth-lede">
@@ -199,7 +202,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   return (
     <main className="auth-page">
       <section className="auth-card" data-zone={zone ?? 'platform'}>
-        <Link href="/" className="auth-brand">{BRAND}</Link>
+        <Link href="/" className="auth-brand"><i aria-hidden="true">M</i>{BRAND}</Link>
         <p className="auth-kicker">{kicker}</p>
         <h1>{isRegister ? 'Create your account' : 'Welcome back'}</h1>
         <p className="auth-lede">

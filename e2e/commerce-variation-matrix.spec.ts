@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { seedSessionCookie } from './session'
 
 // The variant grid: one shirt, several sizes and colours, priced as a table.
 //
@@ -7,8 +8,6 @@ import { expect, test, type Page, type Route } from '@playwright/test'
 // running commerce-service happens to hold. The bodies asserted below are the
 // contract read off the Go handlers: `variation_axes` as array order with no
 // `position`, `options[].value` as the enum option's CODE, and money in paise.
-
-const SELLER_USER_ID = '66666666-6666-4666-8666-666666666666'
 
 const CATEGORIES = [
   {
@@ -202,9 +201,8 @@ async function mockListing(page: Page, options: MockOptions = {}): Promise<MockS
     return json(route, { message: `Unhandled mock route: ${method} ${path}` }, 404)
   })
 
-  await page.addInitScript((userId) => {
-    localStorage.setItem('postbook_session', JSON.stringify({ id: userId }))
-  }, SELLER_USER_ID)
+  // A session is a cookie now, not a localStorage record. See e2e/session.ts.
+  await seedSessionCookie(page)
 
   return {
     createdBody: () => createdBody,

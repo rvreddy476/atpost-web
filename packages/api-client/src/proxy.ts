@@ -4,13 +4,28 @@ const API_GATEWAY = process.env.API_GATEWAY_URL || "http://localhost:8080"
 const UPSTREAM_TIMEOUT_MS = Math.min(Math.max(Number(process.env.API_PROXY_TIMEOUT_MS) || 30_000, 1_000), 120_000)
 
 const FORWARDED_HEADERS = [
+    // `cookie` is the credential. The browser holds access_token and
+    // refresh_token as httpOnly cookies it cannot read, and this route —
+    // running on the server, on the same origin — hands them to the gateway,
+    // which resolves a JWT from the `access_token` cookie on every route.
+    // That is the whole of how a signed-in browser reaches an authenticated
+    // API without any JavaScript ever touching a token.
+    "cookie",
+    // Kept for a non-browser caller presenting its own bearer token. The web
+    // client no longer sends one — it has nothing to send.
     "authorization",
-    "x-user-id",
+    // The double-submit half of the CSRF pair. The identity services compare
+    // this against the csrf_token cookie on every cookie-authenticated write,
+    // so dropping it here would 403 every mutation the web makes.
     "x-csrf-token",
     "x-requested-with",
     "content-type",
     "accept",
-    "cookie",
+    // x-user-id is deliberately NOT forwarded. The gateway deletes every
+    // client-supplied copy of the trusted identity headers before deriving
+    // them from the verified token, so forwarding it achieved nothing except
+    // suggesting to a reader that the client's claim about who it is mattered.
+    //
     // Conditional GETs. The category attribute-schema route is ETagged and the
     // seller's listing form revalidates it on every category switch; without
     // this the validator never reaches the gateway and every hit is a full

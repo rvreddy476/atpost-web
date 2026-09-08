@@ -30,9 +30,32 @@ const registerResponse = {
   },
 }
 
+/**
+ * A login that behaves like the real one: it returns a body AND sets a cookie.
+ *
+ * auth-service sets three (access_token and refresh_token httpOnly, csrf_token
+ * readable) and the zone's proxy forwards them. Only the readable one matters
+ * to a mocked suite — it is the presence signal the client renders from — but
+ * it has to be here, because it is now the entire mechanism by which signing in
+ * makes the app look signed in.
+ */
 async function mockLogin(page: Page) {
   await page.route('**/v1/auth/login', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(loginResponse) }),
+    route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'set-cookie': 'csrf_token=csrf-from-login; Path=/; SameSite=Lax',
+      },
+      body: JSON.stringify(loginResponse),
+    }),
+  )
+}
+
+/** What JS can see of the session: the one cookie that is not httpOnly. */
+function sessionCookie(page: Page) {
+  return page.evaluate(
+    () => document.cookie.split('; ').find((c) => c.startsWith('csrf_token='))?.split('=')[1] ?? null,
   )
 }
 
@@ -69,7 +92,10 @@ test('registration sends the payload the backend requires and stops at "confirm 
   await expect(page.locator('.auth-lede strong')).toHaveText(user.email)
   await expect(page).toHaveURL(`${SHELL}/register?redirect=%2Fshop%2Fcheckout`)
 
-  // No session is invented out of a response that carries no tokens.
+  // No session is invented out of a response that carries no tokens. The
+  // server set no cookie, so the browser holds none — and the two localStorage
+  // slots the old client used stay empty, because nothing writes them any more.
+  expect(await sessionCookie(page)).toBeNull()
   expect(await page.evaluate(() => localStorage.getItem('postbook_session'))).toBeNull()
   expect(await page.evaluate(() => localStorage.getItem('postbook_auth_tokens'))).toBeNull()
 
@@ -133,7 +159,10 @@ test('login without a redirect lands on the shop', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign in' }).click()
 
   await expect(page).toHaveURL(`${SHELL}/shop`)
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('postbook_session') || '{}').id)).toBe(user.id)
+  // The session is the cookie the server set, not a record this client wrote —
+  // which is precisely why it is now valid on every zone and every tab at once.
+  expect(await sessionCookie(page)).toBe('csrf-from-login')
+  expect(await page.evaluate(() => localStorage.getItem('postbook_auth_tokens'))).toBeNull()
 })
 
 test('an explicit redirect still wins over the default landing', async ({ page }) => {

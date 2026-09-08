@@ -23,7 +23,7 @@ export const metadata: Metadata = {
  */
 export default function TermsPage() {
   return (
-    <main>
+    <main className="shell-page">
       <section className="hero">
         <span className="eyebrow">Momentum</span>
         <h1>Terms of Service</h1>

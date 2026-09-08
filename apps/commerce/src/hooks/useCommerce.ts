@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import api, { getCurrentUserId } from '@atpost/api-client'
+import api from '@atpost/api-client'
+import { useSession as usePlatformSession } from '@atpost/api-client/session'
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -462,33 +462,24 @@ export function isSignedOut(error: unknown): boolean {
 }
 
 /**
- * Is there a signed-in shopper at all?
+ * Whether a shopper is signed in.
  *
- * Read at call time rather than held in state: the session is written to
- * storage by the login flow, which may live in a different zone.
- */
-/**
- * Whether a shopper is signed in, resolved AFTER mount.
+ * A thin re-export of the platform's own `useSession`, kept under this name
+ * and this shape because a dozen call sites in the zone already destructure
+ * `{ signedIn, known }` and none of them care where the answer comes from.
+ * That is the point of the indirection, not an accident of it: the shop asks
+ * the shared package what a session is, rather than deciding for itself.
  *
- * The session lives in localStorage, which the server cannot see. Reading it
- * during render therefore gives one answer on the server and another in the
- * browser, and React treats that as a hydration mismatch — which on the shop's
- * landing page left the whole tree suspended on "Loading the store…" and
- * nothing rendered at all. So it starts as "unknown" and settles in an effect,
- * which is the only honest sequence.
+ * What changed underneath it: the session is no longer a localStorage record
+ * this zone reads after mount, but a cookie set by auth-service and shared
+ * across every zone and every tab. `known` is therefore true on the FIRST
+ * paint here, because the layout seeds the provider from the request's own
+ * cookies — so the landing page no longer renders a signed-out shell for a
+ * frame before correcting itself.
  */
 export function useSession(): { signedIn: boolean; known: boolean } {
-  const [signedIn, setSignedIn] = useState<boolean | null>(null)
-  useEffect(() => {
-    const read = () => setSignedIn(!!getCurrentUserId())
-    read()
-    // The client clears a dead session from inside an interceptor, so the
-    // change arrives as an event rather than a render. Without listening, a
-    // shopper whose session just expired keeps seeing a signed-in shell.
-    window.addEventListener('postbook:session-changed', read)
-    return () => window.removeEventListener('postbook:session-changed', read)
-  }, [])
-  return { signedIn: signedIn === true, known: signedIn !== null }
+  const { signedIn, known } = usePlatformSession()
+  return { signedIn, known }
 }
 
 export function useCart() {

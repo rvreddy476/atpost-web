@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import "./globals.css"
+import { readServerSession } from "@atpost/api-client/server"
 import { Providers } from "./providers"
 import { AdminNav } from "@/components/AdminNav"
 import { AdminGate } from "@/components/AdminGate"
@@ -9,7 +10,13 @@ export const metadata: Metadata = {
   description: "atPost admin zone",
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Async, and therefore dynamically rendered: it reads the request's session
+ * cookie so the gate below starts from the right verdict. An admin console has
+ * no public pages to prerender anyway.
+ */
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { signedIn } = await readServerSession()
   return (
     <html lang="en">
       <body className="bg-gray-50">
@@ -18,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             afford. AdminGate is a real component boundary — the nav and every
             screen are simply not rendered for a caller the API refuses, rather
             than hidden with a class. */}
-        <Providers>
+        <Providers initialSignedIn={signedIn}>
           <AdminGate>
             <AdminNav />
             <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
