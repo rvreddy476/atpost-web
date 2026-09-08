@@ -1,21 +1,41 @@
+/* The Momentum theme, then Tailwind.
+
+   @momentum/tokens is imported FIRST and deliberately: it declares every
+   --mo-* custom property and, at the end, points the --brand-* contract that
+   @atpost/ui reads at those same values. Tailwind's layers come after, so a
+   utility can always win over a base rule.
+
+   The light --brand-* block that used to live here is gone rather than
+   overridden. It was a white page, and leaving it in place after the import
+   would have won on source order and repainted the whole zone white — the
+   most confusing possible outcome, because every mo-* class would still be
+   correct and the page would still be wrong.
+
+   There are no colours in this file. A zone that paints its own #0F1419 here
+   is a zone that will be a slightly different black from every other zone in
+   six months. Everything visual lives in packages/tokens/tokens.css, which is
+   also where the contrast measurements are recorded. */
+@import "@momentum/tokens/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* atPost brand tokens (light). Mirrors postbook-ui src/ui/theme.css; the shared
-   Tailwind preset maps brand-* colors onto these vars. Add a `.dark` block with
-   the dark values when the theme switcher is ported. */
+/* next/font generates a family name per font and exposes it as a variable.
+   Handing those to the token sheet's own variables is the seam that lets
+   @momentum/tokens stay a plain stylesheet with no idea how a zone loaded its
+   fonts — apps/shell does exactly this. Both keep their full system fallback
+   behind them, so a failed font request degrades rather than breaks. */
 :root {
-  --brand-bg: 255 255 255;
-  --brand-text: 15 20 25;
-  --brand-accent: 15 20 25;
-  --brand-secondary: 247 249 249;
-  --brand-highlight: 15 20 25;
-  --brand-divider: rgba(15, 20, 25, 0.1);
-  --brand-card: 255 255 255;
+  --mo-font-display: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
+/* `.mo-root` on <body> carries the ground, the type colour, the font, the one
+   focus treatment and `color-scheme: dark` — the last of which is what stops
+   the browser drawing a white scrollbar down the side of a violet-black page. */
 body {
-  background-color: rgb(var(--brand-bg));
-  color: rgb(var(--brand-text));
+  min-height: 100vh;
 }

@@ -1,24 +1,15 @@
-import { Button, Card, CardHeader, CardTitle, CardContent } from "@atpost/ui"
+import { HomeFeed } from "@/feed/HomeFeed"
 
-// Placeholder home for the commerce zone — proves the shared design system
-// renders here. Replace with the real routes (cart, checkout, orders, products,
-// seller, rfq) moved out of postbook-ui src/app/.
-export default function ShopHome() {
-  return (
-    <main className="mx-auto max-w-3xl p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Social zone</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-brand-text/70">
-            Independent <code>/social</code> Multi-Zone, deployed & scaled on its
-            own, using <code>@atpost/ui</code> + <code>@atpost/api-client</code>.
-            Drop the commerce routes into <code>src/app/</code>.
-          </p>
-          <Button>Shared Button from @atpost/ui</Button>
-        </CardContent>
-      </Card>
-    </main>
-  )
+/**
+ * The Momentum home feed — the platform's front door.
+ *
+ * A server component that renders one client component and nothing else. That
+ * is deliberate rather than lazy: the feed is a session-scoped, cursor-paged,
+ * autoplaying surface, so there is nothing here that could usefully be
+ * rendered on the server that the layout has not already done. The layout
+ * reads the session cookie and seeds the provider, so the first HTML already
+ * knows whether anyone is signed in; this page is the mount point.
+ */
+export default function Home() {
+  return <HomeFeed />
 }

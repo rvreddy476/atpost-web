@@ -1,0 +1,39 @@
+{
+  "name": "@momentum/player",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HLS video, the one-video-at-a-time autoplay policy, and the watch tracker that feeds the payout numbers. Takes a source and emits events; imports no API client, so tube can reuse it with different analytics and it can be tested at all.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings=0"
+  },
+  "dependencies": {
+    "@atpost/types": "workspace:*",
+    "@momentum/analytics": "workspace:*",
+    "hls.js": "^1.7.2"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@atpost/config": "workspace:*",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.8.2",
+    "vitest": "^2.1.0"
+  },
+  "files": [
+    "src"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@momentum/analytics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The 13-event creator-payout contract, and the queue that batches it. Holds no transport: the caller passes a send function, so this package never imports api-client and can be tested without a network.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings=0"
+  },
+  "devDependencies": {
+    "@atpost/config": "workspace:*",
+    "typescript": "^5.8.2",
+    "vitest": "^2.1.0"
+  },
+  "files": [
+    "src"
+  ]
+}
