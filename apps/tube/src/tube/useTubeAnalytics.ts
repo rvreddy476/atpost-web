@@ -210,6 +210,22 @@ export function useTubeAnalytics(): TubeAnalytics {
    * view depends on. It matters more on a long video than on a reel, because
    * the number it carries is bigger. `pagehide` rather than `beforeunload`
    * because bfcache and mobile Safari do not reliably fire the latter.
+   *
+   * ── The unmount flush is not belt-and-braces, and it is new ───────────────
+   * Neither of those events fires for an IN-PAGE navigation, and until the
+   * watch page grew a recommendations rail and a series list there was no way
+   * to go from one video to another without a document load — so the gap could
+   * not be reached. It can now, and it loses exactly the wrong event: the watch
+   * page keys its `<Watch>` on the post id, so following a recommendation
+   * unmounts the tree, @momentum/player fires `play_end` on the way out, the
+   * queue holding it is discarded with the component, and the next video builds
+   * a new one. A whole view's `watched_ms_total` and `max_continuous_watch_ms`
+   * would be thrown away — the numbers a creator is paid from — and nothing
+   * anywhere would look like an error.
+   *
+   * The cleanup runs AFTER the child's, so the `play_end` enqueued during
+   * teardown is already in this queue when this fires. `flush` is fire-and-
+   * forget; the request outlives the component, which is the point.
    */
   useEffect(() => {
     const onLeave = () => void queue.flush()
@@ -218,6 +234,7 @@ export function useTubeAnalytics(): TubeAnalytics {
     return () => {
       document.removeEventListener("visibilitychange", onLeave)
       window.removeEventListener("pagehide", onLeave)
+      onLeave()
     }
   }, [queue])
 
