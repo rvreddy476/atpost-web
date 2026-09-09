@@ -1,7 +1,7 @@
 /**
  * The one URL this feature knows.
  *
- * Third sibling of `src/feed/api.ts` and `src/chrome/api.ts`, and separate for
+ * Third sibling of `src/feed/api.ts` and `@momentum/chrome`'s own api.ts, and separate for
  * the reason both of those give: the packages under packages/ are network-free
  * so reels, tube and a profile grid can reuse them, which only means anything
  * if the wiring they are free OF lives somewhere findable. Search's endpoint is

@@ -24,6 +24,7 @@ module.exports = {
     "./src/**/*.{ts,tsx,mdx}",
     // Include the shared component sources so their classes aren't purged.
     "../../packages/ui/src/**/*.{ts,tsx}",
+    "../../packages/chrome/src/**/*.{ts,tsx}",
     "../../packages/content/src/**/*.{ts,tsx}",
     "../../packages/interactions/src/**/*.{ts,tsx}",
     "../../packages/player/src/**/*.{ts,tsx}",

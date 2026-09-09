@@ -44,12 +44,20 @@ export const metadata: Metadata = {
  * sign-in prompt a beat later — worse here than on a feed, because the thing
  * it paints first is an empty black rectangle.
  *
- * ── No AppFrame, and that is the point of the surface ─────────────────────
- * apps/social mounts a header and two rails in its layout because every route
- * it serves has them. This zone's chrome is 48 pixels of translucent bar drawn
- * OVER the reel by `ReelsViewer`, because a full-screen video surface whose
- * chrome takes layout is not full-screen. The one thing the layout still owns
- * is the session, which every route needs and none should fetch twice.
+ * ── No AppFrame HERE, and that is the point of the split ──────────────────
+ * apps/social mounts the header and both rails in its ROOT layout, because
+ * every route it serves has them. This zone serves two surfaces that do not
+ * agree about that:
+ *
+ *   /reels        the browse page, which wears the ordinary frame — mounted in
+ *                 src/app/(browse)/layout.tsx, a route GROUP, so it gains a
+ *                 layout without gaining a path segment.
+ *   /reels/{id}   the immersive viewer, whose entire chrome is 48 pixels of
+ *                 translucent bar drawn OVER the reel, because a full-screen
+ *                 video surface whose chrome takes layout is not full-screen.
+ *
+ * So this file holds only what both need and neither should have twice: the
+ * document, the fonts, and the session.
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { signedIn } = await readServerSession()

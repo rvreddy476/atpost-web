@@ -2,7 +2,7 @@
  * Where a search result can take you, and where it honestly cannot.
  *
  * The rule and its wording come from `packages/ui/src/RoleSwitcher.tsx` and
- * `src/chrome/destinations.ts`, which made this decision first: a thing the
+ * `@momentum/chrome`'s destinations.ts, which made this decision first: a thing the
  * web cannot open is PRESENT, NAMED and UNUSABLE — never dropped, and never an
  * `href` to a route that would 404. Dropping it silently is the failure those
  * files are written to avoid; someone who searched for a friend by name, saw
@@ -32,7 +32,7 @@
  *
  * ── Data and pure functions only ──────────────────────────────────────────
  * No JSX, no hooks, no network — the same discipline as ./contract.ts and
- * src/chrome/destinations.ts. That is what lets "a result without an href is
+ * @momentum/chrome's destinations.ts. That is what lets "a result without an href is
  * never rendered as a link" be asserted without a browser, and that assertion
  * is the one that matters here.
  */

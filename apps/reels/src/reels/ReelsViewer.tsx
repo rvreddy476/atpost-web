@@ -431,14 +431,34 @@ export function ReelsViewer({ initialPostId }: { initialPostId?: string }) {
         ref={header}
         className="absolute inset-x-0 top-0 z-20 flex h-12 items-center gap-3 bg-gradient-to-b from-black/60 to-transparent px-4"
       >
+        {/*
+          Back to the BROWSE PAGE. Two things about this line were wrong.
+
+          The destination: it said `/social`, from when `/reels` itself WAS
+          this surface and there was nowhere else in the zone to return to. Now
+          that /reels is a page of reels, sending somebody out of the zone
+          entirely — straight past the thing they were browsing — is the wrong
+          end of the journey. Expand and back are one gesture and its undo.
+
+          The href: `<Link href="/social">` never went to /social. `next/link`
+          prefixes the zone's basePath, so it asked for `/reels/social`, which
+          nothing serves — a 404 sitting in the only control on this surface.
+          `"/"` is right for the same reason: Next makes it `/reels`.
+
+          `router.back()` was considered and rejected. It is correct when there
+          is history and silently wrong when there is not: a shared
+          /reels/{id} opened cold has no previous page in this app, and Back
+          would either do nothing or leave the site. A link lands somewhere
+          real either way.
+        */}
         <Link
-          href="/social"
+          href="/"
           className="inline-flex items-center gap-2 rounded-mo-pill px-2 py-1 text-sm font-semibold text-white hover:bg-white/10"
         >
           <ArrowLeft aria-hidden className="h-4 w-4" />
-          {BRAND.name}
+          Reels
         </Link>
-        <span className="font-mo-display text-sm font-semibold text-white/80">Reels</span>
+        <span className="font-mo-display text-sm font-semibold text-white/80">{BRAND.name}</span>
       </header>
 
       {fallback ? (

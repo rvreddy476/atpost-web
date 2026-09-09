@@ -36,7 +36,7 @@ import { HASHTAG_DESTINATION, isReachable, PERSON_DESTINATION } from "./destinat
  *      five minutes, and when it is wrong the symptom is a picture that
  *      disappears on a page nobody is still looking at.
  *   4. The unreachable-destination invariant, which is the same one
- *      `chrome/destinations.test.ts` asserts for navigation: a result is
+ *      `@momentum/chrome`'s destinations.test.ts asserts for navigation: a result is
  *      either a link somewhere real or a control that says why it is not, and
  *      never something in between.
  *
@@ -317,7 +317,7 @@ describe("reading a bucket", () => {
 
 describe("results that cannot be opened", () => {
   /*
-   * The same invariant chrome/destinations.test.ts asserts for navigation, for
+   * The same invariant @momentum/chrome's destinations.test.ts asserts for navigation, for
    * the same reason: `href: null` with no reason renders a dead row with no
    * explanation, and a reason ALONGSIDE an href renders an excuse under a
    * working link. Both are silent.

@@ -30,6 +30,7 @@ import { useSession } from "@atpost/api-client/session"
 import { Avatar } from "@momentum/content"
 import { APP_ONLY_REASON, DESTINATIONS, isActionable } from "./destinations"
 import { RailNavItem } from "./NavItem"
+import { signInHref } from "./zone"
 import type { ViewerProfile } from "./api"
 
 /**
@@ -58,9 +59,12 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 export function LeftRail({
+  basePath,
   profile,
   currentId,
 }: {
+  /** The zone this rail is drawn in, so "Sign in" comes back to it. */
+  basePath: string
   profile: ViewerProfile | null
   currentId: string | null
 }) {
@@ -104,7 +108,7 @@ export function LeftRail({
             Sign in to see your feed and the people you follow.
           </p>
           <a
-            href="/login?redirect=%2Fsocial"
+            href={signInHref(basePath)}
             className="mt-3 inline-block rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
           >
             Sign in

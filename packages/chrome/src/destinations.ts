@@ -37,8 +37,8 @@
  *
  * ── Why a destination with no web zone still appears ──────────────────────
  * The web has four zones and the shell's rewrite table is the whole list:
- * /shop, /admin, /social, /apps (apps/shell/next.config.ts, and the same list
- * again in apps/shell/src/lib/moduleRedirect.ts). Reels, Tube, Friends and
+ * /shop, /admin, /social, /apps, /reels (apps/shell/next.config.ts, and the
+ * same list again in apps/shell/src/lib/moduleRedirect.ts). Tube, Friends and
  * Messages are not among them.
  *
  * The prior art for what to do about that is `packages/ui/src/RoleSwitcher.tsx`
@@ -76,6 +76,17 @@ import { BRAND } from "@momentum/brand"
 /** Why a destination cannot be opened from a browser today. */
 export const APP_ONLY_REASON = `Only in the ${BRAND.mobileApp} — the web has no zone for it yet.`
 
+/**
+ * The product's front door, absolutely.
+ *
+ * The header lockup and every "go to your feed" link point here from whichever
+ * zone they are drawn in, so it is one constant rather than a literal repeated
+ * across two apps. Kept beside DESTINATIONS because it IS the `home` row's
+ * href — the row below reads this constant rather than repeating it, so a
+ * lockup that goes somewhere other than Home is not expressible.
+ */
+export const HOME_PATH = "/social"
+
 export interface AppDestination {
   /** Stable id. Lowercased form of the Android enum member where one exists. */
   id: string
@@ -109,7 +120,7 @@ export const DESTINATIONS: readonly AppDestination[] = [
     id: "home",
     label: "Home",
     icon: House,
-    href: "/social",
+    href: HOME_PATH,
     unavailableReason: null,
     description: "Your feed",
   },

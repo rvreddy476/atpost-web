@@ -38,8 +38,12 @@
  *     shown only when the number is actually above zero.
  *
  * ── The action is a friend request, not a follow ──────────────────────────
- * See ./api. `POST /v1/graph/follow` answers 400 WRONG_ENTITY_TYPE against a
- * user; `POST /v1/graph/connection-request` is the route that takes one.
+ * And NOT because follow is unavailable — that claim stood here, and in ./api,
+ * and it was wrong: `POST /v1/graph/follow {"user_id":…}` answers
+ * `{"status":"followed"}` for a person, verified live. These rows are the
+ * ranker's FRIEND candidates and this button says "Add", so the honest wire
+ * for it is `POST /v1/graph/connection-request`, which asks. ./api has the
+ * full correction.
  *
  * ── The events the founder also asked for ─────────────────────────────────
  * Deliberately absent. There is no events endpoint on this gateway to ask —

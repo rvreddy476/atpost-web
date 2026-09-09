@@ -3,7 +3,7 @@ import { Figtree, Outfit } from "next/font/google"
 import { BRAND, zoneTitle } from "@momentum/brand"
 import { readServerSession } from "@atpost/api-client/server"
 import { SessionProvider } from "@atpost/api-client/session"
-import { AppFrame } from "@/chrome/AppFrame"
+import { AppFrame } from "@momentum/chrome"
 import "./globals.css"
 
 /**
@@ -61,7 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           and color-scheme: dark so native controls and the scrollbar follow. */}
       <body className="mo-root">
         <SessionProvider initialSignedIn={signedIn}>
-          <AppFrame>{children}</AppFrame>
+          <AppFrame basePath="/social">{children}</AppFrame>
         </SessionProvider>
       </body>
     </html>

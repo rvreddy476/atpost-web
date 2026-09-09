@@ -161,10 +161,21 @@ export const MAX_QUERY_BYTES = 500
  * Trimmed, because the service trims before deciding a query is empty and a
  * page that renders "results for '   '" while the service saw nothing is two
  * different opinions about the same string.
+ *
+ * ── It is DEFINED in @momentum/chrome now, and re-exported here ───────────
+ * The header's search box is what puts this string on the wire, and the box
+ * moved into a package when the chrome did — apps/reels mounts the same
+ * header, has no results page of its own, and may not import one from
+ * apps/social. So the implementation went with the producer and this line
+ * keeps the consumer's imports where they were. The point of the re-export is
+ * that there is still exactly ONE trim rule, rather than two that agree right
+ * up until somebody edits one of them.
+ *
+ * Nothing else in this file moved. `queryTooLong`, `MAX_QUERY_BYTES` and the
+ * row-to-card mapping are search-service's wire shape and this page's
+ * business; the chrome neither reads nor enforces any of them.
  */
-export function normalizeQuery(raw: string | null | undefined): string {
-  return (raw ?? "").trim()
-}
+export { normalizeQuery } from "@momentum/chrome"
 
 /**
  * Would the service reject this for length?

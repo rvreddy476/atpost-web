@@ -31,6 +31,7 @@ const nextConfig = {
   transpilePackages: [
     ...(base.transpilePackages ?? []),
     "@momentum/analytics",
+    "@momentum/chrome",
     "@momentum/content",
     "@momentum/interactions",
     "@momentum/player",

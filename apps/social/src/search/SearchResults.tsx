@@ -5,7 +5,7 @@
  *
  * Everything visible here that can be shared already is: the card, the pager
  * and the loading skeleton come from `@momentum/content`, the avatar from the
- * same place, the disabled-row pattern from `src/chrome/NavItem.tsx`. What
+ * same place, the disabled-row pattern from `@momentum/chrome`'s NavItem.tsx. What
  * this file adds is the part that cannot be shared — which endpoint, what the
  * URL means, and which of the four outcomes is on screen.
  *
@@ -53,7 +53,7 @@
  * under someone who is reading titles is the wrong default for the surface.
  * Every card still plays on demand — `active` gates autoplay, not playback —
  * and this page therefore also sidesteps the sticky-header measurement error
- * documented at the top of `src/chrome/AppHeader.tsx` rather than inheriting
+ * documented at the top of `@momentum/chrome`'s AppHeader.tsx rather than inheriting
  * it.
  * ═══════════════════════════════════════════════════════════════════════════
  */

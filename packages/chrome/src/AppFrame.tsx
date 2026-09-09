@@ -51,6 +51,15 @@
  * three-column layout breaks and it does not show up until real content
  * arrives.
  *
+ * ── The centre track is 600px in every zone that mounts this ──────────────
+ * Including reels, whose browse grid could plausibly have asked for more room.
+ * It does not get its own width, and that is the point of the frame: the
+ * founder's ask was that Reels "load normally … as Feed page", and a centre
+ * column that is 600px on one tab and 840px on the next is the opposite of
+ * that. Three tiles across 600px is 184px each — the same order as a profile
+ * grid cell on any of the products this borrows from — and the grid decides
+ * its own column count against the track rather than the track bending for it.
+ *
  * ── One request for the viewer, not two ───────────────────────────────────
  * `/v1/profiles/me` is fetched HERE and handed to both the header and the
  * rail. Two components each calling `useSomething()` is how a page ends up
@@ -66,29 +75,27 @@ import { AppHeader } from "./AppHeader"
 import { LeftRail } from "./LeftRail"
 import { RightRail } from "./RightRail"
 import { currentDestinationId } from "./destinations"
+import { zonePath } from "./zone"
 import { fetchViewerProfile, type ViewerProfile } from "./api"
 
-/**
- * This zone's prefix, so `usePathname()` can be compared with the absolute
- * hrefs in ./destinations.
- *
- * Next strips the basePath from `usePathname()`, so on /social it returns "/"
- * and a naive comparison marks nothing current. The value comes from
- * NEXT_PUBLIC_API_BASE_URL because that variable is ALREADY required to equal
- * this zone's basePath — apps/social/.env.local says so at length, and the
- * feed's HLS rewriting depends on it too. One answer per deployment beats a
- * second constant that can disagree with the first.
- */
-function zonePath(pathname: string | null): string {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL || ""
-  if (!pathname) return base || "/"
-  return pathname === "/" ? base || "/" : `${base}${pathname}`
+export interface AppFrameProps {
+  /**
+   * The basePath of the zone this frame is mounted in — "/social", "/reels".
+   *
+   * Required, and stated at each mount point rather than read out of
+   * NEXT_PUBLIC_API_BASE_URL as it used to be. ./zone.ts carries the whole
+   * argument; the short version is that a component drawing links into five
+   * zones has to be TOLD which one it is in, because getting it wrong produces
+   * a header that looks perfect and navigates nowhere.
+   */
+  basePath: string
+  children: React.ReactNode
 }
 
-export function AppFrame({ children }: { children: React.ReactNode }) {
+export function AppFrame({ basePath, children }: AppFrameProps) {
   const { signedIn, status: sessionStatus } = useSession()
   const pathname = usePathname()
-  const currentId = currentDestinationId(zonePath(pathname))
+  const currentId = currentDestinationId(zonePath(basePath, pathname))
 
   const [profile, setProfile] = useState<ViewerProfile | null>(null)
 
@@ -116,7 +123,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <AppHeader displayName={profile?.display_name} currentId={currentId} />
+      <AppHeader
+        basePath={basePath}
+        displayName={profile?.display_name}
+        currentId={currentId}
+      />
       <div
         className={[
           "mx-auto grid w-full max-w-[1600px] justify-center gap-x-6 px-4",
@@ -125,7 +136,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           "xl:grid-cols-[268px_minmax(0,600px)_300px]",
         ].join(" ")}
       >
-        <LeftRail profile={profile} currentId={currentId} />
+        <LeftRail basePath={basePath} profile={profile} currentId={currentId} />
         {/* `min-w-0` for the same reason `minmax(0, …)` is on the track: a
             grid item's default `min-width: auto` refuses to shrink below its
             content, and one wide child would push the rails off screen. */}

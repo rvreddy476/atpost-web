@@ -70,6 +70,20 @@ export interface ReelsFeed {
   retry: () => void
   /** Tell the feed which reel is on screen, so it can prefetch ahead of it. */
   noteIndex: (index: number) => void
+  /**
+   * Ask for the next page outright.
+   *
+   * The browse grid's pager, and only the browse grid's. The immersive
+   * scroller uses `noteIndex`, because its trigger is distance-in-ITEMS from
+   * the reel being watched — see the header — while the grid is an ordinary
+   * scrolling column with a sentinel under it, which is a question about
+   * pixels that `@momentum/content`'s InfiniteFeed already answers.
+   *
+   * Calling this while a page is in flight, after the feed has ended, or after
+   * a failure nobody has retried, does nothing: `load` has held all three
+   * guards since before this existed.
+   */
+  loadMore: () => void
   /** Replace one item in place — an optimistic like or save landing. */
   patch: (id: string, change: Partial<FeedItem>) => void
 }
@@ -195,6 +209,10 @@ export function useReelsFeed(deepLinkId?: string, enabled = true): ReelsFeed {
     [ended, items.length, load]
   )
 
+  const loadMore = useCallback(() => {
+    void load()
+  }, [load])
+
   const patch = useCallback((id: string, change: Partial<FeedItem>) => {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...change } : item)))
   }, [])
@@ -216,6 +234,7 @@ export function useReelsFeed(deepLinkId?: string, enabled = true): ReelsFeed {
     deepLinkIndex: deepLinkIndex === -1 ? null : deepLinkIndex,
     retry,
     noteIndex,
+    loadMore,
     patch,
   }
 }

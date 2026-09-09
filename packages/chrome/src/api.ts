@@ -1,12 +1,24 @@
 /**
- * Every URL the chrome around the feed knows.
+ * Every URL the chrome knows. Three of them, and this is the whole list.
  *
- * The sibling of `src/feed/api.ts`, and kept separate for the same reason that
- * file exists at all: the packages under packages/ are network-free so reels
- * and tube can reuse them, which only means anything if the wiring they are
- * free OF lives somewhere findable. The feed's endpoints are the feed's; the
- * rails' endpoints are these. Two short files beat one long one whose name is
- * a lie about half its contents.
+ * ── The one package that reaches the network, and why it is allowed to ────
+ * Every other @momentum/* package is network-free, deliberately: that is what
+ * lets @momentum/player be tested without a server and @momentum/content be
+ * rendered by a zone that fetches however it likes. The chrome is different in
+ * kind, because its subject IS the viewer — the rail draws their name and
+ * their counts, the menu signs them out, and the suggestions rail is a list of
+ * real people that has to come from somewhere. A prop-driven version would be
+ * these three requests threaded identically through apps/social and
+ * apps/reels, which is the duplication the package removes.
+ *
+ * So the exception is narrow and stated: `useSession()` / `signOut()` from
+ * @atpost/api-client/session, and the three routes below. Nothing else, and
+ * this is not a precedent for the other packages.
+ *
+ * The zone's OWN endpoints stay in the zone — apps/social/src/feed/api.ts and
+ * apps/reels/src/reels/api.ts — for the same reason this file is separate from
+ * them: the feed's endpoints are the feed's, the rails' are these, and two
+ * short files beat one long one whose name is a lie about half its contents.
  *
  * ── The envelope is not unwrapped for you ─────────────────────────────────
  * Same as the feed's: `@atpost/api-client` is a plain axios instance and does
@@ -33,10 +45,33 @@
  *     tags `friend` items `entityType: "user"`.
  *
  *   · The action on a person is therefore a FRIEND REQUEST, not a follow.
- *     `POST /v1/graph/follow` answers 400 WRONG_ENTITY_TYPE — "follow is only
- *     valid against a page" — so wiring the obvious-looking route to a list of
- *     people would have produced a button that fails every time it is pressed.
- *     `POST /v1/graph/connection-request` is the one that takes a user.
+ *
+ *     ── A correction, 2026-09-09 ──────────────────────────────────────────
+ *     What stood here said `POST /v1/graph/follow` answers
+ *     400 WRONG_ENTITY_TYPE against a person, because "follow is only valid
+ *     against a page". That is FALSE, and it was never true. Verified against
+ *     the running gateway, in both directions:
+ *
+ *         POST /v1/graph/follow   {"user_id":"<uuid>"}
+ *           -> 200 {"data":{"status":"followed"}}
+ *         POST /v1/graph/unfollow {"user_id":"<uuid>"}
+ *           -> 200 {"data":{"status":"unfollowed"}}
+ *
+ *     Follow takes a USER. It is the route behind every Follow button on a
+ *     reel — see `setFollow` in apps/reels/src/reels/api.ts, which records the
+ *     same live check and notes that an earlier WRONG_ENTITY_TYPE came from
+ *     sending the right shape to the wrong PLACE rather than from following a
+ *     person.
+ *
+ *     The reason this rail still sends a connection request is a product
+ *     reason and not a wire one, and that difference is the point. These rows
+ *     are `type=friend` — the ranker's FRIEND candidates — and the control
+ *     over them says "Add". A friendship is mutual and needs the other
+ *     person's consent, which is what `POST /v1/graph/connection-request`
+ *     creates; quietly following them instead would be a different act
+ *     performed under a label promising this one. If this rail ever grows a
+ *     `type=follow` section, that section's button is a follow and THIS
+ *     endpoint is the wrong one for it.
  */
 
 import api from "@atpost/api-client"

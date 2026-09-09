@@ -890,7 +890,7 @@ function useTopChromeInset(): number {
  *
  * This used to BE the column — `<main className="mx-auto max-w-xl">`, its own
  * width, its own centring, its own page padding. It is not any more: the zone
- * grew a three-column frame (src/chrome/AppFrame.tsx) and that frame owns the
+ * grew a three-column frame (@momentum/chrome) and that frame owns the
  * `<main>`, the centre track's 600px cap and the page's rhythm. Two things
  * deciding how wide the feed is would have been two things to disagree, and
  * the nested `<main>` would have been a second landmark of the same kind

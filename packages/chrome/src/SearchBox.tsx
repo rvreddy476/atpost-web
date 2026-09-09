@@ -25,10 +25,25 @@
  * the bundle has not arrived, or has failed, pressing Enter still lands on the
  * right page rather than doing nothing at all.
  *
- * The action's prefix comes from NEXT_PUBLIC_API_BASE_URL, which this zone
- * already requires to equal its own basePath (see `zonePath` in AppFrame, and
- * apps/social/.env.local). One answer per deployment to "where is this zone",
- * rather than a second constant that can disagree with the first.
+ * ── There is ONE results page, and it is not in every zone ────────────────
+ * This is the thing that changed when the chrome became a package. The action
+ * used to be `${NEXT_PUBLIC_API_BASE_URL}/search` — this zone's own /search —
+ * and the submit handler used to `router.push("/search?q=…")`. Both are
+ * correct in apps/social and both are wrong in apps/reels, which has no
+ * /search route and never will: `SEARCH_PATH` is `/social/search`, full stop,
+ * because a second results page would be a second opinion about one index.
+ *
+ * So the form's `action` is that absolute path in every zone — which is also
+ * what makes the no-JavaScript path work from reels — and the handler asks
+ * `zoneRelative` whether the destination is inside the zone it is running in:
+ *
+ *   · inside  (social) → `router.push("/search?q=…")`, a client transition.
+ *   · outside (reels)  → `window.location.assign("/social/search?q=…")`, a
+ *     document navigation, because a client-side push in the reels zone would
+ *     resolve against its basePath and ask for /reels/social/search.
+ *
+ * The `preventDefault` in the second branch is not decoration: without it the
+ * form submits AND the assignment runs, which is two navigations racing.
  *
  * ── A searchbox this time, and not a button ───────────────────────────────
  * The old control announced itself as a button because that is what it was:
@@ -43,14 +58,9 @@ import { Suspense, useCallback } from "react"
 import { Search } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { BRAND } from "@momentum/brand"
-import { normalizeQuery } from "@/search/contract"
+import { SEARCH_PATH, normalizeQuery, searchHref, zoneRelative } from "./zone"
 
-/** Where the form posts to without JavaScript. Absolute, zone-prefixed. */
-function searchAction(): string {
-  return `${process.env.NEXT_PUBLIC_API_BASE_URL || ""}/search`
-}
-
-function SearchForm({ initialQuery }: { initialQuery: string }) {
+function SearchForm({ basePath, initialQuery }: { basePath: string; initialQuery: string }) {
   const router = useRouter()
 
   const onSubmit = useCallback(
@@ -66,19 +76,30 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
         event.preventDefault()
         return
       }
-      // Everything else is a client-side transition. `preventDefault` runs
-      // only once we are certain we can do better than the browser would.
+      // From here the browser is not allowed to submit: either we transition
+      // client-side, or we navigate ourselves. Doing both is two navigations
+      // racing for the same tab.
       event.preventDefault()
-      router.push(`/search?q=${encodeURIComponent(query)}`)
+      const target = searchHref(query)
+      const inside = zoneRelative(basePath, target)
+      if (inside) {
+        router.push(inside)
+        return
+      }
+      // Another zone. `router.push` would prefix this zone's basePath.
+      window.location.assign(target)
     },
-    [router]
+    [basePath, router]
   )
 
   return (
     <form
       // The search landmark, so "skip to search" and rotor navigation find it.
       role="search"
-      action={searchAction()}
+      // Absolute, and the same in every zone — this is what a browser with no
+      // JavaScript submits, and it has to reach the one results page from
+      // wherever the header is drawn.
+      action={SEARCH_PATH}
       method="get"
       onSubmit={onSubmit}
       className={[
@@ -143,15 +164,15 @@ function SearchForm({ initialQuery }: { initialQuery: string }) {
  * that local: the fallback is the identical form with an empty box, so the
  * only difference anyone can perceive is that the field fills in.
  */
-function PrefilledSearchForm() {
+function PrefilledSearchForm({ basePath }: { basePath: string }) {
   const params = useSearchParams()
-  return <SearchForm initialQuery={normalizeQuery(params.get("q"))} />
+  return <SearchForm basePath={basePath} initialQuery={normalizeQuery(params.get("q"))} />
 }
 
-export function SearchBox() {
+export function SearchBox({ basePath }: { basePath: string }) {
   return (
-    <Suspense fallback={<SearchForm initialQuery="" />}>
-      <PrefilledSearchForm />
+    <Suspense fallback={<SearchForm basePath={basePath} initialQuery="" />}>
+      <PrefilledSearchForm basePath={basePath} />
     </Suspense>
   )
 }

@@ -16,8 +16,23 @@
  * action that will not work.
  */
 
-import Link from "next/link"
 import { BRAND } from "@momentum/brand"
+import { HOME_PATH, signInHref } from "@momentum/chrome"
+import { ZONE } from "@/zone"
+
+/*
+ * ── Neither link here is `next/link` any more, and both were ──────────────
+ * `next/link` prefixes this zone's basePath onto every href it is given, so
+ * `<Link href="/social">` asked for `/reels/social` — a 404 behind the only
+ * button on the empty state, which is the screen a brand-new account sees.
+ * `<Link href="/login?redirect=/reels">` asked for `/reels/login`, which
+ * survived only because `createZoneConfig` happens to register a redirect at
+ * exactly that path: right by luck rather than by rule.
+ *
+ * The rule, which @momentum/chrome's NavItem.tsx wrote down first: anything
+ * outside this zone is a plain `<a>` to an absolute path. Both destinations
+ * are, and both spellings now come from the chrome so there is one of each.
+ */
 
 function Frame({ children }: { children: React.ReactNode }) {
   return (
@@ -63,9 +78,9 @@ export function ReelsEmpty() {
         Reels are ranked for each account, so this fills up as you follow people and watch
         things. Nothing has been picked for you so far.
       </Body>
-      <Link href="/social" className={ACTION}>
+      <a href={HOME_PATH} className={ACTION}>
         Go to your feed
-      </Link>
+      </a>
     </Frame>
   )
 }
@@ -93,9 +108,9 @@ export function ReelsSignedOut() {
     <Frame>
       <Title>Sign in to watch reels</Title>
       <Body>Reels are ranked for your account, so {BRAND.name} needs to know who you are.</Body>
-      <Link href="/login?redirect=/reels" className={ACTION}>
+      <a href={signInHref(ZONE)} className={ACTION}>
         Sign in
-      </Link>
+      </a>
     </Frame>
   )
 }

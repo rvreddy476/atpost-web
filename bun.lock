@@ -109,6 +109,7 @@
         "@atpost/ui": "workspace:*",
         "@momentum/analytics": "workspace:*",
         "@momentum/brand": "workspace:*",
+        "@momentum/chrome": "workspace:*",
         "@momentum/content": "workspace:*",
         "@momentum/interactions": "workspace:*",
         "@momentum/player": "workspace:*",
@@ -160,6 +161,7 @@
         "@atpost/ui": "workspace:*",
         "@momentum/analytics": "workspace:*",
         "@momentum/brand": "workspace:*",
+        "@momentum/chrome": "workspace:*",
         "@momentum/content": "workspace:*",
         "@momentum/interactions": "workspace:*",
         "@momentum/player": "workspace:*",
@@ -227,6 +229,32 @@
         "@atpost/config": "workspace:*",
         "typescript": "^5.8.2",
         "vitest": "2.1.9",
+      },
+    },
+    "packages/chrome": {
+      "name": "@momentum/chrome",
+      "version": "0.1.0",
+      "dependencies": {
+        "@atpost/api-client": "workspace:*",
+        "@momentum/brand": "workspace:*",
+        "@momentum/content": "workspace:*",
+      },
+      "devDependencies": {
+        "@atpost/config": "workspace:*",
+        "@types/react": "^19.2.2",
+        "@types/react-dom": "^19.2.2",
+        "lucide-react": "^0.460.0",
+        "next": "^15.0.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "typescript": "^5.8.2",
+        "vitest": "2.1.9",
+      },
+      "peerDependencies": {
+        "lucide-react": ">=0.400.0",
+        "next": ">=14",
+        "react": ">=18",
+        "react-dom": ">=18",
       },
     },
     "packages/config": {
@@ -546,6 +574,8 @@
     "@momentum/analytics": ["@momentum/analytics@workspace:packages/analytics"],
 
     "@momentum/brand": ["@momentum/brand@workspace:packages/brand"],
+
+    "@momentum/chrome": ["@momentum/chrome@workspace:packages/chrome"],
 
     "@momentum/content": ["@momentum/content@workspace:packages/content"],
 

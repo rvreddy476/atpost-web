@@ -19,10 +19,13 @@
  * size and wrong at every other.
  *
  * Nothing about the number lives in this file. `useTopChromeInset` in
- * src/feed/HomeFeed.tsx MEASURES the real chrome by hit-testing the top edge
- * of the viewport, so it cannot drift from this header the way a shared
- * constant would — see its own note for why it is a photograph rather than a
- * reading of the markup.
+ * apps/social/src/feed/HomeFeed.tsx MEASURES the real chrome by hit-testing
+ * the top edge of the viewport, so it cannot drift from this header the way a
+ * shared constant would — see its own note for why it is a photograph rather
+ * than a reading of the markup. That is also why this header can now be
+ * mounted in a second zone without an inset constant following it around:
+ * apps/reels' browse page plays nothing and therefore needs no inset at all,
+ * and its immersive viewer measures its own 48px bar off the element.
  *
  * ── Why the header does not scroll away ───────────────────────────────────
  * Below 1024px the left rail is gone, so this bar is the only navigation on
@@ -32,10 +35,11 @@
 
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
-import { DESTINATIONS } from "./destinations"
+import { DESTINATIONS, HOME_PATH } from "./destinations"
 import { HeaderNavIcon } from "./NavItem"
 import { ProfileMenu } from "./ProfileMenu"
 import { SearchBox } from "./SearchBox"
+import { signInHref } from "./zone"
 
 /**
  * ── Search is no longer inert ─────────────────────────────────────────────
@@ -56,9 +60,12 @@ import { SearchBox } from "./SearchBox"
  */
 
 export function AppHeader({
+  basePath,
   displayName,
   currentId,
 }: {
+  /** The zone this header is drawn in. See ./zone.ts. */
+  basePath: string
   displayName?: string | null
   currentId: string | null
 }) {
@@ -68,8 +75,13 @@ export function AppHeader({
     <header className="sticky top-0 z-40 border-b border-mo bg-mo-bg">
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-3 px-4">
         {/* ── Left: the lockup and search ───────────────────────────────── */}
+        {/* A plain <a> and an absolute path, because from the reels zone this
+            is a different Next app behind the shell's rewrite table — and
+            `next/link` would prefix this zone's basePath and ask for
+            /reels/social. See ./NavItem.tsx, which made the same decision
+            first, and ./zone.ts for the arithmetic. */}
         <a
-          href="/social"
+          href={HOME_PATH}
           aria-label={`${BRAND.name} home`}
           className="flex shrink-0 items-center gap-2"
         >
@@ -99,7 +111,7 @@ export function AppHeader({
           </span>
         </a>
 
-        <SearchBox />
+        <SearchBox basePath={basePath} />
 
         {/* ── Centre: the destinations ──────────────────────────────────── */}
         <nav
@@ -118,10 +130,13 @@ export function AppHeader({
         {/* ── Right: you ────────────────────────────────────────────────── */}
         <div className="ml-auto flex shrink-0 items-center">
           {signedIn ? (
-            <ProfileMenu displayName={displayName} />
+            <ProfileMenu basePath={basePath} displayName={displayName} />
           ) : (
             <a
-              href="/login?redirect=%2Fsocial"
+              // Back to the zone they were sent away from, not always to
+              // /social — somebody who hits Sign in from Reels should land
+              // back on Reels.
+              href={signInHref(basePath)}
               className="rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-surface"
             >
               Sign in

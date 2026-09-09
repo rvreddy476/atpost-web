@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import { BRAND } from "@momentum/brand"
-import { APP_ONLY_REASON, DESTINATIONS, currentDestinationId, isActionable } from "./destinations"
+import {
+  APP_ONLY_REASON,
+  DESTINATIONS,
+  HOME_PATH,
+  currentDestinationId,
+  isActionable,
+} from "./destinations"
 
 /**
  * These assert the two things about this list that would ship as bugs.
@@ -81,6 +87,24 @@ describe("DESTINATIONS", () => {
 
   it("names the app rather than spelling the brand out", () => {
     expect(APP_ONLY_REASON).toContain(BRAND.mobileApp)
+  })
+
+  it("sends the header lockup to the same place the Home row goes", () => {
+    // The lockup, "go to your feed" in the reels empty state, and the Home
+    // row are one destination. They read one constant so they cannot drift —
+    // and this is the assertion that the constant is still the row's href.
+    const home = DESTINATIONS.find((d) => d.id === "home")
+    expect(home?.href).toBe(HOME_PATH)
+    expect(LIVE_ZONES).toContain(HOME_PATH)
+  })
+
+  it("still has no zone for Tube, which is what the video tab is waiting on", () => {
+    // Reels became a link the day apps/reels existed. Tube has not, and this
+    // is the line that has to change when it does — together with the shell's
+    // `zones` table and `moduleHomes`. Delete this test then, do not weaken it.
+    const tube = DESTINATIONS.find((d) => d.id === "tube")
+    expect(tube?.href).toBeNull()
+    expect(tube?.unavailableReason).toBe(APP_ONLY_REASON)
   })
 })
 

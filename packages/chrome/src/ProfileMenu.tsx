@@ -33,12 +33,14 @@
  * ── Then a full page load, deliberately ───────────────────────────────────
  * Not `router.push`. /login is served by the SHELL, a different Next app
  * behind a rewrite, so a client transition would ask this zone for a route it
- * does not have. `?redirect=/social` brings the person back here afterwards,
- * and it survives the shell's allowlist because /social is one of the four
- * zones on it (apps/shell/src/lib/moduleRedirect.ts).
+ * does not have. `?redirect=<basePath>` brings the person back to the zone
+ * they signed out OF — the feed from /social, Reels from /reels — and it
+ * survives the shell's allowlist by construction: `moduleHomes` in
+ * apps/shell/src/lib/moduleRedirect.ts is the same five prefixes the rewrite
+ * table carries, so a zone that can be reached at all is on it.
  *
  * ── Profile and Settings are not links ────────────────────────────────────
- * There is no /me and no /settings zone — the shell's rewrite table has four
+ * There is no /me and no /settings zone — the shell's rewrite table has five
  * entries and neither is among them. Same treatment, same reason, same prior
  * art as every other web-less destination here: present, named, focusable,
  * `aria-disabled`, and honest about why.
@@ -62,11 +64,23 @@ import { CircleUser, LogOut, Settings } from "lucide-react"
 import { useSession } from "@atpost/api-client/session"
 import { Avatar } from "@momentum/content"
 import { APP_ONLY_REASON } from "./destinations"
+import { signInHref } from "./zone"
 
-/** Where a signed-out browser is sent, and how it gets back. */
-const SIGN_IN_URL = "/login?redirect=%2Fsocial"
-
-export function ProfileMenu({ displayName }: { displayName?: string | null }) {
+export function ProfileMenu({
+  basePath,
+  displayName,
+}: {
+  /**
+   * The zone this menu is drawn in.
+   *
+   * Where a signed-out browser is sent, and how it gets back. This used to be
+   * a frozen `/login?redirect=%2Fsocial`, which was correct while the chrome
+   * existed in one zone only; signing out of Reels and being returned to the
+   * feed is a small lie about where somebody was.
+   */
+  basePath: string
+  displayName?: string | null
+}) {
   const { user, signOut } = useSession()
   const baseId = useId()
   const menuId = `${baseId}-menu`
@@ -115,9 +129,9 @@ export function ProfileMenu({ displayName }: { displayName?: string | null }) {
       // the local cookie and the broadcast happen either way — so there is no
       // outcome in which staying on a feed this browser can no longer load is
       // the right answer.
-      window.location.assign(SIGN_IN_URL)
+      window.location.assign(signInHref(basePath))
     }
-  }, [signOut, signingOut])
+  }, [basePath, signOut, signingOut])
 
   const name = displayName || user?.email || "Your account"
   const row =
