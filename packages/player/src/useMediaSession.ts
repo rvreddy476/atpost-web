@@ -131,13 +131,17 @@ export function useMediaSession({
     /**
      * `play` — the OS asking for sound.
      *
-     * Note what this does NOT do: unmute. The feed autoplays muted because no
-     * browser will start an unmuted video unprompted, and mute is a
-     * feed-global control the zone owns, so flipping it from a lock-screen
-     * button would silently change every other video too. The practical
-     * consequence is worth knowing: Chrome will not even surface these
-     * controls until the element is unmuted and audible, so in a muted feed
-     * this handler is registered and never called. Once someone unmutes, it
+     * Note what this does NOT do: unmute. The first autoplay of a session is
+     * muted because no browser will start an unmuted video unprompted, and
+     * sound belongs to the player and to the person — `userMuted` in
+     * `MomentumVideo`, and the document-wide default in `soundPreference.ts`.
+     * A lock-screen button reaching past both would be the one place in the
+     * product that overrules somebody's own choice on a video.
+     *
+     * The practical consequence is worth knowing: Chrome will not surface
+     * these controls at all until the element is audible, so on the first,
+     * silent video this handler is registered and never called. From the
+     * second video — once the document has been touched and sound is on — it
      * works.
      */
     applyActionHandler(claim, "play", () => {

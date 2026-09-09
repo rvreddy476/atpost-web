@@ -42,6 +42,18 @@ export interface Failure {
   status?: number
   /** `error.code` from the gateway envelope, when there was one. */
   code?: string
+  /**
+   * `error.message` from the envelope, and it is normally NOT worth reading:
+   * a code is a contract and a message is prose that can change on any deploy.
+   *
+   * It is carried because one route leaves no alternative. Poll voting answers
+   * every rejection it has under a single `VOTE_ERROR` — a duplicate, a closed
+   * poll and an option id from somewhere else all arrive under it — so the
+   * only thing separating "you already voted", which is good news, from a real
+   * failure is the text. `isAlreadyVoted` in @momentum/content is where that
+   * is decided, conservatively and in one place.
+   */
+  message?: string
 }
 
 /**
@@ -53,11 +65,12 @@ export interface Failure {
  */
 export function failureOf(error: unknown): Failure {
   const e = error as
-    | { response?: { status?: number; data?: { error?: { code?: string } } } }
+    | { response?: { status?: number; data?: { error?: { code?: string; message?: string } } } }
     | undefined
   return {
     status: e?.response?.status,
     code: e?.response?.data?.error?.code,
+    message: e?.response?.data?.error?.message,
   }
 }
 

@@ -131,19 +131,96 @@ export function dragTarget(
   return clampPage(startPage, count)
 }
 
+/**
+ * Where a press on an arrow — or on the pip row's own step — lands, or null
+ * for "there is nowhere to go, so there is no button".
+ *
+ * Deliberately expressed in terms of `keyTarget` rather than beside it. "What
+ * does next mean at the last page" is ONE question, and answering it twice is
+ * how a carousel ends up with an arrow that is live at an end the arrow keys
+ * refuse to cross. Null is what makes the arrow ABSENT rather than disabled —
+ * see the render site for why that is the rule here.
+ */
+export function stepTarget(
+  direction: "prev" | "next",
+  current: number,
+  count: number
+): number | null {
+  return keyTarget(direction === "next" ? "ArrowRight" : "ArrowLeft", current, count)
+}
+
+/**
+ * Whether the arrows and the pip buttons are on screen.
+ *
+ * The player's rule, minus the half a carousel has no equivalent for. There is
+ * nothing playing here, so `chromeVisible`'s "a stopped video always shows its
+ * transport" clause has no meaning; what is left is the part that matters —
+ * controls appear when a pointer is over the frame or a keyboard has focused
+ * it, and fade CONTROLS_HIDE_MS after the last movement.
+ *
+ * ── Touch is deliberately not in this list ────────────────────────────────
+ * A finger already has the gesture this whole component is built around, and
+ * it is the better one: swiping a photograph is direct, momentum-carrying and
+ * needs no target to hit. Revealing arrows on a tap would put two 36px buttons
+ * over the left and right edges of a video whose own transport is summoned by
+ * exactly the same tap, and the first thing a person would do with them is
+ * turn the page while trying to pause. So a touch surface keeps the swipe and
+ * gets no chrome, which is the behaviour it has today and the right one.
+ */
+export interface CarouselChrome {
+  /** A MOUSE is over the frame. Never set for a touch or a pen. */
+  hovered: boolean
+  /** The track or one of the controls has keyboard focus. */
+  focused: boolean
+  /** Something moved within CONTROLS_HIDE_MS — the auto-hide timer as a flag. */
+  recentlyMoved: boolean
+}
+
+export function controlsVisible(chrome: CarouselChrome): boolean {
+  if (chrome.focused) return true
+  return chrome.hovered && chrome.recentlyMoved
+}
+
 /** The "2/5" pill, top-right. 1-based, because it is read by a person. */
 export function pillLabel(current: number, count: number): string {
   return `${clampPage(current, count) + 1}/${count}`
 }
 
+/** What one arrow calls itself. Direction only: the pips carry the position. */
+export function arrowLabel(direction: "prev" | "next"): string {
+  return direction === "next" ? "Next photo" : "Previous photo"
+}
+
+/**
+ * What one pip calls itself, now that pips are real buttons.
+ *
+ * ── How this composes with `slideLabel`, which says almost the same thing ──
+ * The two are not duplicates and the difference is the whole reason the pips
+ * could become interactive at all. `slideLabel` names a THING — "Photo 3 of 5"
+ * — and is read when a page arrives. This names an ACTION — "Show photo 3 of
+ * 5" — and is read when a person lands on the control that performs it. A
+ * screen reader announcing both is announcing two different facts, which is
+ * what an interactive dot has to do; announcing "Photo 3 of 5, button" twice
+ * would be the duplication the old `aria-hidden` was avoiding.
+ *
+ * The current pip additionally carries `aria-current`, so "which one am I on"
+ * comes from the control itself rather than from counting.
+ */
+export function pipLabel(index: number, count: number, kind: "image" | "video"): string {
+  const noun = kind === "video" ? "video" : "photo"
+  return `Show ${noun} ${index + 1} of ${count}`
+}
+
 /**
  * What one page calls itself.
  *
- * This is where the position IS announced, and it is the counterpart to the
- * pips being hidden: a screen-reader user arriving on a page hears "Photo 2 of
- * 5" followed by that photograph's own alt text, once, at the moment it
- * becomes relevant. Announcing the same thing again from a row of dots adds
- * nothing and interrupts the part that does.
+ * This is where the position of the CONTENT is announced: a screen-reader user
+ * arriving on a page hears "Photo 2 of 5" followed by that photograph's own alt
+ * text, once, at the moment it becomes relevant.
+ *
+ * The pips used to be `aria-hidden` so that this was the only place it was
+ * said. They are controls now, and `pipLabel` explains how the two coexist
+ * without either of them repeating the other.
  */
 export function slideLabel(index: number, count: number, kind: "image" | "video"): string {
   const noun = kind === "video" ? "Video" : "Photo"

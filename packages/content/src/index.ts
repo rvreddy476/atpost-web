@@ -26,15 +26,43 @@ export type { PostMediaProps } from "./PostMedia"
 export { PostCarousel } from "./PostCarousel"
 export type { PostCarouselProps } from "./PostCarousel"
 export {
+  arrowLabel,
   carouselLabel,
+  controlsVisible,
   dragTarget,
   isPageActive,
   isPageRendered,
   keyTarget,
   pageFromScroll,
   pillLabel,
+  pipLabel,
   slideLabel,
+  stepTarget,
 } from "./carousel"
+export type { CarouselChrome } from "./carousel"
+
+/**
+ * The poll, and its arithmetic.
+ *
+ * Same arrangement as the comment sheet: the component is prop-driven and
+ * reaches no network, and the two things a zone needs to wire it — the
+ * already-voted classification and the error table — are exported beside it so
+ * the zone's api.ts can hold the URLs without also holding the vocabulary.
+ */
+export { PostPoll } from "./PostPoll"
+export type { PostPollProps } from "./PostPoll"
+export {
+  applyVote,
+  canVote,
+  hasVotedFor,
+  isAlreadyVoted,
+  pollErrorMessage,
+  pollRows,
+  pollStage,
+  sharePercent,
+  voteCountLabel,
+} from "./poll"
+export type { PollRow, PollStage } from "./poll"
 
 /**
  * The comment surface, and the overflow menu.

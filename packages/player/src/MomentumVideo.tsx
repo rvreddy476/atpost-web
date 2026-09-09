@@ -34,8 +34,26 @@
  * `video.play()` returns a promise that REJECTS when the browser refuses. It
  * does not throw, so a bare `video.play()` produces an unhandled rejection in
  * the console and no video, with nothing pointing at the cause. Every call
- * here is caught, and every autoplay starts muted, because muted is the only
- * state a browser will start unprompted.
+ * here is caught, and the first autoplay of a session starts muted, because
+ * muted is the only state a browser will start unprompted.
+ *
+ * A refused UNMUTED start is not swallowed: it falls back to muted and plays
+ * anyway, because a silent video is a disappointment and a dead frame is a bug
+ * report. See the rejection handler in the play effect.
+ *
+ * ── Sound, and the reason it arrives on the second video ──────────────────
+ * The product wants sound. Browsers will not give it before the document has
+ * been touched, so the rule is: start muted, and once a real gesture has
+ * happened, every playback that STARTS from then on starts with sound — which
+ * in practice means from the second video onward, the same as Instagram and
+ * TikTok on the web.
+ *
+ * The bit lives in `soundPreference.ts` and is read here imperatively, at a
+ * play start and nowhere else. That is deliberate and is the whole safety
+ * argument: a video already playing when somebody clicks a like button cannot
+ * hear about it, so a click in the header can never make a card three
+ * positions down start blaring. Read that file's header before touching any
+ * of this.
  *
  * ── Controls: the three conditions, and where mute now lives ──────────────
  * This element used to have no transport at all. A click toggled mute, there
@@ -47,11 +65,13 @@
  * playback are properties of A PLAYER, so they live with the player and every
  * surface that mounts one — feed, carousel page, tube — gets them for free.
  *
- *   · MUTE is per player. `muted` is now the DEFAULT (still true, because a
- *     browser refuses an unmuted autoplay), and the first time a person
- *     touches this player's speaker it stops listening to the prop. Nothing
- *     is shared between cards, so unmuting one video does not arm the sound
- *     on the next nineteen.
+ *   · MUTE is per player. `muted` is now the DEFAULT (still true for a cold
+ *     document, because a browser refuses an unmuted autoplay), and the first
+ *     time a person touches this player's speaker it stops listening to every
+ *     default there is. What IS shared is only the default: a press of a
+ *     speaker, or the document's first gesture, changes what the next
+ *     untouched video starts as. It never reaches into a player that has been
+ *     given an answer, and it never changes a video that is already running.
  *   · PLAY/PAUSE is user intent, and it is a THIRD condition on top of
  *     `active`. `controls.ts` is where the three meet; read `shouldPlay` and
  *     `intentOnActiveChange` there before changing anything in this file,
@@ -109,6 +129,13 @@ import {
 } from "./controls"
 import { PauseGlyph, PlayGlyph, Volume2Glyph, VolumeXGlyph } from "./icons"
 import { claimManualPlayback, releaseManualPlayback, revokeManualPlaybackExcept } from "./manualPlayback"
+import {
+  armSound,
+  disarmSound,
+  noteUnmutedPlaybackRefused,
+  soundIsArmed,
+  watchForSoundGesture,
+} from "./soundPreference"
 import type { MediaSessionInfo } from "./mediaSession"
 import { useMediaSession } from "./useMediaSession"
 import { HEARTBEAT_INTERVAL_MS, SAMPLE_INTERVAL_MS, WatchSession, type WatchEvent, type WatchSessionInfo } from "./watchTracker"
@@ -133,17 +160,23 @@ export interface MomentumVideoProps {
    */
   active: boolean
   /**
-   * The DEFAULT sound state for this player, not a shared one.
+   * The DEFAULT sound state for a COLD document, not a shared one.
    *
    * True, and it has to be: a browser refuses to start an unmuted video
    * unprompted, and the refusal arrives as a rejected promise rather than an
    * exception — so an unmuted autoplay is not "louder", it is a video that
    * silently never starts.
    *
-   * Once a person has used THIS player's speaker button, their choice wins and
-   * later changes to this prop are ignored. That is what makes mute per player
-   * rather than per feed: a feed-wide toggle meant scrolling changed the
-   * volume of a video you had never touched.
+   * It is the weakest of three inputs and is overruled in turn by each of the
+   * other two:
+   *
+   *   · once the document has had a real user gesture, a playback STARTING
+   *     from then on starts with sound instead — see `soundPreference.ts`, and
+   *     note that it changes what starts, never what is already running;
+   *   · once a person has used THIS player's speaker, their choice wins for
+   *     ever and later changes to this prop are ignored. That is what makes
+   *     mute per player rather than per feed: a feed-wide toggle meant
+   *     scrolling changed the volume of a video you had never touched.
    */
   muted: boolean
   /**
@@ -261,7 +294,49 @@ export function MomentumVideo({
    * is what lets a default flow through until it is overruled.
    */
   const [userMuted, setUserMuted] = useState<boolean | null>(null)
-  const isMuted = userMuted ?? muted
+
+  /**
+   * Did THIS playback start with sound because the document had been touched?
+   *
+   * Set once, at a play start, from `soundIsArmed()` — never from a render and
+   * never from a subscription. That is the whole of the non-retroactivity
+   * guarantee: a video already running when somebody clicks a like button
+   * cannot hear about it, so it cannot suddenly speak. See the header of
+   * `soundPreference.ts`.
+   */
+  const [startedWithSound, setStartedWithSound] = useState(false)
+
+  /**
+   * The browser refused an unmuted start on this element.
+   *
+   * It outranks everything, including an explicit unmute, because it is not an
+   * opinion — the element is muted, and a speaker glyph claiming otherwise
+   * would be the UI lying about audio. Cleared at the next play start and by
+   * the next press of the speaker, both of which are fresh attempts.
+   */
+  const [refusedUnmuted, setRefusedUnmuted] = useState(false)
+
+  /**
+   * Three defaults and one choice, in precedence order.
+   *
+   * The prop is the FEED's default, `startedWithSound` is the DOCUMENT's
+   * default once a gesture has happened, and `userMuted` is this person's
+   * answer for this video — which beats both, for ever, and is the rule that
+   * makes mute per player rather than per feed. Sound-after-gesture changes
+   * what an untouched player defaults to; it may not overrule somebody who has
+   * already told this player what they want.
+   */
+  const isMuted = refusedUnmuted || (userMuted ?? (startedWithSound ? false : muted))
+
+  /**
+   * Watch for the document's first gesture while this player exists.
+   *
+   * Refcounted inside the module: twenty players install three listeners
+   * between them, and the first gesture removes them. Mounting is also what
+   * starts the clock — a click that happened before there was any video on the
+   * page cannot arm sound.
+   */
+  useEffect(() => watchForSoundGesture(), [])
 
   /** "auto" until they press something. See `controls.ts`. */
   const [intent, setIntent] = useState<PlaybackIntent>("auto")
@@ -486,7 +561,7 @@ export function MomentumVideo({
   /* ── Play / pause: `active`, and what the person said about it ─────────── */
 
   /**
-   * The mute state, readable from an effect that must not DEPEND on it.
+   * The two mute inputs, readable from an effect that must not DEPEND on them.
    *
    * This is the subtle half of making mute per player. `muted` used to be in
    * the play/pause effect's dependency array, which was harmless while the
@@ -495,31 +570,92 @@ export function MomentumVideo({
    * video, person unmutes it, the effect re-runs, sees `active` is still true,
    * and calls `play()` — the pause button undone by the mute button, once per
    * card, with nothing in either handler to point at.
+   *
+   * `startedWithSound` is deliberately NOT among them and is not read here at
+   * all: the effect is what SETS it, from the module, at the one moment sound
+   * is decided. Reading it back would be a loop.
    */
-  const mutedRef = useRef(isMuted)
-  mutedRef.current = isMuted
+  const userMutedRef = useRef(userMuted)
+  userMutedRef.current = userMuted
+  const mutedPropRef = useRef(muted)
+  mutedPropRef.current = muted
 
   useEffect(() => {
     const video = videoRef.current
     if (!video || attach !== "ready") return
 
+    /** Guards the async `play()` rejection against a stale effect run. */
+    let stale = false
+
     if (shouldPlay(active, intent)) {
-      // Muted first, always. An unmuted autoplay is refused by every browser
-      // and the refusal arrives as a rejected promise, not an exception.
-      video.muted = mutedRef.current
+      /*
+        The one moment sound is decided, and the only moment it is read.
+
+        `soundIsArmed()` is asked HERE, imperatively, rather than subscribed
+        to — see the header of `soundPreference.ts`. Reading it during render
+        would make every player re-render on the first click anywhere on the
+        page and would unmute a video that was already running, which is the
+        blaring-video failure this whole design is shaped to make impossible.
+
+        An untouched document always answers false, so the first video of a
+        session is muted, which is the only state a browser will start
+        unprompted.
+      */
+      const armed = soundIsArmed()
+      setStartedWithSound(armed)
+      setRefusedUnmuted(false)
+      const wantMuted = userMutedRef.current ?? (armed ? false : mutedPropRef.current)
+      video.muted = wantMuted
       // A video that ran to the end is showing its last frame; "play" there
       // means watch it again, not resume a finished thing for zero seconds.
       if (video.ended) video.currentTime = 0
       const p = video.play()
       if (p && typeof p.catch === "function") {
         p.catch(() => {
-          // Refused. Nothing to do and nothing to say: the poster stays up and
-          // the person can press play. Swallowing it here is what keeps the
+          if (stale) return
+          if (!wantMuted) {
+            /*
+              The browser refused an UNMUTED start, and the refusal is the
+              browser telling the truth. The wrong response is to swallow it:
+              that leaves a poster where a video should be, with a clean
+              console, and reads as "the videos stopped working".
+
+              So: fall back to muted and keep playing. A silent video is a
+              recoverable disappointment; a dead frame is a bug report. The
+              module is told as well, so the rest of the session stops
+              attempting a permission this browser is not going to grant —
+              Safari refuses every time, and without the latch every video
+              would hitch on the same failed attempt.
+            */
+            noteUnmutedPlaybackRefused()
+            setRefusedUnmuted(true)
+            setStartedWithSound(false)
+            video.muted = true
+            const retry = video.play()
+            if (retry && typeof retry.catch === "function") retry.catch(() => {})
+            return
+          }
+          // A MUTED start was refused, which a browser essentially never does.
+          // Nothing to do and nothing to say: the poster stays up and the
+          // person can press play. Swallowing it here is what keeps the
           // console clean enough that real errors are visible.
         })
       }
     } else {
       video.pause()
+      /*
+        The feed moving on ends this playback's claim on sound; a deliberate
+        pause does not.
+
+        Same distinction the rewind below draws, for the same reason. A person
+        who paused is still watching this video and will press play again, and
+        flipping the speaker glyph to "muted" underneath them — then back on
+        resume — is the icon flickering for no reason they can see. A card the
+        feed has scrolled past is a poster again, and a poster advertising
+        sound it is not making is the feed-wide mute button coming back in
+        through the icon.
+      */
+      if (!active && intent !== "pause") setStartedWithSound(false)
       /*
         Rewind so the next time it becomes active it starts from the top
         rather than resuming a view nobody remembers starting.
@@ -536,6 +672,16 @@ export function MomentumVideo({
       if (!active && intent !== "pause" && video.currentTime > 0 && !loop) {
         video.currentTime = 0
       }
+    }
+
+    /*
+      `play()` settles on a later turn of the loop, and by then the coordinator
+      may well have moved on. Without this the rejection handler above could
+      restart a video the feed had already left — the one-video rule broken by
+      a promise arriving late.
+    */
+    return () => {
+      stale = true
     }
   }, [active, intent, attach, loop])
 
@@ -872,12 +1018,36 @@ export function MomentumVideo({
     togglePlay()
   }, [noteInteraction, togglePlay])
 
+  /**
+   * The speaker, which does two things now — one for this player and one for
+   * the feed, and the difference between them is the whole of the mute rule.
+   *
+   * FOR THIS PLAYER it records `userMuted`, which is final: no default, from
+   * the prop or from the document's gesture history, may ever overrule it
+   * again on this video.
+   *
+   * FOR THE FEED it moves the DEFAULT the next untouched video will start
+   * from. A deliberate press of a speaker is the strongest statement about
+   * sound a person can make, in both directions — "let me hear this" and "stop
+   * making noise at me" — and it would be strange for a feed to hear it, apply
+   * it to one clip, and then go back to guessing. It reaches no other player;
+   * `soundPreference.ts` has no way to.
+   *
+   * It toggles from the DISPLAYED state rather than from `userMuted`, so the
+   * button always does what its glyph says even when a refused unmuted start
+   * has forced the element quiet underneath a choice to the contrary.
+   */
   const toggleMuted = useCallback(() => {
-    const next = !(userMuted ?? muted)
+    const next = !isMuted
     setUserMuted(next)
+    // The refusal was about the last attempt. This press IS a user gesture, in
+    // the handler, which is exactly what the browser was holding out for.
+    setRefusedUnmuted(false)
+    if (next) disarmSound()
+    else armSound()
     onToggleMuted?.(next)
     noteInteraction()
-  }, [userMuted, muted, onToggleMuted, noteInteraction])
+  }, [isMuted, onToggleMuted, noteInteraction])
 
   const seekBy = useCallback(
     (deltaSeconds: number) => {

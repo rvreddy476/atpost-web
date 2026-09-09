@@ -47,7 +47,7 @@
 
 import { useState } from "react"
 import { Radio, Video } from "lucide-react"
-import type { FeedItem } from "@atpost/types/feed"
+import type { FeedItem, FeedPoll } from "@atpost/types/feed"
 import type { WatchEvent, WatchSessionInfo } from "@momentum/player"
 import { primaryVideo } from "@momentum/player"
 import { ActionBar } from "@momentum/interactions"
@@ -58,6 +58,7 @@ import type { CommentApi, CommentRow } from "./comments"
 import { PostCarousel } from "./PostCarousel"
 import { PostMedia } from "./PostMedia"
 import { PostOverflowMenu } from "./PostOverflowMenu"
+import { PostPoll } from "./PostPoll"
 import type { ReportReason } from "./postMenu"
 import { absoluteTime, formatDuration, relativeTime } from "./relativeTime"
 
@@ -76,6 +77,17 @@ export interface PostCardHandlers {
   onComment?: (item: FeedItem) => void
   onShare?: (item: FeedItem) => void
   onStale?: (postId: string) => void
+  /**
+   * Cast one poll vote, answering with the poll AS THE SERVER NOW HAS IT.
+   *
+   * `POST /v1/posts/{id}/poll/vote` answers `{"ok":true}` and nothing else, so
+   * the totals have to be read back — and reading them back is a second URL,
+   * which is the zone's business and not this package's. Absent means the
+   * options are shown but not pressable; see the render site.
+   */
+  onVote?: (item: FeedItem, optionId: string) => Promise<FeedPoll>
+  /** Turns a rejected vote into a sentence. Pairs with `commentError` above. */
+  pollError?: (error: unknown) => string
 
   /* ── The overflow menu's actions. Every one optional; see the header. ──── */
 
@@ -151,6 +163,8 @@ export function PostCard({
   onComment,
   onShare,
   onStale,
+  onVote,
+  pollError,
   permalink,
   onFeedback,
   onReport,
@@ -318,7 +332,34 @@ export function PostCard({
           </div>
         )}
 
-        {item.poll && <PollSummary poll={item.poll} />}
+        {/*
+          The poll, which takes a vote now.
+
+          `signedIn` is `viewerId`, which the card already has for the comment
+          sheet — a viewer who has not voted and a viewer who is not there send
+          the same empty `viewer_votes`, and the two want different cards. And
+          `onVote` being absent is what makes the options unpressable, the same
+          absent-not-disabled rule the comment control and the overflow rows
+          follow: a card with nothing wired renders correct, readable results
+          and no promise it cannot keep.
+        */}
+        {item.poll && (
+          <PostPoll
+            poll={item.poll}
+            label={name}
+            signedIn={Boolean(viewerId)}
+            onVote={onVote ? (optionId) => onVote(item, optionId) : undefined}
+            errorMessage={pollError}
+            /*
+              The one poll in the live corpus has the SAME string for the
+              post's text and the poll's question, so the card printed
+              "Which_color_wins" twice, one line apart. The post's body stays
+              and the box's heading goes: the text belongs to the card, and a
+              poll whose question really is different still shows it.
+            */
+            showQuestion={(item.poll.question ?? "").trim() !== (item.text ?? "").trim()}
+          />
+        )}
       </div>
 
       <div className="border-t border-mo px-2 py-1">
@@ -386,40 +427,3 @@ export function PostCard({
   )
 }
 
-/**
- * A poll, read-only.
- *
- * Voting is `POST /v1/posts/{id}/vote` and belongs in a later pass — showing
- * the options and the totals is honest; showing a button that does nothing is
- * not, so there is no button here.
- */
-function PollSummary({ poll }: { poll: NonNullable<FeedItem["poll"]> }) {
-  const total = poll.total_votes ?? 0
-  return (
-    <div className="space-y-2 rounded-mo border border-mo bg-mo-raised p-3">
-      {poll.question && <p className="font-semibold text-mo-ink">{poll.question}</p>}
-      <ul className="space-y-1.5">
-        {(poll.options ?? []).map((option) => {
-          const votes = option.votes ?? 0
-          const share = total > 0 ? Math.round((votes / total) * 100) : 0
-          return (
-            <li key={option.id} className="relative overflow-hidden rounded-mo-sm bg-mo-sunken">
-              <div
-                aria-hidden="true"
-                className="absolute inset-y-0 left-0 bg-mo-cyan/20"
-                style={{ width: `${share}%` }}
-              />
-              <div className="relative flex justify-between px-3 py-1.5 text-sm text-mo-ink">
-                <span>{option.text}</span>
-                <span className="tabular-nums text-mo-body">{share}%</span>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-      <p className="text-xs text-mo-body">
-        {total} {total === 1 ? "vote" : "votes"}
-      </p>
-    </div>
-  )
-}

@@ -99,19 +99,56 @@ export interface FeedCounts {
   comments: number
 }
 
+/**
+ * ── These names were wrong, and the card showed nothing because of it ──────
+ *
+ * This interface used to declare `options[].text`, `options[].votes`,
+ * `viewer_option_id` and `closes_at`. Not one of those fields exists. The feed
+ * embeds post-service's own `PollData` verbatim — feed-service carries it
+ * through as a `json.RawMessage` and renames nothing — so the wire says
+ * `label`, `vote_count`, `viewer_votes` and `ends_at`.
+ *
+ * Every field being optional meant TypeScript had nothing to say about it, and
+ * the poll card rendered exactly what reading undefined off an object gets
+ * you: blank option rows, 0% on all of them, and a correct total underneath.
+ * That is half of "the poll is not taking my vote — I'm not able to get
+ * anything on it"; the other half is that there was no button.
+ *
+ * Verified on the live gateway against post 23e22ab6-…, signed in:
+ *
+ *   GET /v1/feed/home  →  item.poll:
+ *   {"question":"Which_color_wins","allows_multiple":false,
+ *    "options":[{"id":"27c38f13-…","label":"Teal","vote_count":1,
+ *                "percentage":50}, …],
+ *    "total_votes":2,"viewer_votes":["c4adbb00-…"],"has_ended":false}
+ */
 export interface FeedPollOption {
   id: string
-  text?: string
-  votes?: number
+  /** The option as the author wrote it. `label`, NOT `text`. */
+  label?: string
+  vote_count?: number
+  /** The server's own 0–100, unrounded. See `sharePercent` in @momentum/content. */
+  percentage?: number
 }
 
 export interface FeedPoll {
-  id?: string
   question?: string
+  /** May one person choose more than one option? Decides the whole interaction. */
+  allows_multiple?: boolean
   options?: FeedPollOption[]
   total_votes?: number
-  viewer_option_id?: string | null
-  closes_at?: string | null
+  /**
+   * The option ids THIS viewer has chosen — an array, because a multiple-choice
+   * poll has several, and omitted entirely (not `[]`) when they have chosen
+   * none or nobody is signed in. Present on the feed item as well as on
+   * `GET /v1/posts/{id}/poll`, so a card knows how to draw itself without a
+   * second request.
+   */
+  viewer_votes?: string[]
+  /** RFC3339, and absent for a poll that never closes. */
+  ends_at?: string | null
+  /** The server's own verdict on `ends_at`. Trusted over the clock on this machine. */
+  has_ended?: boolean
 }
 
 /** One item of `data` from `GET /v1/feed/home`. */

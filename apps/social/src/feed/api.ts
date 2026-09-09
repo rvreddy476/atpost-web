@@ -25,6 +25,8 @@
  *   POST   /v1/feed/feedback   {post_id|author_id, signal}  -> 200
  *   POST   /v1/reports    {entity_type,entity_id,reason,details} -> 200
  *   POST   /v1/analytics/events     {events:[...]}    -> 202 {accepted,duplicate}
+ *   GET    /v1/posts/{id}/poll                        -> the poll, ANONYMOUS OK
+ *   POST   /v1/posts/{id}/poll/vote {option_id}       -> 200 {ok:true}
  *
  * Four of those are shaped differently from their neighbours and every one is
  * easy to get wrong: like is a toggle that ignores what you wanted; bookmark
@@ -39,10 +41,12 @@
  */
 
 import api from "@atpost/api-client"
-import type { FeedItem, FeedPage } from "@atpost/types/feed"
+import type { FeedItem, FeedPage, FeedPoll } from "@atpost/types/feed"
 import type { AnalyticsEvent, SendOutcome } from "@momentum/analytics"
 import {
   commentErrorMessage,
+  isAlreadyVoted,
+  pollErrorMessage,
   type CommentPage,
   type CommentRow,
   type ReportReason,
@@ -232,6 +236,93 @@ export async function createComment(postId: string, text: string): Promise<Comme
 export function commentFailureMessage(error: unknown): string {
   const { status, code } = failureOf(error)
   return commentErrorMessage(code, status)
+}
+
+/* ── Polls ──────────────────────────────────────────────────────────────── */
+
+/**
+ * The poll as the server has it, including THIS viewer's choices.
+ *
+ * Anonymous callers get a 200 with full counts and no `viewer_votes` — the
+ * handler treats `X-User-Id` as optional and only uses it to fill that field —
+ * so this is not gated on the session. It is also why the card shows results
+ * to everybody: they are public, and a client-side curtain in front of a
+ * public document would be a lie one devtools tab defeats.
+ *
+ * Not called on first paint. `GET /v1/feed/home` already embeds this exact
+ * object on the item (feed-service passes post-service's poll through as raw
+ * JSON), so a feed of twenty posts does not make twenty extra requests to
+ * learn something it was already told. This is the read-BACK after a vote.
+ */
+export async function fetchPoll(postId: string): Promise<FeedPoll> {
+  const res = await api.get<Envelope<FeedPoll>>(`/v1/posts/${postId}/poll`)
+  const poll = res.data?.data
+  if (!poll) throw new Error("The poll answered without a poll in it.")
+  return poll
+}
+
+/**
+ * Cast one vote, and answer with the poll the server now has.
+ *
+ * ── Two requests, because the vote route returns nothing ──────────────────
+ * `POST /v1/posts/{id}/poll/vote` answers `{"ok":true}` — no counts, no
+ * totals, no echo of who voted. Somebody has to read the numbers back, and
+ * doing it here rather than in the card is what keeps @momentum/content free
+ * of URLs. The optimistic ±1 in `PostPoll` is what fills the gap between the
+ * two.
+ *
+ * ── "Already voted" is closer to success than to failure ──────────────────
+ * This is `ACTIVE_REPORT_EXISTS` again — see `reportNotice` — and it is
+ * reachable in ordinary use: vote in one tab, and the other tab's copy of the
+ * feed still believes nothing has been chosen. The server refusing that second
+ * press is telling us our state is stale, not that anything went wrong. So it
+ * is swallowed and the poll is fetched, which brings back `viewer_votes` and
+ * the person sees their vote marked instead of a red line under it.
+ *
+ * Everything else rethrows, and `pollFailureMessage` turns it into a sentence.
+ *
+ * ── Which of the two vote routes, and why ─────────────────────────────────
+ * post-service has both `POST /v1/posts/{id}/vote` and
+ * `POST /v1/posts/{id}/poll/vote`. This uses the latter. Verified live, they
+ * differ in ways that both matter:
+ *
+ *   /vote       enforces single-choice properly ("already voted on this
+ *               poll") but reports EVERY refusal as **500 INTERNAL_ERROR**,
+ *               including that one — which is indistinguishable from the
+ *               server being broken, and would make an ordinary stale tab
+ *               look like an outage.
+ *   /poll/vote  answers 400 VOTE_ERROR, 401 and 200 like an API, but performs
+ *               no single-choice check at all: it inserts against a primary
+ *               key of (post_id, user_id, option_id), so the same option twice
+ *               is refused and a SECOND option on a single-choice poll is
+ *               accepted. Confirmed on the live stack.
+ *
+ * Neither is right. The one with usable status codes was chosen and the client
+ * declines to send the vote the server would wrongly accept — `pollStage` and
+ * `canVote` in @momentum/content stop a single-choice poll offering a second
+ * option. That is a guard, not a fix: the route is still open to anything that
+ * is not this client, and the defect is in the handover.
+ */
+export async function castPollVote(postId: string, optionId: string): Promise<FeedPoll> {
+  try {
+    await api.post(`/v1/posts/${postId}/poll/vote`, { option_id: optionId })
+  } catch (error: unknown) {
+    const { status, code, message } = failureOf(error)
+    if (!isAlreadyVoted(code, status, message)) throw error
+  }
+  return fetchPoll(postId)
+}
+
+/**
+ * Why a vote was refused, in a sentence.
+ *
+ * The classification lives in @momentum/content, which owns this surface's
+ * vocabulary and is tested as a table; all this adds is the transport, exactly
+ * as `commentFailureMessage` does above.
+ */
+export function pollFailureMessage(error: unknown): string {
+  const { status, code, message } = failureOf(error)
+  return pollErrorMessage(code, status, message)
 }
 
 /* ── Steering the ranker, and reporting ─────────────────────────────────── */

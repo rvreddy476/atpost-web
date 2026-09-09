@@ -26,7 +26,31 @@
  * scrollbar for a mouse, RTL, and the platform's own physics for free. So the
  * scroller IS the pager, and this file adds only what the browser does not
  * give: which page is showing (measured, never remembered), a mouse DRAG
- * (desktop pointers do not swipe), arrow keys, and the two overlays.
+ * (desktop pointers do not swipe), arrow keys, and the overlays.
+ *
+ * ── A mouse does not swipe, and it should not have to ─────────────────────
+ * The drag below is real and stays. It was also, for a while, the ONLY way a
+ * mouse could turn a page — which is the wrong primary interaction on a
+ * desktop: nobody drags a photograph to see the next one, the grab cursor
+ * promised a gesture people do not make, and the row of dots that showed the
+ * position could not be pressed to change it.
+ *
+ * So there are now three ways to turn a page and the drag is the third:
+ *
+ *   · ARROWS, overlaid left and right, revealed on hover or keyboard focus
+ *     exactly as the player's transport is. ABSENT at the ends rather than
+ *     disabled — see the render site.
+ *   · PIPS, which are buttons: pressing the third dot shows the third photo.
+ *     They are real controls with real labels now; `pipLabel` in carousel.ts
+ *     carries how that composes with each slide's own announcement.
+ *   · the drag, and the swipe, and the trackpad, and the arrow keys, all
+ *     unchanged.
+ *
+ * The chrome follows the player's rule and its clock — `controlsVisible` and
+ * CONTROLS_HIDE_MS — so a carousel inside a feed of videos does not fade on a
+ * different schedule from the video sitting next to it. A hidden control is
+ * not a tab stop and is `aria-hidden`, which is what keeps twenty carousels
+ * from putting a hundred dead buttons in a keyboard user's way.
  *
  * ── Autoplay: two conditions, both required ───────────────────────────────
  * A post being the item the coordinator chose and a page being the one in view
@@ -42,21 +66,27 @@
  * author's reach by however many pictures they attached.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import type { FeedItem, FeedMedia } from "@atpost/types/feed"
 import type { WatchEvent, WatchSessionInfo } from "@momentum/player"
+import { CONTROLS_HIDE_MS } from "@momentum/player"
 import { MediaFrame, PostMedia } from "./PostMedia"
 import { formatDuration } from "./relativeTime"
 import { aspectRatio } from "./variants"
 import {
+  arrowLabel,
   carouselLabel,
+  controlsVisible,
   dragTarget,
   isPageActive,
   isPageRendered,
   keyTarget,
   pageFromScroll,
   pillLabel,
+  pipLabel,
   slideLabel,
+  stepTarget,
 } from "./carousel"
 
 export interface PostCarouselProps {
@@ -325,10 +355,131 @@ export function PostCarousel({
     event.preventDefault()
   }, [])
 
+  /* ── The chrome: arrows and pips, on the player's rule and its clock ───── */
+
+  const [hovered, setHovered] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const [recentlyMoved, setRecentlyMoved] = useState(false)
+  const chromeShown = controlsVisible({ hovered, focused, recentlyMoved })
+
+  const hideTimer = useRef(0)
+  const noteActivity = useCallback(() => {
+    setRecentlyMoved(true)
+    if (typeof window === "undefined") return
+    if (hideTimer.current) window.clearTimeout(hideTimer.current)
+    hideTimer.current = window.setTimeout(() => {
+      hideTimer.current = 0
+      setRecentlyMoved(false)
+    }, CONTROLS_HIDE_MS)
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (typeof window !== "undefined" && hideTimer.current) window.clearTimeout(hideTimer.current)
+    },
+    []
+  )
+
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  /**
+   * Nothing invisible may hold the focus — the same hole the player's
+   * transport had, arriving here for the same reason.
+   *
+   * Press a pip with the MOUSE and it has DOM focus without being
+   * focus-visible, so `focused` stays false and the chrome is free to fade
+   * three seconds later, leaving the focus on an `aria-hidden` button nobody
+   * can see. When the chrome goes, the focus comes back out to the track,
+   * which is always focusable and always visible.
+   */
+  useEffect(() => {
+    if (chromeShown) return
+    const root = rootRef.current
+    const track = trackRef.current
+    if (typeof document === "undefined" || !root || !track) return
+    const active = document.activeElement
+    if (active && active !== track && root.contains(active)) track.focus()
+  }, [chromeShown])
+
+  /**
+   * An arrow press, and the focus problem that comes with hiding one.
+   *
+   * The arrow that has just carried you to the last page is about to be
+   * removed from the document, and a focused element that unmounts drops the
+   * focus on `<body>` — a keyboard user pressing Right twice through a
+   * two-page carousel would land nowhere and have to Tab back from the top of
+   * the page. So when the step lands somewhere that arrow cannot leave, the
+   * focus is handed to the track before the button goes.
+   */
+  const step = useCallback(
+    (direction: "prev" | "next") => {
+      const target = stepTarget(direction, pageRef.current, count)
+      if (target === null) return
+      goTo(target)
+      noteActivity()
+      if (stepTarget(direction, target, count) === null) trackRef.current?.focus()
+    },
+    [count, goTo, noteActivity]
+  )
+
+  const trackId = useId()
+
+  /**
+   * Whether a faded control can still be pressed. It cannot.
+   *
+   * Exactly ONE of the two classes is ever emitted — Tailwind orders
+   * `.pointer-events-none` before `.pointer-events-auto` in its own sheet, so
+   * a list carrying both resolves to `auto` however it was written, and an
+   * invisible arrow would sit over the photograph eating clicks.
+   */
+  const hit = chromeShown ? "pointer-events-auto" : "pointer-events-none"
+  const fade = [
+    "transition-opacity duration-150 ease-mo motion-reduce:transition-none",
+    chromeShown ? "opacity-100" : "opacity-0",
+  ].join(" ")
+
   return (
-    <div className="relative">
+    <div
+      ref={rootRef}
+      className="relative"
+      /*
+        A touch or a pen never counts as hover. The player's rule, and here it
+        is also what keeps the arrows off a phone entirely: a browser fires
+        `pointerenter` on the way into a tap, so treating that as hover would
+        summon two buttons over the edges of the frame on every tap — and a tap
+        on a carousel page holding a video is that video's play/pause.
+      */
+      onPointerEnter={(event) => {
+        if (event.pointerType === "touch" || event.pointerType === "pen") return
+        setHovered(true)
+        noteActivity()
+      }}
+      onPointerLeave={() => setHovered(false)}
+      onPointerMove={(event) => {
+        if (event.pointerType === "touch" || event.pointerType === "pen") return
+        noteActivity()
+      }}
+      /*
+        KEYBOARD focus pins the chrome open; a click that merely moved the DOM
+        focus here does not. `:focus-visible` is the browser's own answer to
+        that question and is already this product's focus-ring rule, so the
+        controls appear under exactly the condition the ring does.
+      */
+      onFocus={(event) => {
+        const target = event.target as HTMLElement | null
+        try {
+          setFocused(target?.matches?.(":focus-visible") ?? true)
+        } catch {
+          setFocused(true)
+        }
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false)
+      }}
+    >
       <div
         ref={trackRef}
+        id={trackId}
         // A labelled group rather than a listbox or a tablist: the pages are
         // content, not options, and nothing here is "selected". `carousel` is
         // the role description the ARIA authoring practices use for exactly
@@ -357,7 +508,16 @@ export function PostCarousel({
           // The scrollbar is noise under a photograph and the pips already say
           // where you are. The pages remain reachable by every other means.
           "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          "cursor-grab select-none active:cursor-grabbing",
+          /*
+            No grab cursor. It was the first thing anyone noticed about this
+            carousel and the complaint was exactly right: a hand promises a
+            gesture that is not how a person with a mouse turns a page, and it
+            was promising it on a control that had no other affordance at all.
+            The drag still works — it is just no longer advertised as the way
+            in. `select-none` stays, because dragging across a picture must not
+            paint a text selection over the card.
+          */
+          "select-none",
           "rounded-mo focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo",
         ].join(" ")}
       >
@@ -367,8 +527,9 @@ export function PostCarousel({
           return (
             <div
               key={entry.media_id}
-              // The position is announced HERE, once, on arrival — which is the
-              // counterpart to the pips being hidden below.
+              // Where the position of the CONTENT is announced, once, on
+              // arrival. The pips below say what pressing them DOES, which is
+              // a different sentence — see `pipLabel` in carousel.ts.
               role="group"
               aria-roledescription="slide"
               aria-label={slideLabel(index, count, entry.kind)}
@@ -452,31 +613,152 @@ export function PostCarousel({
       </span>
 
       {/*
-        Position pips.
+        ── The arrows ──────────────────────────────────────────────────────
 
-        Hidden from assistive technology on purpose, exactly as the Android
-        version clears their semantics: a screen-reader user moving through the
-        pages hears each page's own label and alt text, so a row of dots
-        announcing "dot dot dot" adds nothing and interrupts the part that
-        does. The same information is in the pill, in words, for everyone else.
+        Vertically centred on the left and right edges, which is the one band
+        of the frame nothing else wants: the pill has top-left, the player's
+        speaker has top-right, the pips have bottom-centre and the duration
+        badge has bottom-right.
+
+        ABSENT at the ends, not disabled. That is this card's own rule — a
+        disabled control says "not yet" where the truth is "not here" — and it
+        is also the honest one for an overlay: a greyed arrow welded over the
+        first photograph of every carousel is chrome that can never do
+        anything, sitting on top of the content it is decorating. `stepTarget`
+        returning null is the single definition of "there is nowhere to go",
+        shared with the arrow keys, so the two can never disagree.
+
+        Colour is the player's OVERLAY_BUTTON recipe unchanged, because these
+        sit on the same photography its speaker does: `--mo-ink` on `--mo-bg`
+        at .70 measures 6.46 against a pure white frame, 11.62 over mid grey
+        and 17.38 over black. The glyph is non-text and needs 3.0.
       */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
-      >
-        <div className="flex items-center gap-1.5 rounded-mo-pill bg-mo-bg/60 px-2 py-1 backdrop-blur-sm">
+      {(["prev", "next"] as const).map((direction) => {
+        if (stepTarget(direction, page, count) === null) return null
+        return (
+          <button
+            key={direction}
+            type="button"
+            onClick={() => step(direction)}
+            // A faded control is not a control: out of the tab order and out
+            // of the accessibility tree while it cannot be seen.
+            aria-hidden={!chromeShown}
+            tabIndex={chromeShown ? 0 : -1}
+            aria-label={arrowLabel(direction)}
+            aria-controls={trackId}
+            className={[
+              OVERLAY_BUTTON,
+              hit,
+              fade,
+              "absolute top-1/2 h-9 w-9 -translate-y-1/2",
+              direction === "prev" ? "left-2" : "right-2",
+            ].join(" ")}
+          >
+            {direction === "prev" ? (
+              <ChevronLeft aria-hidden="true" className="h-5 w-5" />
+            ) : (
+              <ChevronRight aria-hidden="true" className="h-5 w-5" />
+            )}
+          </button>
+        )
+      })}
+
+      {/*
+        ── The pips, which are buttons now ─────────────────────────────────
+
+        They used to be `aria-hidden` decoration, and that was a real decision
+        rather than an oversight: a screen-reader user moving through the pages
+        hears each page's own label, so a row of dots announcing "dot dot dot"
+        added nothing and interrupted the part that did.
+
+        Making them pressable means they can no longer be decoration — an
+        interactive thing that is hidden from assistive technology is worse
+        than a dot, it is a control only some people can reach. So they are
+        real buttons with real labels ("Show photo 3 of 5"), and the current
+        one carries `aria-current`. `pipLabel` in carousel.ts sets out how that
+        coexists with each slide saying "Photo 3 of 5" without either repeating
+        the other: one names a thing, the other names an action.
+
+        What keeps that from costing a keyboard user a hundred tab stops in a
+        feed of carousels is the same mechanism the player uses for its
+        transport, applied here: while the chrome is faded these are
+        `aria-hidden` and `tabIndex={-1}`, so an untouched feed contains none
+        of them. Hovering or focusing the frame brings them, and a keyboard
+        user reaches them by the same Tab that reveals them.
+
+        The hit target is what makes this usable rather than merely correct: a
+        1.5px dot is not a thing a mouse can hit, so each button is a 20px
+        square with the dot drawn in the middle of it.
+      */}
+      {/*
+        The full-width row stays `pointer-events-none` for ever: it spans the
+        whole frame and sits directly over the left-hand end of a video's
+        transport, so a hit area there would swallow the play button and any
+        drag begun along the bottom edge. Only the pill inside it — which is as
+        wide as the dots and no wider — is ever pressable.
+      */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+        <div
+          className={`flex items-center gap-0.5 rounded-mo-pill bg-mo-bg/60 px-1 backdrop-blur-sm ${hit} ${fade}`}
+        >
           {media.map((entry, index) => (
-            <span
+            <button
               key={entry.media_id}
-              className={
-                index === page
-                  ? "h-1.5 w-1.5 rounded-mo-pill bg-mo-ink"
-                  : "h-1 w-1 rounded-mo-pill bg-mo-ink/40"
-              }
-            />
+              type="button"
+              onClick={() => {
+                goTo(index)
+                noteActivity()
+              }}
+              aria-hidden={!chromeShown}
+              tabIndex={chromeShown ? 0 : -1}
+              aria-label={pipLabel(index, count, entry.kind)}
+              aria-current={index === page ? "true" : undefined}
+              aria-controls={trackId}
+              className={[
+                "flex h-5 w-5 items-center justify-center rounded-mo-pill",
+                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo",
+              ].join(" ")}
+            >
+              {/*
+                The dot itself, unchanged. The current pip is `--mo-ink` on the
+                .60 scrim — 4.47 over a pure white photograph, which clears the
+                3.0 a non-text mark needs. The dim ones are 2.0–3.4 against
+                that same scrim and that is deliberate: "not the current page"
+                is the only thing they say, they say it against the current
+                pip, and the same fact is in the pill in words.
+              */}
+              <span
+                aria-hidden="true"
+                className={
+                  index === page
+                    ? "h-1.5 w-1.5 rounded-mo-pill bg-mo-ink"
+                    : "h-1 w-1 rounded-mo-pill bg-mo-ink/40"
+                }
+              />
+            </button>
           ))}
         </div>
       </div>
     </div>
   )
 }
+
+/**
+ * The shape every overlay control on a carousel shares.
+ *
+ * Copied verbatim from `OVERLAY_BUTTON` in @momentum/player's MomentumVideo,
+ * and copied on purpose rather than imported: that constant is private to the
+ * player and a carousel arrow is not a player control, so exporting it would
+ * make an internal detail of one package a contract of another. What must not
+ * drift is the MEASUREMENT behind it — `--mo-ink` on `--mo-bg` at .70, 6.46
+ * against a pure white frame — and that is why the numbers are written out at
+ * both sites rather than only here.
+ *
+ * It carries no `pointer-events` of its own; that belongs to the caller,
+ * because it depends on whether the control is currently on screen. See `hit`.
+ */
+const OVERLAY_BUTTON =
+  "inline-flex items-center justify-center rounded-mo-pill " +
+  "bg-mo-bg/70 text-mo-ink backdrop-blur-sm transition-colors duration-150 ease-mo " +
+  "hover:bg-mo-bg/85 focus-visible:outline focus-visible:outline-2 " +
+  "focus-visible:outline-offset-2 focus-visible:outline-mo"

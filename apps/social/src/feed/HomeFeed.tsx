@@ -8,6 +8,16 @@
  * happens when a signed URL goes stale, and how a like reaches the gateway.
  * If a component in here starts growing layout, it belongs in
  * @momentum/content instead — that is the line the zone is thin on one side of.
+ *
+ * ── It has sections now ───────────────────────────────────────────────────
+ * "For You | Following | HashTag", the same three Android shipped and in the
+ * same order — see `./tabs.ts`, which copies the set rather than inventing one.
+ * The mechanics are split out so this file stays about wiring: `./tabs.ts` is
+ * the vocabulary and the URL, `./useFeedRoute.ts` puts the selection in the
+ * address bar, `./useTabbedFeed.ts` keeps one paged list per section, and
+ * `./FeedTabs.tsx` is the strip. What is left here is what only the feed can
+ * decide: which section asks for what, what each says when it is empty, and
+ * what the strip costs the player.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -26,21 +36,27 @@ import {
   type ReportReason,
 } from "@momentum/content"
 import { prefersReducedMotion, useAutoplayCoordinator } from "@momentum/player"
+import { ArrowLeft, Hash, UserPlus } from "lucide-react"
 import {
+  castPollVote,
   commentFailureMessage,
   createComment,
   fetchComments,
-  fetchFeedPage,
   fileReport,
+  pollFailureMessage,
   sendFeedback,
   setBookmark,
   setRepost,
   toggleLike,
 } from "./api"
+import { FeedTabs, panelId, tabId } from "./FeedTabs"
 import type { Notice } from "./outcomes"
+import { SectionEmpty, SectionError } from "./TabStates"
+import { listKey, type FeedTabId } from "./tabs"
+import { TrendingTags } from "./TrendingTags"
 import { useFeedAnalytics } from "./useFeedAnalytics"
-
-type Status = "loading" | "ready" | "error"
+import { useFeedRoute } from "./useFeedRoute"
+import { useTabbedFeed, useTrendingTags } from "./useTabbedFeed"
 
 /**
  * The sound a video starts with, and the last thing in this file that has an
@@ -73,12 +89,28 @@ export function HomeFeed() {
    */
   const { signedIn, status: sessionStatus, userId } = useSession()
 
-  const [items, setItems] = useState<FeedItem[]>([])
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [status, setStatus] = useState<Status>("loading")
-  const [errorMessage, setErrorMessage] = useState("")
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [reachedEnd, setReachedEnd] = useState(false)
+  /* ── Which section ────────────────────────────────────────────────────── */
+
+  const [route, go] = useFeedRoute()
+  const key = listKey(route)
+  const feed = useTabbedFeed(key, signedIn && sessionStatus !== "unknown")
+  const trending = useTrendingTags(route.tab === "hashtag" && signedIn)
+  const items = feed.list.items
+
+  const selectTab = useCallback(
+    (tab: FeedTabId) => {
+      // A tab switch is a change of view, not a navigation — see the note on
+      // `useFeedRoute`. Returning to HashTag returns to the TAG LIST rather
+      // than to whichever tag was last open: the tab's own name is the list,
+      // and re-entering a tag silently would make the strip's third label mean
+      // two different screens depending on history.
+      go({ tab, tag: null }, "replace")
+    },
+    [go]
+  )
+
+  const openTag = useCallback((tag: string) => go({ tab: "hashtag", tag }, "push"), [go])
+  const closeTag = useCallback(() => go({ tab: "hashtag", tag: null }, "replace"), [go])
 
   /**
    * Read once, on mount.
@@ -132,10 +164,38 @@ export function HomeFeed() {
 
   /**
    * How much of the top of the window is behind chrome — measured, not known.
-   * See `useTopChromeInset`.
+   *
+   * TWO things are pinned up there now, and both have to be in this number.
+   * `useTopChromeInset` reads the header by hit-testing the top edge of the
+   * window; the tab strip sits BELOW the header, so that hit test cannot see
+   * it and reports the header alone. The strip therefore reports its own
+   * height (`onHeightChange`) and it is added here.
+   *
+   * ── Why this is not a detail ──────────────────────────────────────────────
+   * The number is what the autoplay coordinator subtracts before deciding
+   * which card is "most visible", and what the dwell tracker subtracts before
+   * deciding a card was seen. Leave the strip out and a video that is entirely
+   * behind it counts as on screen: it starts playing where nobody can see it
+   * and sends watch heartbeats for pixels that were never painted. Watch time
+   * is what a creator is paid on, so an under-measured inset is not a cosmetic
+   * bug — it is money moving on a false reading.
+   *
+   * Measured on the live page at 1440×900, scrolled so the strip is stuck:
+   * the header's bottom edge is 57, the strip is 53 tall and sits at exactly
+   * 57 with no gap, so the band the trackers use starts at 110 rather than 57.
+   * `elementsFromPoint(720, 0)` at that moment returns the header alone — the
+   * 53 pixels the strip covers are invisible to it, which is the whole reason
+   * for the addition.
+   *
+   * The sum is very slightly conservative before the reader has scrolled — the
+   * strip is `sticky`, so at the top of the page it is sitting at y=129 under
+   * the Home heading rather than over any post, and those 53 pixels are not
+   * yet covering anything. Erring towards "not yet visible" is the safe
+   * direction for both trackers, so this does not try to be cleverer than that.
    */
-  const topInset = useTopChromeInset()
-  const viewportInset = { top: topInset }
+  const headerInset = useTopChromeInset()
+  const [tabsHeight, setTabsHeight] = useState(0)
+  const viewportInset = { top: headerInset + tabsHeight }
 
   /**
    * The one playing item, resolved by STABLE ID.
@@ -145,7 +205,7 @@ export function HomeFeed() {
    * own". Every card still plays on demand.
    *
    * The inset is what stops the coordinator crediting a card for the strip of
-   * it that is behind the sticky header. Both trackers get the same number
+   * it that is behind the sticky chrome. Both trackers get the same number
    * from the same measurement, because an impression and a play have to agree
    * about what "on screen" means.
    */
@@ -181,6 +241,12 @@ export function HomeFeed() {
    * every render and React would detach and re-attach every card's ref, which
    * is precisely the churn the caches exist to prevent. So the composition is
    * cached too, keyed by the same stable post id.
+   *
+   * Keying by post id is still right across sections even though one post can
+   * appear in two of them: only one section's list is mounted at a time, so
+   * there is only ever one element per id, and switching sections unmounts the
+   * old cards — which calls each ref with null and unregisters them — before
+   * the new ones mount.
    */
   const cardRefs = useRef(new Map<string, (el: HTMLElement | null) => void>()).current
   const registerAutoplay = coordinator.register
@@ -202,60 +268,6 @@ export function HomeFeed() {
 
   /* ── Fetching ─────────────────────────────────────────────────────────── */
 
-  const inFlight = useRef(false)
-
-  const load = useCallback(
-    async (nextCursor: string | null, mode: "replace" | "append") => {
-      if (inFlight.current) return
-      inFlight.current = true
-      if (mode === "append") setLoadingMore(true)
-
-      try {
-        const page = await fetchFeedPage(nextCursor)
-        setItems((prev) => {
-          if (mode === "replace") return page.items
-          // The ranker can repeat an item across pages. Deduping by id here
-          // rather than trusting the cursor keeps React keys unique, which is
-          // otherwise a silent rendering corruption rather than a visible bug.
-          const seen = new Set(prev.map((i) => i.id))
-          return [...prev, ...page.items.filter((i) => !seen.has(i.id))]
-        })
-        setCursor(page.nextCursor)
-        // No cursor means the page came back short, which on this endpoint IS
-        // the end-of-feed signal rather than a missing field.
-        setReachedEnd(!page.nextCursor)
-        setStatus("ready")
-      } catch (err: unknown) {
-        const e = err as { response?: { status?: number } }
-        if (mode === "replace") {
-          setStatus("error")
-          setErrorMessage(
-            e.response?.status === 401
-              ? "Your session has expired. Sign in again to see your feed."
-              : "The feed did not answer. It may be a moment before it does."
-          )
-        }
-        // A failed NEXT page keeps the feed that is already on screen. Blanking
-        // twenty posts someone is reading because page three failed is the
-        // worst possible response to a transient error.
-      } finally {
-        inFlight.current = false
-        setLoadingMore(false)
-      }
-    },
-    []
-  )
-
-  useEffect(() => {
-    if (sessionStatus === "unknown") return
-    if (!signedIn) {
-      setStatus("error")
-      setErrorMessage("Sign in to see your feed.")
-      return
-    }
-    void load(null, "replace")
-  }, [signedIn, sessionStatus, load])
-
   /**
    * Signed URLs expire in five minutes.
    *
@@ -270,12 +282,13 @@ export function HomeFeed() {
    * budget in seconds and take the feed down for the person it was helping.
    */
   const lastRefresh = useRef(0)
+  const reload = feed.reload
   const handleStale = useCallback(() => {
     const now = Date.now()
     if (now - lastRefresh.current < 30_000) return
     lastRefresh.current = now
-    void load(null, "replace")
-  }, [load])
+    reload()
+  }, [reload])
 
   /* ── Interactions ─────────────────────────────────────────────────────── */
 
@@ -284,9 +297,13 @@ export function HomeFeed() {
    * in the button. Without writing it back, scrolling a liked post out of view
    * and back would re-mount the card from stale props and show it unliked.
    */
-  const patch = useCallback((id: string, changes: Partial<FeedItem>) => {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...changes } : i)))
-  }, [])
+  const mutate = feed.mutate
+  const patch = useCallback(
+    (id: string, changes: Partial<FeedItem>) => {
+      mutate((prev) => prev.map((i) => (i.id === id ? { ...i, ...changes } : i)))
+    },
+    [mutate]
+  )
 
   const onLike = useCallback(
     // `_next` is ignored on purpose: the route is a TOGGLE with no body, so
@@ -366,6 +383,31 @@ export function HomeFeed() {
     [patch, analytics, positionOf]
   )
 
+  /* ── Polls ────────────────────────────────────────────────────────────── */
+
+  /**
+   * A vote, and the poll the server hands back for it.
+   *
+   * Patched into the item for the same reason a like's count is: the card is
+   * seeded from `item.poll`, so a poll that was only ever updated in local
+   * component state would go back to its old numbers the moment the card
+   * scrolled out of the render window and mounted again.
+   *
+   * NOT recorded as an engagement. The analytics contract has thirteen types
+   * and no vote among them; putting one in the `like` bucket to have somewhere
+   * to put it would inflate a number the creator dashboard treats as real. A
+   * vote is unmeasured here until the contract has a name for it, which is the
+   * same call `repost` did NOT get to make — that one is genuinely a share.
+   */
+  const onVote = useCallback(
+    async (item: FeedItem, optionId: string) => {
+      const poll = await castPollVote(item.id, optionId)
+      patch(item.id, { poll })
+      return poll
+    },
+    [patch]
+  )
+
   /* ── Steering the feed ────────────────────────────────────────────────── */
 
   /**
@@ -399,27 +441,24 @@ export function HomeFeed() {
    * a sentence, because a post that reappears with no explanation reads as a
    * bug rather than as a request that did not land.
    *
+   * The undo comes back from `mutate` as a closure rather than as the old
+   * array; the note on `TabbedFeed.mutate` says why a value read here would be
+   * a render out of date.
+   *
    * `interested` removes nothing. It is a ranking hint, not a hide.
    */
   const onFeedback = useCallback(
     (item: FeedItem, signal: "interested" | "not_interested", target: "post" | "author") => {
       const position = positionOf(item)
       const hides = signal === "not_interested"
-      // Captured BEFORE the optimistic removal, so a rollback restores the
-      // list that was actually there rather than one a later render produced.
-      // Seeded from the current render rather than from nothing: `setItems`
-      // defers its updater, so an empty seed would be a rollback to a blank
-      // feed in the window before React has processed the update. This is
-      // `useOptimisticToggle`'s `let restore = state` for a list.
-      let restore: FeedItem[] = items
+      let undo: () => void = () => {}
 
       if (hides) {
-        setItems((prev) => {
-          restore = prev
-          return prev.filter((i) =>
+        undo = mutate((prev) =>
+          prev.filter((i) =>
             target === "author" ? i.author_id !== item.author_id : i.id !== item.id
           )
-        })
+        )
         // The reasons are the analytics contract's own vocabulary, not the
         // menu's. "Not interested" on a post is `irrelevant`; on an account it
         // is `dislike_creator`, which is what the row means. The event type
@@ -437,11 +476,11 @@ export function HomeFeed() {
         { kind: target, id: target === "author" ? item.author_id : item.id },
         signal
       ).then(({ ok, notice: answer }) => {
-        if (!ok && hides) setItems(restore)
+        if (!ok && hides) undo()
         setNotice(answer)
       })
     },
-    [analytics, positionOf, items]
+    [analytics, positionOf, mutate]
   )
 
   /**
@@ -482,90 +521,257 @@ export function HomeFeed() {
 
   /* ── Render ───────────────────────────────────────────────────────────── */
 
-  if (status === "loading") {
+  /**
+   * Signed out, and no strip.
+   *
+   * The tabs are three ways of asking a question that needs a session; showing
+   * them over a sign-in message would be three controls that all do the same
+   * nothing. This is the one branch that renders no `tablist` at all.
+   */
+  if (sessionStatus !== "unknown" && !signedIn) {
     return (
       <Shell notice={notice}>
-        <FeedSkeleton />
-      </Shell>
-    )
-  }
-
-  if (status === "error") {
-    return (
-      <Shell notice={notice}>
-        <FeedError message={errorMessage} onRetry={() => void load(null, "replace")} />
-      </Shell>
-    )
-  }
-
-  if (items.length === 0) {
-    return (
-      <Shell notice={notice}>
-        <FeedEmpty onRefresh={() => void load(null, "replace")} />
+        <FeedError message="Sign in to see your feed." />
       </Shell>
     )
   }
 
   return (
     <Shell notice={notice}>
-      <InfiniteFeed
-        hasMore={!reachedEnd}
-        loading={loadingMore}
-        onLoadMore={() => void load(cursor, "append")}
-        loadingIndicator={
-          <div className="pt-4">
-            <FeedSkeleton count={1} />
-          </div>
-        }
-        endIndicator={<FeedEnd />}
+      <FeedTabs
+        selected={route.tab}
+        onSelect={selectTab}
+        top={headerInset}
+        onHeightChange={setTabsHeight}
+      />
+      <div
+        role="tabpanel"
+        id={panelId(route.tab)}
+        aria-labelledby={tabId(route.tab)}
+        /*
+          Focusable because a panel is allowed to be, and this one sometimes
+          has to be: the skeleton and two of the empty states contain no
+          focusable element at all, and a panel with no way into it is a panel
+          a keyboard reader cannot reach.
+        */
+        tabIndex={0}
+        className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mo"
       >
-        {items.map((item, index) => {
-          const session = activeId === item.id ? analytics.sessionFor(item, index + 1) : undefined
-          return (
-            <PostCard
-              key={item.id}
-              item={item}
-              // Both trackers bind to the same element and the same stable id,
-              // through ONE cached callback — see `cardRef`.
-              containerRef={cardRef(item.id)}
-              active={activeId === item.id}
-              // The value every player on this card STARTS from. Nothing above
-              // a player can change its sound any more; see `STARTS_MUTED`.
-              muted={STARTS_MUTED}
-              session={session}
-              onWatchEvent={
-                session ? (event) => analytics.recordWatch(item, session, event) : undefined
-              }
-              resolveUrl={resolveUrl}
-              onLike={onLike}
-              onSave={onSave}
-              onRepost={onRepost}
-              onStale={handleStale}
-              /*
-                The comment surface. `comments` is what makes the bar's comment
-                control appear at all — the card drops it when nothing is wired
-                rather than leaving the dead glyph this feed shipped with — and
-                `onComment` is deliberately NOT passed, because that prop means
-                "navigate somewhere instead" and this zone has nowhere to go.
-              */
-              comments={comments}
-              viewerId={userId ?? undefined}
-              onCommentCreated={onCommentCreated}
-              commentError={commentFailureMessage}
-              /*
-                The overflow menu. `permalink` stays absent for the reason its
-                own note gives — there is no post detail route in this zone, so
-                "Copy link" would copy a link to a page that does not exist and
-                the menu drops the row instead.
-              */
-              isOwnPost={isOwnPost}
-              onFeedback={onFeedback}
-              onReport={onReport}
+        {route.tab === "hashtag" && !route.tag ? (
+          <TrendingTags
+            status={trending.status}
+            tags={trending.tags}
+            onOpen={openTag}
+            onRetry={trending.reload}
+          />
+        ) : (
+          <>
+            {route.tag && <TagHeading tag={route.tag} onBack={closeTag} />}
+            <FeedBody
+              tab={route.tab}
+              tag={route.tag}
+              feed={feed}
+              onBrowseForYou={() => selectTab("for-you")}
+              render={(item, index) => {
+                const session =
+                  activeId === item.id ? analytics.sessionFor(item, index + 1) : undefined
+                return (
+                  <PostCard
+                    key={item.id}
+                    item={item}
+                    // Both trackers bind to the same element and the same
+                    // stable id, through ONE cached callback — see `cardRef`.
+                    containerRef={cardRef(item.id)}
+                    active={activeId === item.id}
+                    // The value every player on this card STARTS from. Nothing
+                    // above a player can change its sound any more; see
+                    // `STARTS_MUTED`.
+                    muted={STARTS_MUTED}
+                    session={session}
+                    onWatchEvent={
+                      session ? (event) => analytics.recordWatch(item, session, event) : undefined
+                    }
+                    resolveUrl={resolveUrl}
+                    onLike={onLike}
+                    onSave={onSave}
+                    onRepost={onRepost}
+                    onStale={handleStale}
+                    /*
+                      The comment surface. `comments` is what makes the bar's
+                      comment control appear at all — the card drops it when
+                      nothing is wired rather than leaving the dead glyph this
+                      feed shipped with — and `onComment` is deliberately NOT
+                      passed, because that prop means "navigate somewhere
+                      instead" and this zone has nowhere to go.
+                    */
+                    comments={comments}
+                    viewerId={userId ?? undefined}
+                    onCommentCreated={onCommentCreated}
+                    commentError={commentFailureMessage}
+                    /*
+                      Voting. `viewerId` above is what tells the card whether
+                      anybody is signed in — a viewer who has not voted and a
+                      viewer who is not there send the same empty
+                      `viewer_votes`, and the two want different cards.
+                    */
+                    onVote={onVote}
+                    pollError={pollFailureMessage}
+                    /*
+                      The overflow menu. `permalink` stays absent for the reason
+                      its own note gives — there is no post detail route in this
+                      zone, so "Copy link" would copy a link to a page that does
+                      not exist and the menu drops the row instead.
+                    */
+                    isOwnPost={isOwnPost}
+                    onFeedback={onFeedback}
+                    onReport={onReport}
+                  />
+                )
+              }}
             />
-          )
-        })}
-      </InfiniteFeed>
+          </>
+        )}
+      </div>
     </Shell>
+  )
+}
+
+/**
+ * One section's list: its skeleton, its own empty and error states, its posts.
+ *
+ * ── Three sections, three different sentences ─────────────────────────────
+ * This is the part that is easiest to get lazily wrong, and it is not a tone
+ * question. An empty **Following** describes a world that is working perfectly
+ * and names the one thing that changes it; an empty **For You** means the
+ * ranker had nothing right now; a failed fetch means the screen is not the
+ * truth. Merge them and the reader loses the ability to tell whether to act or
+ * to wait — "we could not load your feed" over a Following tab that loaded
+ * fine and honestly contains nothing is a false alarm that sends someone to
+ * check their connection instead of following somebody.
+ *
+ * For You keeps `FeedEmpty` and `FeedError` from @momentum/content verbatim.
+ * The other two cannot: those components hardcode their headings. See the note
+ * at the top of `./TabStates.tsx` for the props that would remove the
+ * duplication, and why this branch does not add them.
+ */
+function FeedBody({
+  tab,
+  tag,
+  feed,
+  onBrowseForYou,
+  render,
+}: {
+  tab: FeedTabId
+  tag: string | null
+  feed: ReturnType<typeof useTabbedFeed>
+  onBrowseForYou: () => void
+  render: (item: FeedItem, index: number) => React.ReactNode
+}) {
+  const { list, loadMore, reload } = feed
+
+  if (list.status === "loading") return <FeedSkeleton />
+
+  if (list.status === "error") {
+    // 401 is the one failure worth telling apart by hand: it is not "the feed
+    // is down", it is "you are no longer who you were", and the next step is
+    // different. Everything else gets one sentence on purpose — a reader
+    // cannot act on a status code.
+    const expired = list.failure?.status === 401
+
+    if (tag) {
+      return (
+        <SectionError
+          title={`We could not load #${tag}`}
+          detail={
+            expired
+              ? "Your session has expired. Sign in again to see this tag."
+              : "The tag's posts did not answer. It may be a moment before they do."
+          }
+          action={{ label: "Try again", onClick: reload }}
+        />
+      )
+    }
+    return (
+      <FeedError
+        message={
+          expired
+            ? "Your session has expired. Sign in again to see your feed."
+            : "The feed did not answer. It may be a moment before it does."
+        }
+        onRetry={reload}
+      />
+    )
+  }
+
+  if (list.items.length === 0) {
+    if (tag) {
+      return (
+        <SectionEmpty
+          icon={Hash}
+          title={`No posts with #${tag} yet`}
+          detail="Nothing has been posted with this tag. Be the first."
+          action={{ label: "Check again", onClick: reload }}
+        />
+      )
+    }
+    if (tab === "following") {
+      return (
+        <SectionEmpty
+          icon={UserPlus}
+          // Says what is true, and what changes it. It also says where to go
+          // meanwhile, because the honest answer to "this tab is empty" on a
+          // new account is "the other tab is not".
+          title="Nothing from people you follow yet"
+          detail="This tab shows posts from accounts you follow. Follow a few people and they will show up here."
+          action={{ label: "Browse For You", onClick: onBrowseForYou }}
+        />
+      )
+    }
+    return <FeedEmpty onRefresh={reload} />
+  }
+
+  return (
+    <InfiniteFeed
+      hasMore={!list.reachedEnd}
+      loading={list.loadingMore}
+      onLoadMore={loadMore}
+      loadingIndicator={
+        <div className="pt-4">
+          <FeedSkeleton count={1} />
+        </div>
+      }
+      endIndicator={<FeedEnd />}
+    >
+      {list.items.map(render)}
+    </InfiniteFeed>
+  )
+}
+
+/**
+ * Which tag is open, and the way back to the list.
+ *
+ * The tag is an `<h2>` under the page's `<h1>`: it is a section of Home, not a
+ * page of its own, and the heading outline should say so to anyone reading by
+ * headings. The back control is a button rather than a link because the
+ * destination is a state of this page, and it REPLACES rather than pushes so
+ * that the browser's own Back still lands on the tag list exactly once instead
+ * of walking back through list, tag, list.
+ */
+function TagHeading({ tag, onBack }: { tag: string; onBack: () => void }) {
+  return (
+    <div className="mb-4 flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label="Back to trending tags"
+        className="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+      >
+        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+      </button>
+      <h2 className="min-w-0 truncate font-mo-display text-lg font-semibold tracking-mo-display text-mo-ink">
+        #{tag}
+      </h2>
+    </div>
   )
 }
 
@@ -593,6 +799,15 @@ export function HomeFeed() {
  * same reason a photograph cannot drift from its subject. It needs no
  * agreement with another file, no shared constant, and no CSS variable that
  * could itself be edited apart from the thing it describes.
+ *
+ * ── What it CANNOT see, and who covers that ───────────────────────────────
+ * The hit test is at y = 0, so it only ever finds the topmost bar. The feed's
+ * tab strip pins BELOW the header — its own top is at 56.67, not 0 — so it is
+ * invisible to this and always will be. That is not a bug to fix here by
+ * probing further down the page: whether the strip is currently covering
+ * anything depends on the scroll offset, and this is deliberately a
+ * measurement that does not run per frame. The strip reports its own height
+ * instead, and the caller adds the two. See `viewportInset` above.
  *
  * A full-screen overlay is `fixed` too, and would otherwise report the whole
  * window as chrome; anything covering more than a third of the height is not a

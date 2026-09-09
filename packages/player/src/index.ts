@@ -62,6 +62,29 @@ export {
   revokeManualPlaybackExcept,
 } from "./manualPlayback"
 
+/**
+ * Sound, and the one bit that decides whether the next video has any.
+ *
+ * `MomentumVideo` uses all of this on its own and a zone needs none of it —
+ * there is no prop to pass and nothing to wire. It is exported because a
+ * surface with its own transport (tube's watch page, a reels viewer) draws its
+ * own speaker button and must move the same default when somebody presses it,
+ * and because a "sound is on" indicator in a zone's chrome would read
+ * `soundIsArmed`.
+ *
+ * Read the header of `soundPreference.ts` first. The rule that matters is that
+ * this changes what a playback STARTS as and never what is already playing,
+ * which is what keeps a click in the header from making a video blare.
+ */
+export {
+  armSound,
+  disarmSound,
+  isActivationKey,
+  noteUnmutedPlaybackRefused,
+  soundIsArmed,
+  watchForSoundGesture,
+} from "./soundPreference"
+
 export {
   analyticsContentType,
   areVariantsExpired,

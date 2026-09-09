@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest"
 import {
+  arrowLabel,
   carouselLabel,
   clampPage,
+  controlsVisible,
   dragTarget,
   isPageActive,
   isPageRendered,
   keyTarget,
   pageFromScroll,
   pillLabel,
+  pipLabel,
   slideLabel,
+  stepTarget,
 } from "./carousel"
 
 /**
@@ -170,5 +174,87 @@ describe("clampPage", () => {
     expect(clampPage(99, 3)).toBe(2)
     expect(clampPage(Number.NaN, 3)).toBe(0)
     expect(clampPage(0, 0)).toBe(0)
+  })
+})
+
+/* ── The controls the founder asked for: arrows, and pips you can press ──── */
+
+describe("stepTarget", () => {
+  it("moves one page, in the direction the arrow points", () => {
+    expect(stepTarget("next", 0, 5)).toBe(1)
+    expect(stepTarget("prev", 3, 5)).toBe(2)
+  })
+
+  /**
+   * Null is what makes the arrow ABSENT rather than disabled. A greyed arrow
+   * welded over the first photograph of every carousel is chrome that can
+   * never do anything, sitting on top of the content it decorates.
+   */
+  it("has nowhere to go at the ends, which is what removes the button", () => {
+    expect(stepTarget("prev", 0, 5)).toBeNull()
+    expect(stepTarget("next", 4, 5)).toBeNull()
+  })
+
+  it("gives the same answer as the arrow keys, because it is the same answer", () => {
+    // One definition of "what does next mean here". Two would eventually
+    // disagree, and the visible symptom is an arrow that works at an end the
+    // keyboard refuses to cross.
+    for (const page of [0, 1, 2, 3, 4]) {
+      expect(stepTarget("next", page, 5)).toBe(keyTarget("ArrowRight", page, 5))
+      expect(stepTarget("prev", page, 5)).toBe(keyTarget("ArrowLeft", page, 5))
+    }
+  })
+
+  it("offers nothing on a single-page deck", () => {
+    expect(stepTarget("next", 0, 1)).toBeNull()
+    expect(stepTarget("prev", 0, 1)).toBeNull()
+  })
+})
+
+describe("controlsVisible", () => {
+  it("is nothing at rest, so an untouched feed carries no overlay chrome", () => {
+    expect(controlsVisible({ hovered: false, focused: false, recentlyMoved: false })).toBe(false)
+  })
+
+  it("appears for a mouse that is over the frame and still moving", () => {
+    expect(controlsVisible({ hovered: true, focused: false, recentlyMoved: true })).toBe(true)
+  })
+
+  it("fades under a mouse that has stopped, on the player's own clock", () => {
+    // `recentlyMoved` IS the CONTROLS_HIDE_MS timer. A cursor parked over a
+    // photograph is not asking for two buttons on top of it.
+    expect(controlsVisible({ hovered: true, focused: false, recentlyMoved: false })).toBe(false)
+  })
+
+  it("stays for keyboard focus, whatever the timer says", () => {
+    // The one condition with no clock on it: a control that faded out from
+    // under the focus would leave that focus inside an aria-hidden subtree.
+    expect(controlsVisible({ hovered: false, focused: true, recentlyMoved: false })).toBe(true)
+  })
+})
+
+describe("pip and arrow labels", () => {
+  it("names an arrow by what it does", () => {
+    expect(arrowLabel("prev")).toBe("Previous photo")
+    expect(arrowLabel("next")).toBe("Next photo")
+  })
+
+  /**
+   * The pips were `aria-hidden` decoration on purpose — a row of dots
+   * announcing "dot dot dot" told a screen-reader user nothing that each
+   * slide's own label had not already said. Pressable things cannot be
+   * decoration, so the labels have to earn their place: `slideLabel` names a
+   * THING and is read on arrival, `pipLabel` names an ACTION and is read on
+   * the control that performs it.
+   */
+  it("says what pressing a pip does, not what the pip is", () => {
+    expect(pipLabel(2, 5, "image")).toBe("Show photo 3 of 5")
+    expect(pipLabel(0, 2, "video")).toBe("Show video 1 of 2")
+  })
+
+  it("never reads the same as the slide it moves to", () => {
+    for (const index of [0, 1, 2]) {
+      expect(pipLabel(index, 3, "image")).not.toBe(slideLabel(index, 3, "image"))
+    }
   })
 })
