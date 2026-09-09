@@ -19,8 +19,16 @@ import { APP_ONLY_REASON, DESTINATIONS, currentDestinationId, isActionable } fro
  * pkg/routepolicy) because it got it wrong there first.
  */
 
-/** The zones apps/shell actually rewrites to, and the only legal hrefs. */
-const LIVE_ZONES = ["/shop", "/admin", "/social", "/apps"]
+/**
+ * The zones apps/shell actually rewrites to, and the only legal hrefs.
+ *
+ * This list and the `zones` table in apps/shell/next.config.ts move together —
+ * which is the whole point of the assertion below. `/reels` joined both when
+ * apps/reels was built; before that the Reels row was `href: null` with
+ * APP_ONLY_REASON, and this test is what would have caught it being linked a
+ * release too early.
+ */
+const LIVE_ZONES = ["/shop", "/admin", "/social", "/apps", "/reels"]
 
 describe("DESTINATIONS", () => {
   it("carries the mobile client's own top-level vocabulary", () => {

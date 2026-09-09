@@ -18,6 +18,7 @@ const zones = [
   ["/admin", "ADMIN_ZONE_URL", "http://localhost:3002"],
   ["/social", "SOCIAL_ZONE_URL", "http://localhost:3004"],
   ["/apps", "MINIAPPS_ZONE_URL", "http://localhost:3010"],
+  ["/reels", "REELS_ZONE_URL", "http://localhost:3011"],
 ] as const
 
 const nextConfig: NextConfig = {

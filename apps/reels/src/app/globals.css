@@ -1,0 +1,59 @@
+/* The Momentum theme, then Tailwind.
+
+   @momentum/tokens is imported FIRST and deliberately: it declares every
+   --mo-* custom property and, at the end, points the --brand-* contract that
+   @atpost/ui reads at those same values. Tailwind's layers come after, so a
+   utility can always win over a base rule.
+
+   There are no colours in this file. A zone that paints its own #0F1419 here
+   is a zone that will be a slightly different black from every other zone in
+   six months. Everything visual lives in packages/tokens/tokens.css, which is
+   also where the contrast measurements are recorded — and note that none of
+   those measurements cover a control sitting on a frame of video, which is
+   why the reel's own overlay reasons about contrast where it is drawn. */
+@import "@momentum/tokens/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* next/font generates a family name per font and exposes it as a variable.
+   Handing those to the token sheet's own variables is the seam that lets
+   @momentum/tokens stay a plain stylesheet with no idea how a zone loaded its
+   fonts. Both keep their full system fallback behind them, so a failed font
+   request degrades rather than breaks. */
+:root {
+  --mo-font-display: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* This zone is exactly one viewport tall and never scrolls at the document
+   level: the reel scroller inside it is the only thing that scrolls, and a
+   document that ALSO scrolled would fight it — a swipe would move both, and
+   the snap would land between two reels.
+
+   `overflow: hidden` on both, rather than only on <body>, because the two
+   disagree about which one owns the viewport's scrollbar and a browser will
+   happily use whichever is not locked down. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* The reel scroller's own scrollbar is hidden. This is the one place a
+   scrollbar is genuinely noise rather than an affordance: the surface is
+   snapped to whole pages, so the bar can never be dragged to a useful
+   position, and it would sit as a bright line down the right edge of every
+   video. The content stays reachable by wheel, touch, and the keys in
+   src/reels/keys.ts — which is what makes hiding it acceptable rather than a
+   trap. */
+.reels-scroller {
+  scrollbar-width: none;
+}
+
+.reels-scroller::-webkit-scrollbar {
+  display: none;
+}

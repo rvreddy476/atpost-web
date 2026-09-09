@@ -117,8 +117,12 @@ export const DESTINATIONS: readonly AppDestination[] = [
     id: "reels",
     label: "Reels",
     icon: Film,
-    href: null,
-    unavailableReason: APP_ONLY_REASON,
+    // A real zone as of the reels build: apps/reels, and the shell's rewrite
+    // table now carries /reels. This entry was `href: null` with
+    // APP_ONLY_REASON until the zone existed, which is this file's rule — an
+    // entry becomes a link on the day something serves it, and not before.
+    href: "/reels",
+    unavailableReason: null,
     description: "Short video",
   },
   {
