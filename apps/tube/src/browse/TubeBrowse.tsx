@@ -1,92 +1,99 @@
 "use client"
 
 /**
- * `/tube` — the browse page. A grid of long videos inside the ordinary chrome.
+ * `/tube` — the home page of Momentum Tube.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * WHAT THIS IS, AND WHY IT IS THE OTHER HALF OF THE REELS CHANGE
+ * WHAT CHANGED, AND WHY THE OLD SHAPE WAS WRONG
  *
- * The founder's note names both surfaces in one sentence:
+ * This page shipped an hour ago as "a grid of long videos inside the ordinary
+ * chrome" — two cards across a 600px centre track, between the feed's left
+ * rail of Messages and Friends and its right rail of people to add. The
+ * founder's note is about exactly that:
  *
- *     "see the reel page or video page, it should load normally with all
- *      option and icons and as Feed page when we click only Reel tab or video
- *      tab. We have to give to expand option for reels or video. 1. When user
- *      click on expand button for reels, it plays full page as it now. 2. When
- *      user click on Full video expand, it ill play full video"
+ *     "it's a completely isolated application from the feed. It's Momentum
+ *      Tube. So it should be completely isolated. It did open like in YouTube
+ *      completely — channel, subscriptions, settings at the left side, and
+ *      videos."
  *
- * The reels half shipped first and made `/reels` a page in the app rather than
- * a full-screen takeover. This is the same shape for video: a page that loads
- * "normally with all option and icons" — the header, the left rail, the right
- * rail, the working nav strip, the same 600px centre track everything else in
- * the product uses.
+ * The chrome is now Tube's own (../chrome/TubeFrame.tsx) and the centre track
+ * is gone with it, so this page had to be re-laid-out rather than merely
+ * re-parented. Three things follow from the wider track:
  *
- * Where the two halves diverge is what "expand" means, and that divergence is
- * the founder's own. A reel expands into a full-page swipe-through takeover,
- * `/reels/{id}`, because that is what watching reels IS. A long video expands
- * into "full video" — the picture filling the screen with the page still
- * behind it — and that control lives on the watch page, not here. See
- * ../watch/expand.ts.
+ *   · THE GRID GOES WIDER. Two across was not a preference, it was arithmetic
+ *     against 600px: three across in that track is 184x104 per cell, at which
+ *     a poster is a smear and a two-line title is four lines. With the whole
+ *     window the same reasoning gives a different answer — see `GRID` below,
+ *     which has the widths written out.
+ *
+ *   · THE CHIP RAIL EXISTS. `?category=` was always real on this endpoint and
+ *     was deliberately not sent, because "a filter is only honest with a
+ *     control attached". The control is ./TubeCategories.tsx and the filter
+ *     is honest now.
+ *
+ *   · THE SIGNED-OUT PAGE IS NOT A WALL. It used to be a single "Sign in to
+ *     watch videos" card, which was the correct rendering of a 401 from
+ *     `/v1/feed/videos` and the wrong answer for a home page. The public
+ *     shelf behind `/v1/posts/recent?content_type=long_video` needs no
+ *     session, so an anonymous visitor now gets real videos and one sentence
+ *     saying what they are missing. ../tube/api.ts has the wire detail.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * THE PRESENTATION
- *
- * Two cards across in the 600px track, one below the `sm` breakpoint. A card
- * is a 16:9 poster with the title, the channel, the view count and the age
- * under it — the standard long-video card, and the standard for a reason: the
- * thing being chosen between is the TITLE, which a 100-character field can
- * genuinely fill, and a title has nowhere to live on a 9:16 tile.
- *
- * Two across and not three: a 16:9 cell three across in 600px is 184x104, at
- * which a poster is a smear and a two-line title is four lines. Two across is
- * ~292x164, which is the size these thumbnails are actually for.
+ * WHAT DID NOT CHANGE
  *
  * ── It mounts no players ──────────────────────────────────────────────────
  * Zero `<video>` elements on this page, which is the whole economy of the
- * split. ./VideoCard.tsx has the measurement and the argument.
+ * split, and going wider makes it matter MORE rather than less: four cards a
+ * row instead of two is four players a row that are not attached.
+ * ./VideoCard.tsx has the measurement and the argument.
  *
  * ── It has no like / save / share / follow ────────────────────────────────
  * Those exist, complete, one click away, with their optimistic updates, their
  * rollbacks and their engagement events. Reproducing them per card would be a
- * second implementation of each — and a second place for them to disagree with
- * the server. The counts ARE shown, as counts.
+ * second implementation of each — and a second place for them to disagree
+ * with the server. The counts ARE shown, as counts.
  *
  * ── It does not share feed state with the watch page ──────────────────────
  * Opening a video is a route change, and the watch page fetches its own page
  * one — which, in the ordinary case of clicking a card, is the very page the
- * card came from. Hoisting the pages into something both routes read would be
- * a client-side store for the sake of a request that has already been paid for
- * once. ../tube/useTubeFeed.ts has the note on why the watch page reads the
- * feed at all instead of `GET /v1/posts/{id}`.
+ * card came from. ../tube/useTubeFeed.ts has the note on why the watch page
+ * reads the feed at all instead of `GET /v1/posts/{id}`.
  */
 
+import { useState } from "react"
 import { useSession } from "@atpost/api-client/session"
 import { InfiniteFeed } from "@momentum/content"
 import { useTubeFeed } from "@/tube/useTubeFeed"
 import { VideoCard } from "./VideoCard"
-import {
-  BrowseEmpty,
-  BrowseEnd,
-  BrowseError,
-  BrowseSignedOut,
-  BrowseSkeleton,
-} from "./states"
+import { TubeCategories, useCategories } from "./TubeCategories"
+import { ALL_CHIP, chipLabel, chipQuery, type TubeChip } from "./chips"
+import { BrowseEmpty, BrowseEnd, BrowseError, BrowseSkeleton, PublicNotice } from "./states"
+import { VIDEO_GRID } from "./grid"
 
 export function TubeBrowse() {
   const session = useSession()
-  // Not `session.signedIn`: that is false while the status is still "unknown",
-  // and a page that waited for certainty before its first fetch would add a
-  // round trip to every visit. `signedOut` is the only state known to be
-  // pointless to ask from.
-  const feed = useTubeFeed(undefined, !session.signedOut)
+  const categories = useCategories()
+  const [chip, setChip] = useState<TubeChip>(ALL_CHIP)
+
+  // `signedOut` and not `!signedIn`: the latter is true while the status is
+  // still "unknown", and a page that chose its endpoint from that would read
+  // the public shelf for a signed-in viewer on every cold load.
+  const anonymous = session.signedOut
+
+  const feed = useTubeFeed(undefined, session.status !== "unknown", {
+    ...chipQuery(chip),
+    anonymous,
+  })
   const items = feed.items
 
   const body = () => {
-    if (session.signedOut) return <BrowseSignedOut />
     if (feed.loading) return <BrowseSkeleton />
     if (feed.error && items.length === 0) {
       return <BrowseError message={feed.error} onRetry={feed.retry} />
     }
-    if (items.length === 0) return <BrowseEmpty />
+    if (items.length === 0) {
+      return <BrowseEmpty filter={chip.kind === "all" ? null : chipLabel(chip, categories)} />
+    }
 
     return (
       <InfiniteFeed
@@ -100,15 +107,12 @@ export function TubeBrowse() {
         loadingIndicator={
           <p className="py-6 text-center text-sm text-mo-body">Loading more videos…</p>
         }
-        endIndicator={<BrowseEnd count={items.length} />}
+        endIndicator={<BrowseEnd count={items.length} ranked={!anonymous} />}
       >
-        {/* Asymmetric gaps on purpose: `gap-x-3` keeps two cards in a row
-            reading as one row, while `gap-y-5` puts real air between a card's
-            title block and the poster of the card below it. An even gutter
-            makes the title look like a caption for the wrong picture.
-            InfiniteFeed wraps its children in `space-y-4`, which has no effect
-            on a single child. */}
-        <ul className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+        {/* InfiniteFeed wraps its children in `space-y-4`, which has no effect
+            on a single child. The column count and the gaps are ./grid.ts,
+            because the skeleton has to agree with them. */}
+        <ul className={VIDEO_GRID}>
           {items.map((item, at) => (
             <VideoCard key={item.id} item={item} position={at + 1} total={items.length} />
           ))}
@@ -119,14 +123,23 @@ export function TubeBrowse() {
 
   return (
     <div>
-      <header className="mb-5">
-        <h1 className="font-mo-display text-2xl font-semibold tracking-mo-display text-mo-ink">
-          Tube
-        </h1>
-        <p className="mt-1 text-sm text-mo-body">
-          Long video, ranked for you. Open one to watch, then expand it to full video.
-        </p>
-      </header>
+      {/* No <h1> above the grid, and that is deliberate rather than an
+          omission. The old page had one that read "Tube", which was necessary
+          when this was a surface inside the feed's chrome and had to say
+          which surface it was. The application is now called Momentum Tube in
+          its own top bar, on every page; a heading repeating it under the bar
+          that says it would be the page's largest text stating something the
+          reader already knows, and it would push the first row of videos a
+          further 60px down. The chip rail is the first thing on the page,
+          which is also where YouTube puts it. */}
+      <TubeCategories
+        categories={categories}
+        selected={chip}
+        signedIn={session.signedIn}
+        onSelect={setChip}
+      />
+
+      {anonymous && <PublicNotice />}
 
       {/* A page that failed AFTER showing videos keeps the videos and says so
           underneath, rather than replacing a working grid with an apology. */}

@@ -49,7 +49,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { FeedItem } from "@atpost/types/feed"
-import { fetchVideosPage } from "./api"
+import { fetchVideosPage, feedQueryKey, type TubeFeedQuery } from "./api"
 
 /** How many pages a deep link may walk before giving up. See the header. */
 const DEEP_LINK_MAX_PAGES = 12
@@ -81,22 +81,41 @@ export interface TubeFeed {
 
 /**
  * @param deepLinkId the post the watch page was opened on, if any.
- * @param enabled false while the browser is known to be signed out.
+ * @param enabled false while there is nothing worth asking for.
+ * @param query which page of long video — see `TubeFeedQuery` in ./api.ts.
  *
- * `/v1/feed/videos` ranks against a viewer and is 401 for an anonymous
- * browser — there is no anonymous long-video feed on this gateway at all — so
- * asking without a session is not a request that might work. It is a
- * guaranteed 401, and each one costs a failed token refresh behind it. The
- * layout seeds the session provider from the request's own cookie, so this is
- * known before the first paint rather than after a round trip.
+ * ── `enabled` used to mean "there is a session" ───────────────────────────
+ * It meant that because `/v1/feed/videos` ranks against a viewer and is 401
+ * for an anonymous browser: asking without a session was not a request that
+ * might work, it was a guaranteed 401 with a failed token refresh behind each
+ * one. That is still true of THAT endpoint, and it is now expressed where it
+ * belongs — `query.anonymous` switches the call to the public shelf — so a
+ * signed-out home page fetches something that works instead of fetching
+ * nothing. `enabled` is back to its plain meaning: false while the caller has
+ * not decided yet.
+ *
+ * ── The query is part of the hook's IDENTITY ──────────────────────────────
+ * A cursor and a seen-set belong to one query. Switching from All to Comedy
+ * while holding the old cursor asks the server to continue a list it is no
+ * longer sending, and the seen-set would silently drop videos that appear in
+ * both. So every piece of paging state is torn down and rebuilt when
+ * `feedQueryKey(query)` changes — see the effect below, which is the only
+ * thing in this file that is allowed to reset it.
  */
-export function useTubeFeed(deepLinkId?: string, enabled = true): TubeFeed {
+export function useTubeFeed(
+  deepLinkId?: string,
+  enabled = true,
+  query: TubeFeedQuery = {}
+): TubeFeed {
   const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ended, setEnded] = useState(false)
   const [deepLinkMissing, setDeepLinkMissing] = useState(false)
+
+  /** The query's identity, and the only thing that makes this hook start over. */
+  const queryKey = feedQueryKey(query)
 
   const cursor = useRef<string | null>(null)
   const inFlight = useRef(false)
@@ -128,45 +147,106 @@ export function useTubeFeed(deepLinkId?: string, enabled = true): TubeFeed {
    */
   const failed = useRef(false)
 
+  /**
+   * The end of the feed, as a ref as well as as state.
+   *
+   * The state is what the surface renders. The ref is what `load` reads,
+   * and they are separate for two reasons that both bite:
+   *
+   *   · `load` must see the CURRENT value at call time. Reading the state
+   *     variable meant `load` changed identity whenever `ended` flipped,
+   *     which the effect below then had to have an `eslint-disable` and a
+   *     paragraph to work around.
+   *   · A reset sets `ended` to false and calls `load` in the same tick. A
+   *     `load` closed over the old state would see the OLD `true` and refuse
+   *     to fetch the first page of the new query — a chip that filters to a
+   *     category and then shows an empty grid forever.
+   */
+  const endedRef = useRef(false)
+
+  /**
+   * Which query the pages on screen belong to.
+   *
+   * Bumped by the reset effect. A response that comes back after the query
+   * has moved on is dropped rather than appended: without this, switching
+   * chips quickly interleaves two feeds into one list, and the cursor that
+   * ends up in `cursor.current` belongs to whichever request happened to
+   * finish last.
+   */
+  const generation = useRef(0)
+
+  /** The query as of the last reset. See the note on `generation`. */
+  const activeQuery = useRef<TubeFeedQuery>(query)
+
   const load = useCallback(async () => {
-    if (!enabled || inFlight.current || ended || failed.current) return
+    if (!enabled || inFlight.current || endedRef.current || failed.current) return
     inFlight.current = true
+    const mine = generation.current
     const first = pagesFetched.current === 0
     if (first) setLoading(true)
     else setLoadingMore(true)
     setError(null)
 
     try {
-      const page = await fetchVideosPage(cursor.current)
+      const page = await fetchVideosPage(cursor.current, activeQuery.current)
+      if (mine !== generation.current) return
       pagesFetched.current += 1
       const fresh = page.items.filter((item) => !seen.current.has(item.id))
       for (const item of fresh) seen.current.add(item.id)
       if (fresh.length > 0) setItems((prev) => [...prev, ...fresh])
       cursor.current = page.nextCursor
-      if (!page.nextCursor) setEnded(true)
+      if (!page.nextCursor) {
+        endedRef.current = true
+        setEnded(true)
+      }
       failed.current = false
     } catch {
+      if (mine !== generation.current) return
       failed.current = true
       setError("Videos could not be loaded.")
     } finally {
-      inFlight.current = false
-      setLoading(false)
-      setLoadingMore(false)
+      if (mine === generation.current) {
+        inFlight.current = false
+        setLoading(false)
+        setLoadingMore(false)
+      }
     }
-  }, [enabled, ended])
+  }, [enabled])
 
   /**
-   * The first page, once — and again if a session arrives.
+   * The first page — and the whole state torn down when the query changes.
    *
-   * `enabled` and not `load` in the dependency list. `load` also changes
-   * identity when `ended` flips, and re-running this on THAT edge would ask
-   * for a page the moment the feed ended.
+   * `queryKey` rather than `query` in the dependency list because `query` is
+   * an object literal at every call site and would be a new identity on every
+   * render, which is an infinite fetch loop rather than a subtle bug.
+   *
+   * Everything below the line is paging state that belongs to ONE query, and
+   * this is the only place any of it is reset. Leaving any single piece
+   * behind has a distinct and confusing symptom: a stale `cursor` continues a
+   * list the server is no longer sending, a stale `seen` set silently drops
+   * videos that are in both answers, a stale `ended` shows an empty grid
+   * forever, and a stale `failed` latch refuses to fetch the new query at all.
    */
   useEffect(() => {
     if (!enabled) return
+    generation.current += 1
+    activeQuery.current = query
+    cursor.current = null
+    pagesFetched.current = 0
+    inFlight.current = false
+    seen.current = new Set()
+    failed.current = false
+    endedRef.current = false
+    setItems([])
+    setEnded(false)
+    setError(null)
+    setDeepLinkMissing(false)
+    setLoading(true)
     void load()
+    // `query` is intentionally absent: `queryKey` is its identity, and `load`
+    // is stable now that it no longer closes over `ended`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled])
+  }, [enabled, queryKey])
 
   const foundAt = deepLinkId ? items.findIndex((i) => i.id === deepLinkId) : -1
 

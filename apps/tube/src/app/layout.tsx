@@ -1,10 +1,9 @@
 import type { Metadata } from "next"
 import { Figtree, Outfit } from "next/font/google"
-import { BRAND, zoneTitle } from "@momentum/brand"
-import { AppFrame } from "@momentum/chrome"
+import { BRAND } from "@momentum/brand"
 import { readServerSession } from "@atpost/api-client/server"
 import { SessionProvider } from "@atpost/api-client/session"
-import { ZONE } from "@/zone"
+import { TubeFrame } from "@/chrome/TubeFrame"
 import "./globals.css"
 
 /**
@@ -27,8 +26,25 @@ const figtree = Figtree({
   display: "swap",
 })
 
+/**
+ * The title is the APP's name, not "Tube — Momentum".
+ *
+ * `zoneTitle("Tube")` produced the latter, which is the right shape for a
+ * SURFACE of a product — it is what /shop and /social and /reels use, and it
+ * reads as "one of Momentum's pages". This app is not one of those:
+ *
+ *     "it's a completely isolated application from the feed. It's Momentum
+ *      Tube."
+ *
+ * So the browser tab says the app's own name. It is also what somebody
+ * bookmarking a channel or a video should find in their bookmark bar a week
+ * later.
+ */
 export const metadata: Metadata = {
-  title: zoneTitle("Tube"),
+  title: {
+    default: `${BRAND.name} Tube`,
+    template: `%s — ${BRAND.name} Tube`,
+  },
   description: `Long video on ${BRAND.name}.`,
 }
 
@@ -37,33 +53,41 @@ export const metadata: Metadata = {
  *
  * `readServerSession()` reads this request's own session cookie, so the server
  * already knows whether anyone is signed in and the first HTML is the right
- * one. `GET /v1/feed/videos` is 401 for an anonymous browser — there is no
- * anonymous long-video feed at all — so without this the zone would paint a
- * grid of skeletons and replace them with a sign-in prompt a beat later.
+ * one. It matters more here than it looks: the two feeds this app can read are
+ * DIFFERENT ENDPOINTS depending on the answer — `GET /v1/feed/videos` is 401
+ * for an anonymous browser, and the public shelf behind
+ * `GET /v1/posts/recent?content_type=long_video` is what a signed-out visitor
+ * sees instead. Without the cookie read the home page would fetch the wrong
+ * one, get a 401, and then fetch the other.
  *
- * ── The frame is HERE, and that is the difference from apps/reels ─────────
- * apps/reels splits its chrome into a `(browse)` route group, because its two
- * surfaces disagree about wearing it: `/reels` is an ordinary page and
- * `/reels/{id}` is a full-screen takeover whose only chrome is 48px of
- * translucent bar drawn OVER the video.
+ * ── The frame is HERE, and it is TUBE'S OWN ──────────────────────────────
+ * What stood here was `<AppFrame basePath={ZONE}>` — @momentum/chrome, the
+ * frame /social and /reels wear. This one line is the whole of what the
+ * founder rejected: Tube shipped looking like a tab of the feed.
  *
- * Tube has no such disagreement, and that IS the founder's distinction:
+ *     "it's a completely isolated application from the feed. It's Momentum
+ *      Tube. So it should be completely isolated. It did open like in YouTube
+ *      completely — channel, subscriptions, settings at the left side, and
+ *      videos."
  *
- *     "When user click on expand button for reels, it plays full page as it
- *      is now. When user click on Full video expand, it ill play full video."
+ * `TubeFrame` is that shell: Tube's own top bar, Tube's own left rail with
+ * the viewer's subscribed channels in it, and one wide content track instead
+ * of the shared frame's 600px centre column. ../chrome/TubeFrame.tsx has the
+ * argument in full, including why the shared frame could not simply be
+ * parameterised — its 600px centre is a promise it keeps for the two zones
+ * that do want it.
  *
- * A reel is watched by taking over the screen. A long video is watched in a
- * PAGE — with a title, a channel, a description and the action row under the
- * picture — and it is the expand control on that page, not the route, that
- * makes the picture fill the screen. So both `/tube` and `/tube/{postId}`
- * wear the ordinary frame, this is the only place it is mounted, and there is
- * no route group.
+ * It takes no `basePath`. @momentum/chrome needs one because it draws links
+ * into five zones and has to be TOLD which it is in; this shell's links are
+ * either its own routes (where `next/link` adds the basePath itself) or the
+ * three absolute paths in ../chrome/links.ts. There is nothing left for a
+ * prop to disambiguate.
  *
- * `basePath` is a required prop rather than an environment read. It is what
- * marks Tube as the current destination in the strip, what makes "Sign in"
- * come back HERE rather than to the feed, and what tells the search box that
- * its results page is in another zone and must be a document navigation. See
- * @momentum/chrome's zone.ts.
+ * Tube still has no route group, and that part is unchanged: apps/reels needs
+ * one because `/reels/{id}` is a full-screen takeover that refuses the frame,
+ * while every surface here — the grid, subscriptions, a channel, the watch
+ * page — is an ordinary page inside the shell. The expand control on the
+ * watch page, not the route, is what makes a picture fill the screen.
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { signedIn } = await readServerSession()
@@ -74,7 +98,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           and color-scheme: dark so native controls and the scrollbar follow. */}
       <body className="mo-root">
         <SessionProvider initialSignedIn={signedIn}>
-          <AppFrame basePath={ZONE}>{children}</AppFrame>
+          <TubeFrame>{children}</TubeFrame>
         </SessionProvider>
       </body>
     </html>

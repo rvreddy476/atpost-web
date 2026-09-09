@@ -4,8 +4,8 @@
  * What the browse page shows when there is no grid.
  *
  * ── Why not @momentum/content's FeedEmpty / FeedError ─────────────────────
- * They are the right SHAPE — a card on the violet ground, inside the same
- * centre track — and the wrong words. Their copy is about a feed ("Your feed
+ * They are the right SHAPE — a card on the violet ground — and the wrong
+ * words. Their copy is about a feed ("Your feed
  * is warming up", "We could not load your feed"), and this page's noun is a
  * video. More than a noun, actually: an empty answer from `/v1/feed/videos` is
  * a strong statement here, because that endpoint is the one long-video surface
@@ -17,8 +17,8 @@
 
 import { AlertTriangle, Tv } from "lucide-react"
 import { BRAND } from "@momentum/brand"
-import { HOME_PATH, signInHref } from "@momentum/chrome"
-import { ZONE } from "@/zone"
+import { TUBE_SIGN_IN_HREF } from "@/chrome/links"
+import { VIDEO_GRID } from "./grid"
 
 const ACTION =
   "mt-5 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan " +
@@ -52,9 +52,12 @@ function Body({ children }: { children: React.ReactNode }) {
  * thing arriving. A single word or a spinner would reserve none of the space
  * the real cards take and every row below would jump when they landed.
  */
-export function BrowseSkeleton({ count = 4 }: { count?: number }) {
+export function BrowseSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <ul aria-hidden="true" className="grid grid-cols-1 gap-x-3 gap-y-5 sm:grid-cols-2">
+    // The SAME grid class the real cards use, from ./grid.ts, so the first
+    // page landing does not re-flow the page. A skeleton whose column count
+    // differs from the grid it stands in for is worse than no skeleton.
+    <ul aria-hidden="true" className={VIDEO_GRID}>
       {Array.from({ length: count }, (_, i) => (
         <li key={i} className="animate-pulse">
           <div className="aspect-video w-full rounded-mo bg-mo-raised" />
@@ -66,7 +69,29 @@ export function BrowseSkeleton({ count = 4 }: { count?: number }) {
   )
 }
 
-export function BrowseEmpty() {
+/**
+ * Nothing came back.
+ *
+ * `filter` is the chip that was selected, or null for All, and it changes the
+ * sentence rather than decorating it. "No videos yet" under a Comedy chip is
+ * a claim about the platform when the true statement is a claim about one
+ * category — and the person reading it has a control on screen that would fix
+ * it, which they will not use if they have been told the shelf is empty.
+ */
+export function BrowseEmpty({ filter }: { filter?: string | null }) {
+  if (filter) {
+    return (
+      <Card>
+        <Tv aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
+        <Title>Nothing in {filter}</Title>
+        <Body>
+          No long video came back for that filter. Pick another chip, or choose All to see
+          everything ranked for you.
+        </Body>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <Tv aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
@@ -75,12 +100,6 @@ export function BrowseEmpty() {
         Long videos are ranked for each account and topped up with recent public ones, so this
         fills up as people post and as you follow them. Nothing has been picked for you so far.
       </Body>
-      {/* A plain <a> and an absolute path: /social is a different Next app
-          behind the shell's rewrite table, and next/link would prefix this
-          zone's basePath and ask for /tube/social. */}
-      <a href={HOME_PATH} className={ACTION}>
-        Go to your feed
-      </a>
     </Card>
   )
 }
@@ -103,33 +122,62 @@ export function BrowseError({ message, onRetry }: { message: string; onRetry?: (
 }
 
 /**
- * `/v1/feed/videos` ranks against a viewer and is 401 for an anonymous
- * browser — there is no anonymous long-video feed on this gateway at all — so
- * there is no signed-out version of this page to show.
+ * What a signed-out visitor is looking at, said once, above the grid.
  *
- * The chrome around it is still drawn, and still says "Sign in" in two places
- * of its own — this is the third, and the only one that explains why.
+ * ── This replaced a wall, and the wall was not wrong, it was incomplete ───
+ * What stood here was a full-page "Sign in to watch videos" card, and the
+ * reason given was accurate: `/v1/feed/videos` ranks against a viewer and is
+ * 401 for an anonymous browser. What that reasoning missed is that the ranked
+ * feed is not the only long-video list on the gateway.
+ * `GET /v1/posts/recent?content_type=long_video` is public — and is the very
+ * source the ranked feed tops its own short first page up from — so there IS
+ * an anonymous view of this corpus and the page can show it.
+ *
+ * It is a strip and not a card because it is not the page's content: the
+ * videos are. A full-width card between the chips and the grid would push the
+ * first row below the fold to say something that fits on one line.
+ *
+ * What it must not do is overclaim. These rows carry a title, an age, counts
+ * and a duration, and they carry no `variants` (so no poster), no `blurhash`
+ * and no `channel` (so no name to link) — verified on the wire, and recorded
+ * in full in ../tube/api.ts. The sentence says so, because a visitor who
+ * signs in and finds a visibly better page should have been told that was
+ * coming.
  */
-export function BrowseSignedOut() {
+export function PublicNotice() {
   return (
-    <Card>
-      <Tv aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
-      <Title>Sign in to watch videos</Title>
-      <Body>Videos are ranked for your account, so {BRAND.name} needs to know who you are.</Body>
-      <a href={signInHref(ZONE)} className={ACTION}>
+    <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-mo border border-mo bg-mo-surface px-4 py-3">
+      <Tv aria-hidden="true" className="h-4 w-4 shrink-0 text-mo-purple" />
+      <p className="min-w-0 flex-1 text-sm text-mo-body">
+        Recent public videos on {BRAND.name}. Sign in for videos ranked for you, with posters and
+        channels, plus your subscriptions.
+      </p>
+      {/* A plain <a>: /login is served by the shell, a different Next app
+          behind a rewrite, so next/link would ask for /tube/login. */}
+      <a
+        href={TUBE_SIGN_IN_HREF}
+        className="shrink-0 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
+      >
         Sign in
       </a>
-    </Card>
+    </div>
   )
 }
 
-/** The end of the grid. Said once, quietly, rather than spinning forever. */
-export function BrowseEnd({ count }: { count: number }) {
+/**
+ * The end of the grid. Said once, quietly, rather than spinning forever.
+ *
+ * `ranked` decides which of two true sentences this is. "Ranked for you" is
+ * accurate for `/v1/feed/videos` and false for the public shelf a signed-out
+ * visitor is reading — nothing has been ranked for somebody the server has
+ * not been told about, and saying so would be a small invented claim at the
+ * bottom of every anonymous visit.
+ */
+export function BrowseEnd({ count, ranked = true }: { count: number; ranked?: boolean }) {
+  const what = ranked ? "ranked for you right now" : "public right now"
   return (
     <p className="py-8 text-center text-sm text-mo-body">
-      {count === 1
-        ? "That is the only video ranked for you right now."
-        : `That is all ${count} videos ranked for you right now.`}
+      {count === 1 ? `That is the only video ${what}.` : `That is all ${count} videos ${what}.`}
     </p>
   )
 }

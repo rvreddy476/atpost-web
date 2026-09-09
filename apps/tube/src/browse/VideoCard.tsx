@@ -3,16 +3,27 @@
 /**
  * One cell of the browse grid: a poster, a title, and the way in.
  *
- * ── One anchor, and everything inside it is decoration ────────────────────
- * The whole card is the link. The obvious build — a picture that links, with a
- * "Watch" BUTTON on top of it and the channel name as a second link to a
- * channel page — puts a control inside a control, and browsers disagree about
- * what a click on the inner one does, screen readers disagree about how to
- * announce it, and the keyboard gets three tab stops for one act. So there is
- * one anchor per video, every mark inside it is `aria-hidden`, and `cardLabel`
- * in ../tube/video.ts is what a screen reader announces. (The channel name
- * will want to be its own link on the day there is a channel page to send it
- * to. `GET /v1/channels/{handle}` exists; the page does not.)
+ * ── One anchor per DESTINATION, and never one inside another ──────────────
+ * This card used to be a single anchor wrapping everything, and the note here
+ * said the channel name "will want to be its own link on the day there is a
+ * channel page to send it to. `GET /v1/channels/{handle}` exists; the page
+ * does not." The page exists now — `/tube/@{handle}` — so the name is a link,
+ * and the structure changed to make that legal rather than the link being
+ * nested into the existing anchor.
+ *
+ * What has NOT changed is the rule that produced the old shape: a control
+ * inside a control is invalid, browsers disagree about what a click on the
+ * inner one does, and screen readers disagree about how to announce it. So
+ * the card is now two SIBLING anchors and no nesting:
+ *
+ *   · the poster and the title, one anchor, going to the video. Everything
+ *     inside it is `aria-hidden` and `cardLabel` in ../tube/video.ts is what
+ *     a screen reader announces.
+ *   · the channel name, a second anchor, going to the channel.
+ *
+ * Two tab stops, because there are genuinely two places to go. That is the
+ * opposite of the three-stops-for-one-act the old note was avoiding. The
+ * counts and the age stay outside both anchors, as text.
  *
  * ── Zero video elements mount here, and that is the design ────────────────
  * A poster is one image request. A 720p long-video segment set is tens of
@@ -65,16 +76,28 @@ import {
   videoTitle,
   viewsLabel,
 } from "@/tube/video"
+import { itemChannelHref } from "@/tube/channels"
 
 export function VideoCard({
   item,
   position,
   total,
+  hideCreator = false,
 }: {
   item: FeedItem
   /** 1-based rank, for the accessible name only. */
   position: number
   total: number
+  /**
+   * Drop the channel line — for a grid that is already ABOUT one channel.
+   *
+   * The channel page passes this, and it is not merely tidiness there: the
+   * rows that page renders come from `/v1/posts/by-author`, which sends bare
+   * `PostDetail` with no `channel` object on it at all. `creatorName` would
+   * therefore fall through to "Someone" under every card on a page whose
+   * heading is the creator's name. Saying nothing is better than saying that.
+   */
+  hideCreator?: boolean
 }) {
   const media = videoMedia(item)
   const blurhash = videoBlurhash(media)
@@ -89,6 +112,7 @@ export function VideoCard({
   const likes = likesLabel(item)
   const comments = commentsLabel(item)
   const watchable = isWatchable(item)
+  const channelLink = itemChannelHref(item)
 
   return (
     <li>
@@ -169,30 +193,50 @@ export function VideoCard({
           <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-mo-ink">
             {videoTitle(item)}
           </h3>
-          <p className="mt-1 truncate text-sm text-mo-body">{creatorName(item)}</p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-mo-body">
-            <span>{viewsLabel(item)}</span>
-            <span aria-hidden>·</span>
-            <span>{relativeTime(item.created_at)}</span>
-            {/* Counts and NOT buttons. Like, save, share and follow all live
-                one click away on the watch page, where the state machines, the
-                optimistic rollbacks and the analytics already are. A second
-                set here would be a second implementation of each. */}
-            {likes && (
-              <span className="inline-flex items-center gap-1">
-                <Heart className="h-3 w-3" />
-                <span className="tabular-nums">{likes}</span>
-              </span>
-            )}
-            {comments && (
-              <span className="inline-flex items-center gap-1">
-                <MessageCircle className="h-3 w-3" />
-                <span className="tabular-nums">{comments}</span>
-              </span>
-            )}
-          </p>
         </div>
       </Link>
+
+      {/* ── Outside the video's anchor ─────────────────────────────────────
+          Everything below is a sibling of the link above, never a child of
+          it: the channel name is its own destination and a nested anchor is
+          invalid. See the header. */}
+      <div className="mt-1">
+        {!hideCreator &&
+          (channelLink ? (
+            <Link
+              href={channelLink}
+              className="block truncate rounded-mo-sm text-sm text-mo-body transition-colors duration-150 ease-mo hover:text-mo-ink outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
+            >
+              {creatorName(item)}
+            </Link>
+          ) : (
+            /* No channel on the row, so no address to link to. A name that
+               is not a link is better than a link to "/@" — see `channelRef`
+               in ../tube/channels.ts, which is where that null comes from. */
+            <p className="truncate text-sm text-mo-body">{creatorName(item)}</p>
+          ))}
+        <p aria-hidden className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-mo-body">
+          <span>{viewsLabel(item)}</span>
+          <span>·</span>
+          <span>{relativeTime(item.created_at)}</span>
+          {/* Counts and NOT buttons. Like, save, share and follow all live one
+              click away on the watch page, where the state machines, the
+              optimistic rollbacks and the analytics already are. A second set
+              here would be a second implementation of each. */}
+          {likes && (
+            <span className="inline-flex items-center gap-1">
+              <Heart className="h-3 w-3" />
+              <span className="tabular-nums">{likes}</span>
+            </span>
+          )}
+          {comments && (
+            <span className="inline-flex items-center gap-1">
+              <MessageCircle className="h-3 w-3" />
+              <span className="tabular-nums">{comments}</span>
+            </span>
+          )}
+        </p>
+      </div>
     </li>
   )
 }

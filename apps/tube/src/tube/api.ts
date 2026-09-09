@@ -96,30 +96,100 @@ export interface VideosPage {
 }
 
 /**
+ * The public long-video shelf, for a browser with no session.
+ *
+ * `GET /v1/feed/videos` is 401 for an anonymous browser — it ranks against a
+ * viewer and this gateway has no anonymous long-video feed. That is a fact
+ * about the ranked feed and NOT a fact about long video, and the difference
+ * is what stops the signed-out home page being a wall:
+ * `GET /v1/posts/recent?content_type=long_video` is public (verified with no
+ * cookie jar, 2026-09-09) and is the very source `GetLongVideoFeed` itself
+ * tops a short first page up from. So a signed-out visitor is shown the same
+ * corpus, unranked, rather than a sign-in card and nothing else.
+ *
+ * What they do NOT get is full hydration, and the exact shortfall was read off
+ * the wire rather than assumed. A `/v1/posts/recent` row carries:
+ *
+ *     title, text, created_at, counts, view_count, is_processing,
+ *     media[]: { media_id, kind, position, alt_text, processing_status,
+ *                moderation_status, duration_ms, hls_url }
+ *
+ * and does NOT carry `variants`, `blurhash`, `author` or `channel`. So the
+ * card draws its title, its age, its counts and its DURATION — the media row
+ * is there — but has no poster to show (`pickThumb` reads `variants.thumb_150`
+ * and there is none), no soft blurhash under it, and no channel name to link.
+ * That is a real reduction and the strip above the grid states it rather than
+ * dressing it up. `PublicNotice` in ../browse/states.tsx is that sentence.
+ *
+ * A THIRD cursor family, and it must not be mixed with the other two:
+ * `/v1/posts/*` pages on a bare RFC3339Nano timestamp. See `VideosPage`.
+ */
+const PUBLIC_PATH = "/v1/posts/recent"
+
+/**
+ * What a surface is asking this feed for.
+ *
+ * Every field is optional and every default is the plain ranked feed, so
+ * `fetchVideosPage(cursor)` means exactly what it meant before this type
+ * existed. That is deliberate: the watch page calls it that way.
+ */
+export interface TubeFeedQuery {
+  /**
+   * A slug from `GET /v1/posts/categories`. Absent means every category, and
+   * the request is then byte-identical to what it was before the chip rail.
+   */
+  category?: string | null
+  /** Subscriptions: authors the viewer follows, and nobody else. */
+  followingOnly?: boolean
+  /** No session: the public shelf above instead of the ranked feed. */
+  anonymous?: boolean
+}
+
+/**
  * One page of long videos.
  *
- * ── `following_only` is deliberately not sent ─────────────────────────────
- * The parameter exists on this endpoint and it fails CLOSED: it filters the
- * candidate set to authors the viewer follows and returns an EMPTY array for
- * an account that follows nobody, rather than backfilling with strangers.
- * That is the correct behaviour and it is exactly why this surface must not
- * ask for it — there is no All / Following control in this zone, so nothing on
- * screen would let somebody turn it back off.
+ * ── `following_only` FAILS CLOSED, and that is why it needs a control ─────
+ * The parameter filters the candidate set to authors the viewer follows and
+ * returns an EMPTY array for an account that follows nobody, rather than
+ * backfilling with strangers. That is the correct behaviour, and it is why
+ * this call would not send it while the browse grid was the only surface:
+ * with no All/Following control on screen, nothing would have let somebody
+ * turn it back off, and a new account would have had a permanently empty Tube
+ * with no explanation.
  *
- * ── `category` is deliberately not sent either, YET ───────────────────────
- * It is real (`?category=` on this endpoint, a slug from the server's own
- * taxonomy at `GET /v1/posts/categories`) and it is what the phone's chip rail
- * drives. It is left out because a filter is only honest with a control
- * attached: an invalid slug is `400 INVALID_CATEGORY` and a valid one that
- * nothing in this corpus carries is an empty page, and neither is something a
- * page with no chips can explain. The chips are the follow-up, not a missing
- * argument to this call.
+ * It is sent NOW because there are two places it can be turned off from — the
+ * "Following" chip on the home rail, and the fact that /tube/subscriptions is
+ * a page you navigated to and can navigate away from. The subscriptions page
+ * also names the emptiness when it happens instead of shrugging.
+ *
+ * ── `category` is sent for the same reason, and only now ──────────────────
+ * It is real (`?category=` here, a slug from the server's own taxonomy) and
+ * it is what the phone's chip rail drives. It was left out while a filter had
+ * no control attached: an invalid slug is `400 INVALID_CATEGORY` and a valid
+ * one that nothing in this corpus carries is an empty page, neither of which
+ * a page with no chips could explain. The chips exist now — ../browse/
+ * TubeCategories.tsx — and the empty case says which chip caused it.
  */
-export async function fetchVideosPage(cursor?: string | null): Promise<VideosPage> {
-  const res = await api.get<Envelope<FeedItem[]>>(VIDEOS_PATH, {
+export async function fetchVideosPage(
+  cursor?: string | null,
+  query: TubeFeedQuery = {}
+): Promise<VideosPage> {
+  const anonymous = Boolean(query.anonymous)
+  const res = await api.get<Envelope<FeedItem[]>>(anonymous ? PUBLIC_PATH : VIDEOS_PATH, {
     params: {
       limit: PAGE_SIZE,
       ...(cursor ? { cursor } : {}),
+      // `content_type` on the public shelf is what `category` and
+      // `following_only` are on the ranked one: the same page, narrowed by
+      // whatever that endpoint understands. The public shelf understands
+      // neither of the other two, so they are not sent to it — an ignored
+      // parameter is a filter that silently did nothing.
+      ...(anonymous
+        ? { content_type: "long_video" }
+        : {
+            ...(query.category ? { category: query.category } : {}),
+            ...(query.followingOnly ? { following_only: true } : {}),
+          }),
     },
   })
 
@@ -130,6 +200,24 @@ export async function fetchVideosPage(cursor?: string | null): Promise<VideosPag
     // condition, not a missing field to work around.
     nextCursor: res.data?.meta?.next_cursor || null,
   }
+}
+
+/**
+ * The identity of a query, for a hook that has to know when to start over.
+ *
+ * A feed is paged with a cursor and a seen-set, and both belong to ONE query:
+ * switching from All to Comedy while holding the old cursor asks the server
+ * to continue a list it is no longer sending. So `useTubeFeed` resets its
+ * whole state when this string changes, and this is the one definition of
+ * "changed" — pure, so ./video.test.ts can assert that two queries meaning
+ * the same thing produce the same key and two that do not, do not.
+ */
+export function feedQueryKey(query: TubeFeedQuery = {}): string {
+  return [
+    query.anonymous ? "public" : "ranked",
+    query.followingOnly ? "following" : "all",
+    query.category || "*",
+  ].join("|")
 }
 
 /* ── Follow ─────────────────────────────────────────────────────────────── */

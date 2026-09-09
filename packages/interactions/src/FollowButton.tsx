@@ -22,6 +22,27 @@ export interface FollowButtonProps {
   displayName?: string
   /** Resolves to the state the server says is now true. */
   onToggle: (next: "follow" | "unfollow") => Promise<FollowState>
+  /**
+   * The three words, when "Follow" is the wrong one for the surface.
+   *
+   * ── Why this is a prop and not a second component ─────────────────────
+   * Momentum Tube calls this act SUBSCRIBING. That is the founder's word,
+   * it is the word on the channel page's own count ("1.2K subscribers"),
+   * and a control saying "Follow" directly under it would be two names for
+   * one thing on one screen. The EDGE is identical — there is no
+   * subscription route on this gateway, `POST /v1/graph/follow` is what
+   * both surfaces call, verified — so what differs is vocabulary and
+   * nothing else.
+   *
+   * Copying this component into apps/tube to change three strings would be
+   * a second implementation of the optimistic update, the rollback and the
+   * three-state rule above, and a second place for them to drift. So the
+   * words are a parameter and the behaviour is not.
+   *
+   * Omit it and the labels are the product's default, which is what
+   * apps/social and apps/reels pass by not passing anything.
+   */
+  labels?: Partial<Record<FollowState, string>>
   className?: string
 }
 
@@ -31,7 +52,14 @@ const LABEL: Record<FollowState, string> = {
   requested: "Requested",
 }
 
-export function FollowButton({ state, displayName, onToggle, className }: FollowButtonProps) {
+export function FollowButton({
+  state,
+  displayName,
+  onToggle,
+  labels,
+  className,
+}: FollowButtonProps) {
+  const words: Record<FollowState, string> = { ...LABEL, ...labels }
   const [current, setCurrent] = useState<FollowState>(state)
   const [pending, setPending] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -65,7 +93,7 @@ export function FollowButton({ state, displayName, onToggle, className }: Follow
       disabled={pending}
       aria-pressed={active}
       aria-label={
-        displayName ? `${LABEL[current]} ${displayName}` : LABEL[current]
+        displayName ? `${words[current]} ${displayName}` : words[current]
       }
       className={[
         "rounded-mo-pill border px-3 py-1 text-sm font-semibold transition-colors duration-150 ease-mo",
@@ -79,7 +107,7 @@ export function FollowButton({ state, displayName, onToggle, className }: Follow
         className ?? "",
       ].join(" ")}
     >
-      {failed ? "Try again" : LABEL[current]}
+      {failed ? "Try again" : words[current]}
     </button>
   )
 }
