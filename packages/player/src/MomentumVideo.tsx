@@ -58,26 +58,52 @@
  *     because the one-video-at-a-time invariant is split across them and
  *     `manualPlayback.ts`.
  *
- * A click on the picture toggles play/pause — the convention on every video
- * on the web, and what the phone does. It no longer toggles mute; mute has
- * its own always-visible button, because a control that only appears on hover
- * cannot be reached on a touchscreen.
+ * ── The shape of the transport, and the button that is NOT here ───────────
+ * A real player's shape, which is VLC's and QuickTime's and YouTube's:
+ *
+ *     ┌──────────────────────────────────────── [speaker] ─┐
+ *     │                                                     │
+ *     │                     the picture                     │
+ *     │                                                     │
+ *     │  ────────────────●──────────────────────────────    │  seek
+ *     │  ▶  0:12 / 1:04                                     │  transport
+ *     └─────────────────────────────────────────────────────┘
+ *
+ * SPEAKER top-right, on its own, in the one corner nothing else wants. It is
+ * the control people reach for most and the one that must never move.
+ *
+ * PLAY/PAUSE bottom-left with the seek bar above it and the clock beside it —
+ * out of the picture, along an edge, where a transport belongs.
+ *
+ * THERE IS NO CENTRE BUTTON, and its removal is the point of this layout
+ * rather than a side effect. A 56px disc in the middle of a feed video sits
+ * exactly where a person is trying to look, covers the frame, and does the
+ * same job as pressing the picture behind it — so a fade at the wrong moment
+ * reads as "the pause button doesn't work". `chromeVisible` in controls.ts
+ * carries the full argument. Pressing the picture still toggles play/pause;
+ * that behaviour was always right and is untouched.
+ *
+ * The whole transport HIDES while the video plays and comes back on hover, on
+ * keyboard focus, or on a tap, then fades again CONTROLS_HIDE_MS after the
+ * last interaction. A hidden control is not a tab stop and is `aria-hidden`,
+ * so nothing that cannot be seen can be reached by Tab or read aloud.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type Hls from "hls.js"
 import {
   CONTROLS_HIDE_MS,
+  chromeVisible,
   formatClock,
   intentOnActiveChange,
   keyAction,
-  playGlyphVisible,
   progressFraction,
   restingLineVisible,
   scrubTarget,
   scrubberVisible,
   seekTarget,
   shouldPlay,
+  tapOutcome,
   toggleIntent,
   type PlaybackIntent,
 } from "./controls"
@@ -219,6 +245,7 @@ export function MomentumVideo({
   resolveUrl,
 }: MomentumVideoProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [attach, setAttach] = useState<AttachState>("idle")
   const [usingProgressive, setUsingProgressive] = useState(false)
@@ -699,6 +726,16 @@ export function MomentumVideo({
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
   const [recentlyMoved, setRecentlyMoved] = useState(false)
+  /**
+   * A finger asked for the transport. See `tapOutcome` and `chromeVisible`.
+   *
+   * `hovered` deliberately never becomes true for a touch or a pen — a finger
+   * is not hovering, and pretending it is would break the reveal-first rule:
+   * a browser fires `pointerenter` on the way into a tap, so the chrome would
+   * already be "visible" by the time the tap was decided and the first tap
+   * would toggle blind after all.
+   */
+  const [revealed, setRevealed] = useState(false)
 
   /**
    * Progress.
@@ -722,10 +759,28 @@ export function MomentumVideo({
    * Treating those as paused videos would paint a full transport on every card.
    * See `scrubberVisible`.
    */
-  const chrome = { playing: isPlaying, started: playhead > 0, hovered, focused, recentlyMoved }
-  const glyphVisible = drawable && playGlyphVisible(chrome)
-  const scrubVisible = drawable && scrubberVisible(chrome)
+  const started = playhead > 0
+  const chrome = { playing: isPlaying, started, hovered, focused, recentlyMoved, revealed }
+  const chromeShown = drawable && chromeVisible(chrome)
+  /**
+   * The seek bar's own condition, and the one that keeps a feed navigable.
+   *
+   * This is not only an opacity: the `role="slider"` is not RENDERED at all
+   * unless it is true, so an untouched feed of twenty videos contains zero
+   * sliders rather than twenty carrying `tabIndex={-1}`. See `scrubberVisible`.
+   */
+  const scrubVisible = scrubberVisible(chrome) && drawable
   const restingVisible = drawable && restingLineVisible(chrome)
+
+  /** Read by the pointer handlers, which run outside a render. */
+  const chromeShownRef = useRef(chromeShown)
+  chromeShownRef.current = chromeShown
+
+  /**
+   * Which device produced the last press. `click` does not carry it, so it is
+   * captured from the `pointerdown` that preceded it.
+   */
+  const pointerKind = useRef<string>("mouse")
 
   const hideTimer = useRef(0)
   const noteActivity = useCallback(() => {
@@ -735,8 +790,51 @@ export function MomentumVideo({
     hideTimer.current = window.setTimeout(() => {
       hideTimer.current = 0
       setRecentlyMoved(false)
+      // The touch reveal decays on the same clock. Two timers for one fade is
+      // how a transport ends up half on screen.
+      setRevealed(false)
     }, CONTROLS_HIDE_MS)
   }, [])
+
+  /**
+   * Somebody just DID something — pressed play, moved the scrubber, tapped the
+   * picture — as opposed to merely moving a mouse across it.
+   *
+   * The difference matters on a touchscreen, where `hovered` is never true and
+   * the auto-hide timer alone therefore holds nothing on screen. Without this,
+   * pressing play on a phone made the transport vanish in the same frame: the
+   * timer was running but no condition in `chromeVisible` was satisfied. Every
+   * deliberate interaction now holds the transport for CONTROLS_HIDE_MS,
+   * whatever the person used to make it.
+   */
+  const noteInteraction = useCallback(() => {
+    setRevealed(true)
+    noteActivity()
+  }, [noteActivity])
+
+  /**
+   * Nothing invisible may hold the focus.
+   *
+   * The controls fade but stay in the document, and while they are faded they
+   * are `tabIndex={-1}` and `aria-hidden`. That is right for a keyboard user
+   * arriving from outside — but it leaves one hole: press the speaker with the
+   * MOUSE and it has DOM focus without being focus-visible, so the transport
+   * is free to fade three seconds later and leave the focus sitting on a
+   * button nobody can see. Screen-reader focus would then be inside an
+   * `aria-hidden` subtree, which is exactly the state the ARIA spec calls out.
+   *
+   * So when the transport goes, the focus comes back out to the player itself,
+   * which is always focusable while the controls exist. Focus stays on the
+   * card — the person does not lose their place — and it lands somewhere
+   * visible.
+   */
+  useEffect(() => {
+    if (chromeShown || !controls) return
+    const root = rootRef.current
+    if (typeof document === "undefined" || !root) return
+    const active = document.activeElement
+    if (active && active !== root && root.contains(active)) root.focus()
+  }, [chromeShown, controls])
 
   useEffect(
     () => () => {
@@ -754,15 +852,32 @@ export function MomentumVideo({
       startMethodRef.current = video && video.currentTime > 0 && !video.ended ? "resume" : "tap"
     }
     setIntent(next)
-    noteActivity()
-  }, [active, intent, noteActivity])
+    noteInteraction()
+  }, [active, intent, noteInteraction])
+
+  /**
+   * A press on the picture itself.
+   *
+   * With a mouse this is play/pause, unchanged and correct — it is what every
+   * video on the web does. With a finger it is play/pause ONLY once the
+   * transport is already on screen; the first tap on a playing video summons
+   * the transport instead of silently stopping something the person cannot
+   * see. `tapOutcome` holds the rule and the reasoning.
+   */
+  const onPictureClick = useCallback(() => {
+    if (tapOutcome(pointerKind.current, chromeShownRef.current) === "reveal") {
+      noteInteraction()
+      return
+    }
+    togglePlay()
+  }, [noteInteraction, togglePlay])
 
   const toggleMuted = useCallback(() => {
     const next = !(userMuted ?? muted)
     setUserMuted(next)
     onToggleMuted?.(next)
-    noteActivity()
-  }, [userMuted, muted, onToggleMuted, noteActivity])
+    noteInteraction()
+  }, [userMuted, muted, onToggleMuted, noteInteraction])
 
   const seekBy = useCallback(
     (deltaSeconds: number) => {
@@ -774,9 +889,9 @@ export function MomentumVideo({
       // watchTracker.ts — so announcing it here would count one seek twice and
       // would put the definition of "a seek" in two places.
       setPlayhead(video.currentTime)
-      noteActivity()
+      noteInteraction()
     },
-    [noteActivity]
+    [noteInteraction]
   )
 
   const seekToFraction = useCallback(
@@ -785,9 +900,9 @@ export function MomentumVideo({
       if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return
       video.currentTime = seekTarget(0, fraction * video.duration, video.duration)
       setPlayhead(video.currentTime)
-      noteActivity()
+      noteInteraction()
     },
-    [noteActivity]
+    [noteInteraction]
   )
 
   /**
@@ -809,6 +924,11 @@ export function MomentumVideo({
       if (!action) return
       event.preventDefault()
       event.stopPropagation()
+      // Somebody is driving this from the keyboard, whatever moved the focus
+      // here originally. From now on the transport stays up while they are on
+      // it — see `focused` in `onFocus` for why arriving by mouse does not
+      // count.
+      setFocused(true)
       switch (action.kind) {
         case "toggle-play":
           togglePlay()
@@ -836,13 +956,24 @@ export function MomentumVideo({
       const rect = bar.getBoundingClientRect()
       video.currentTime = scrubTarget(event.clientX - rect.left, rect.width, video.duration)
       setPlayhead(video.currentTime)
-      noteActivity()
+      noteInteraction()
     },
-    [noteActivity]
+    [noteInteraction]
   )
 
   const progress = progressFraction(playhead, duration)
   const label = ariaLabel || "Video"
+
+  /**
+   * Whether a faded control can still be clicked. It cannot.
+   *
+   * Exactly ONE of the two pointer-events classes is ever emitted, which is
+   * the point: Tailwind orders `.pointer-events-none` before
+   * `.pointer-events-auto` in its own sheet, so a class list carrying both
+   * would silently resolve to `auto` however they were written and an
+   * invisible button would still be sitting over the picture eating clicks.
+   */
+  const hit = chromeShown ? "pointer-events-auto" : "pointer-events-none"
 
   return (
     /* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions --
@@ -869,6 +1000,7 @@ export function MomentumVideo({
         the box. See `className` in the props.
       */
       className={className}
+      ref={rootRef}
       // A `group`, not an `application` and not a `region`: the picture is the
       // content and the buttons inside are the controls. Focusable so the
       // transport keys have somewhere to land, which is the whole reason a
@@ -877,13 +1009,55 @@ export function MomentumVideo({
       aria-label={label}
       tabIndex={controls ? 0 : -1}
       onKeyDown={controls ? onKeyDown : undefined}
-      onPointerEnter={() => {
+      /*
+        A touch or a pen never counts as hover, and never starts the auto-hide
+        clock by arriving. See `revealed` above: a browser fires `pointerenter`
+        on the way into a tap, so treating that as hover would mean the chrome
+        was already "visible" when the tap was decided, and the reveal-first
+        rule would quietly never fire.
+      */
+      onPointerDown={(event) => {
+        pointerKind.current = event.pointerType || "mouse"
+      }}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "touch" || event.pointerType === "pen") return
         setHovered(true)
         noteActivity()
       }}
+      // Always clears, whatever the pointer was: a stale `hovered` left behind
+      // on a hybrid laptop would pin the transport open over the picture.
       onPointerLeave={() => setHovered(false)}
-      onPointerMove={noteActivity}
-      onFocus={() => setFocused(true)}
+      onPointerMove={(event) => {
+        if (event.pointerType === "touch" || event.pointerType === "pen") return
+        noteActivity()
+      }}
+      /*
+        KEYBOARD focus pins the transport open. A click that merely happened to
+        move the DOM focus here does not.
+
+        This box is `tabIndex={0}`, so pressing the picture to pause also
+        focuses it — and treating that as "focused" meant the transport never
+        faded again for the rest of the session. One click and the controls
+        were welded over the picture, which is most of what was wrong with the
+        old chrome in the first place.
+
+        `:focus-visible` is the browser's own answer to exactly this question
+        and it is already the product's focus-ring rule (tokens.css draws the
+        cyan ring on `*:focus-visible`), so the controls now appear under the
+        same condition as the ring: if you can see that this is focused, you
+        can see the transport. `onKeyDown` upgrades it the moment a key is
+        used, which is how a browser upgrades focus-visible too.
+      */
+      onFocus={(event) => {
+        const target = event.target as HTMLElement | null
+        try {
+          setFocused(target?.matches?.(":focus-visible") ?? true)
+        } catch {
+          // A browser without :focus-visible keeps the old, safer behaviour:
+          // any focus shows the controls.
+          setFocused(true)
+        }
+      }}
       onBlur={(event) => {
         // Focus moving between the group and its own buttons is not "left".
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false)
@@ -904,6 +1078,23 @@ export function MomentumVideo({
         onPlaying={handlePlaying}
         onPlay={() => setElementPaused(false)}
         onPause={() => setElementPaused(true)}
+        /*
+          `emptied` counts as stopped, and this is not a theoretical case.
+
+          Tearing a source off an element — `hls.destroy()`, a new `src`, the
+          load algorithm running again — sets `paused` back to true and fires
+          `emptied`, and Chrome does NOT fire `pause` on the way. So a video
+          that had begun to play and then had its source replaced left React
+          believing it was still playing for ever after. The whole transport
+          hangs off that flag, so the consequence was a STOPPED video wearing
+          no controls at all: nothing to press, and the auto-hide rule saying
+          it was fine because the video was "playing".
+
+          Seen in the live feed: `play` (paused=false), then `emptied`
+          (paused=true), and no `pause` in between. The fix is to believe the
+          element rather than to reason about which events ought to arrive.
+        */
+        onEmptied={() => setElementPaused(true)}
         onWaiting={() => {
           bufferingRef.current = true
         }}
@@ -925,21 +1116,28 @@ export function MomentumVideo({
         }}
         // A click on the picture is play/pause — every video on the web, and
         // what the phone does. It used to toggle mute, which is why there was
-        // no way to stop a video in this feed at all.
-        onClick={controls ? togglePlay : undefined}
+        // no way to stop a video in this feed at all. On a touchscreen the
+        // first tap summons the transport instead; see `onPictureClick`.
+        onClick={controls ? onPictureClick : undefined}
       />
 
       {controls && attach !== "failed" && (
         <>
           {/*
-            The speaker, and the one control that is NEVER hidden.
+            The speaker. Top-right, on its own, and nowhere else ever.
 
-            Bottom-LEFT, which is the only free corner: the duration badge is
-            bottom-right, the carousel's "2/5" pill is top-right and its pips
-            are bottom-centre. And always on screen, because the alternative —
-            fading with the rest of the chrome — puts the sound out of reach on
-            a touchscreen, where there is no hover to bring it back and a tap
-            means play/pause.
+            One place is the whole requirement. It used to be bottom-left,
+            wedged between a duration badge and a scrubber that had to carry
+            `pl-10` to avoid it — three things fighting over one edge. The
+            top-right corner is the only one a transport does not want, so the
+            control people reach for most gets a corner to itself and never has
+            to move for a carousel, a badge or a seek bar.
+
+            It fades with the rest of the transport, which it could not do
+            before: the old objection was that a touchscreen has no hover to
+            bring it back. It has a tap now — see `tapOutcome` — so the sound
+            is one tap away on a phone and a hover away on a desktop, and the
+            picture is unobstructed in between.
 
             Colour: this sits over PHOTOGRAPHY, so nothing here may rely on a
             theme colour alone. `--mo-ink` on `--mo-bg` at .70 is the scrim the
@@ -950,8 +1148,21 @@ export function MomentumVideo({
             type="button"
             onClick={toggleMuted}
             aria-pressed={isMuted}
+            // A faded control is not a control. Out of the tab order and out
+            // of the accessibility tree while it cannot be seen, so a keyboard
+            // user never lands on something invisible — and back in the moment
+            // focus reaches the player, because `chromeVisible` is true
+            // whenever anything inside this group has focus.
+            aria-hidden={!chromeShown}
+            tabIndex={chromeShown ? 0 : -1}
             aria-label={isMuted ? `Unmute ${label}` : `Mute ${label}`}
-            className={OVERLAY_BUTTON + " absolute bottom-2 left-2 h-8 w-8"}
+            className={[
+              OVERLAY_BUTTON,
+              hit,
+              "absolute right-2 top-2 h-9 w-9",
+              "transition-opacity duration-150 ease-mo motion-reduce:transition-none",
+              chromeShown ? "opacity-100" : "opacity-0",
+            ].join(" ")}
           >
             {isMuted ? (
               <VolumeXGlyph className="h-4 w-4" />
@@ -978,105 +1189,141 @@ export function MomentumVideo({
           )}
 
           {/*
-            The play glyph and the scrubber come and go SEPARATELY, and that is
-            not a detail — see `playGlyphVisible` and `scrubberVisible`.
+            ── The transport bar ──────────────────────────────────────────
 
-            The glyph belongs on any stopped video, including the nineteen
-            posters in a feed that have never run: a still with a play triangle
-            is how the web says "this is a video". A scrubber on those nineteen
-            would be nineteen empty bars and, worse, nineteen extra slider tab
-            stops between a keyboard user and the bottom of the page.
+            Seek along the top, then play/pause at the bottom-left with the
+            clock beside it. That is VLC's shape, and QuickTime's, and
+            YouTube's, and it is the shape because it works: the controls are
+            along an edge instead of over the middle of the picture, the seek
+            bar gets the full width of the frame to aim at, and the play button
+            is where the eye already goes when it leaves a video.
+
+            The right-hand end of the transport row is deliberately EMPTY. A
+            carousel prints its own per-page duration badge at bottom-right and
+            its position pips at bottom-centre; keeping our content left-anchored
+            means the three never collide, so a video inside a carousel looks
+            the same as one outside it.
           */}
           <div
-            aria-hidden={!glyphVisible}
+            aria-hidden={!chromeShown}
             className={[
-              "pointer-events-none absolute inset-0 transition-opacity duration-150 ease-mo motion-reduce:transition-none",
-              glyphVisible ? "opacity-100" : "opacity-0",
+              "pointer-events-none absolute inset-x-0 bottom-0",
+              "transition-opacity duration-150 ease-mo motion-reduce:transition-none",
+              chromeShown ? "opacity-100" : "opacity-0",
             ].join(" ")}
           >
             {/*
-              The big one, in the centre of the frame.
+              The scrim, and why it is a gradient rather than a bar of colour.
 
-              This is the phone's `PausedGlyph` (ReelsScreen.kt) rendered for a
-              surface that has a cursor: a disc of scrim under a single large
-              glyph, scaling in from 0.8, in the middle of the picture where a
-              stopped video is being looked at. Two deliberate differences:
-
-                · it is a real button. On the phone the glyph is inert and the
-                  VIDEO under it takes the tap, which is the right answer when
-                  the whole screen is the target. With a mouse, a 56px disc
-                  that visibly says "press me" and then does nothing under the
-                  cursor is a bug report.
-                · it shows a pause bar while playing, not only a play triangle
-                  while paused, because on the web the chrome is summoned by
-                  hovering a video that is running and the thing you came for
-                  is the stop.
+              Everything below sits on user photography, which can be a white
+              sky. A hard-edged strip would be a black bar stapled across the
+              bottom of every video; a gradient reads as light falling off and
+              is what a real player uses. It is sized so the controls sit in
+              its dense end: `--mo-bg` at .95 at the very bottom easing to .65
+              at the halfway line, which puts the play glyph and the clock on
+              roughly .83 and the seek bar on roughly .60. Against the worst
+              case — a pure white frame — that is 9.5:1 for the glyph and the
+              clock (AAA at any size) and 4.2:1 for the seek bar, which is
+              non-text and needs 3.0. Over anything darker it only improves.
             */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <button
-                type="button"
-                onClick={togglePlay}
-                // Not focusable, and hidden from assistive technology: it is
-                // the same action as Space on the group and as a click on the
-                // picture. A third tab stop per video would put twenty of them
-                // between a keyboard user and the bottom of the feed, and a
-                // third announcement of the same control is noise.
-                tabIndex={-1}
-                aria-hidden="true"
-                className={[
-                  OVERLAY_BUTTON,
-                  "pointer-events-auto h-14 w-14 transition-transform duration-150 ease-mo motion-reduce:transition-none",
-                  glyphVisible ? "scale-100" : "invisible scale-[.8]",
-                ].join(" ")}
-              >
-                {isPlaying ? <PauseGlyph className="h-6 w-6" /> : <PlayGlyph className="h-6 w-6" />}
-              </button>
-            </div>
-          </div>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-mo-bg/95 via-mo-bg/65 to-transparent"
+            />
 
-          {/* The scrubber, along the bottom edge and clear of the speaker. */}
-          <div
-            aria-hidden={!scrubVisible}
-            className={[
-              "pointer-events-none absolute inset-x-2 bottom-2 flex items-center gap-2 pl-10 pr-14",
-              "transition-opacity duration-150 ease-mo motion-reduce:transition-none",
-              scrubVisible ? "opacity-100" : "opacity-0",
-            ].join(" ")}
-          >
-              <div
-                ref={scrubRef}
-                // A real slider: `role` and the three values, so the position
-                // is announced and the arrow keys work from the bar itself.
-                // The keys are handled on the group above, which this sits
-                // inside, so they behave identically wherever focus is.
-                role="slider"
-                aria-label={`Seek ${label}`}
-                aria-valuemin={0}
-                aria-valuemax={Math.round(duration)}
-                aria-valuenow={Math.round(playhead)}
-                aria-valuetext={`${formatClock(playhead)} of ${formatClock(duration)}`}
-                tabIndex={scrubVisible ? 0 : -1}
-                onPointerDown={onScrub}
-                onKeyDown={onKeyDown}
-                className="pointer-events-auto group/scrub relative h-4 flex-1 cursor-pointer rounded-mo-pill focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
-              >
-                <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-mo-pill bg-mo-bg/70">
-                  {/*
-                    The filled part is `--mo-ink` rather than the ember: a
-                    scrubber is a MARK, not the primary action on the screen,
-                    and an ember bar on every video would put twenty gradient
-                    fills in a feed that has one accent colour for the thing it
-                    actually wants you to press.
-                  */}
+            <div className="relative flex flex-col gap-1 px-3 pb-2">
+              {/*
+                The seek bar, and the rule that keeps a feed navigable.
+
+                A `role="slider"` is RENDERED ONLY for a video that has
+                actually run. Not hidden, not `tabIndex={-1}` — absent. A feed
+                is nineteen posters and one video, and nineteen sliders is
+                nineteen extra tab stops and nineteen extra things for a screen
+                reader to read out on the way down the page. What the other
+                nineteen get is the inert track below: the same line, in the
+                same place, with no semantics and nothing to focus.
+              */}
+              {scrubVisible ? (
+                <div
+                  ref={scrubRef}
+                  // A real slider: `role` and the three values, so the position
+                  // is announced and the arrow keys work from the bar itself.
+                  // The keys are handled on the group above, which this sits
+                  // inside, so they behave identically wherever focus is.
+                  role="slider"
+                  aria-label={`Seek ${label}`}
+                  aria-valuemin={0}
+                  aria-valuemax={Math.round(duration)}
+                  aria-valuenow={Math.round(playhead)}
+                  aria-valuetext={`${formatClock(playhead)} of ${formatClock(duration)}`}
+                  tabIndex={0}
+                  onPointerDown={onScrub}
+                  onKeyDown={onKeyDown}
+                  className={
+                    hit +
+                    " group/scrub relative h-4 w-full cursor-pointer rounded-mo-pill" +
+                    " focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+                  }
+                >
+                  <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-mo-pill bg-mo-ink/30 transition-[height] duration-150 ease-mo group-hover/scrub:h-1.5 motion-reduce:transition-none">
+                    {/*
+                      The filled part is `--mo-ink` rather than the ember: a
+                      scrubber is a MARK, not the primary action on the screen,
+                      and an ember bar on every video would put twenty gradient
+                      fills in a feed that has one accent colour for the thing
+                      it actually wants you to press.
+                    */}
+                    <div
+                      className="h-full rounded-mo-pill bg-mo-ink"
+                      style={{ width: `${progress * 100}%` }}
+                    />
+                  </div>
+                  {/* The handle. A seek bar without one is a progress bar. */}
                   <div
-                    className="h-full rounded-mo-pill bg-mo-ink"
-                    style={{ width: `${progress * 100}%` }}
+                    aria-hidden="true"
+                    className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-mo-pill bg-mo-ink shadow-mo-sm"
+                    style={{ left: `${progress * 100}%` }}
                   />
                 </div>
+              ) : (
+                <div aria-hidden="true" className="pointer-events-none relative h-4 w-full">
+                  <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-mo-pill bg-mo-ink/30" />
+                </div>
+              )}
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  // Not focusable, and hidden from assistive technology: it is
+                  // the same action as Space on the group and as a press on
+                  // the picture. A third tab stop per video would put twenty
+                  // of them between a keyboard user and the bottom of the
+                  // feed, and a third announcement of the same control is
+                  // noise. The group above carries the label and the keys.
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className={
+                    hit +
+                    " inline-flex h-8 w-8 items-center justify-center rounded-mo-pill text-mo-ink" +
+                    " transition-colors duration-150 ease-mo hover:bg-mo-ink/20 motion-reduce:transition-none"
+                  }
+                >
+                  {isPlaying ? <PauseGlyph className="h-5 w-5" /> : <PlayGlyph className="h-5 w-5" />}
+                </button>
+                {/*
+                  Elapsed in ink, total in body — one is a live number and the
+                  other is a fact about the file, and setting them in one
+                  colour makes the person read the slash to tell which is
+                  which. The total is omitted entirely until metadata arrives,
+                  because "0:00 / 0:00" over a poster looks like a broken file.
+                */}
+                <span className="pointer-events-none select-none text-xs tabular-nums text-mo-ink">
+                  {formatClock(playhead)}
+                  {duration > 0 && <span className="text-mo-body"> / {formatClock(duration)}</span>}
+                </span>
               </div>
-              <span className="pointer-events-none rounded-mo-sm bg-mo-bg/70 px-1.5 py-0.5 text-xs tabular-nums text-mo-ink backdrop-blur-sm">
-                {formatClock(playhead)}
-              </span>
+            </div>
           </div>
         </>
       )}
@@ -1093,9 +1340,14 @@ export function MomentumVideo({
  * on the platform. `--mo-ink` on `--mo-bg` at .70 measures 6.46 against pure
  * white, 11.62 over mid grey and 17.38 over black — the same table the
  * carousel's pill was built from.
+ *
+ * It carries no `pointer-events` of its own. That belongs to the caller,
+ * because it depends on whether the control is currently on screen — see `hit`
+ * in the component, and the note there about why both classes must never
+ * appear together.
  */
 const OVERLAY_BUTTON =
-  "pointer-events-auto inline-flex items-center justify-center rounded-mo-pill " +
+  "inline-flex items-center justify-center rounded-mo-pill " +
   "bg-mo-bg/70 text-mo-ink backdrop-blur-sm transition-colors duration-150 ease-mo " +
   "hover:bg-mo-bg/85 focus-visible:outline focus-visible:outline-2 " +
   "focus-visible:outline-offset-2 focus-visible:outline-mo"

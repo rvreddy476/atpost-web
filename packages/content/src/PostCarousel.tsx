@@ -12,7 +12,7 @@
  * not what the person who posted it meant.
  *
  * ── What is copied from the Android version, and why ──────────────────────
- *   · the "2/5" pill, top-right, INSIDE the frame
+ *   · the "2/5" pill, INSIDE the frame (top-LEFT here — see the render site)
  *   · the position pips, bottom-centre, INSIDE the frame
  * Both sit over the media rather than under it so the card is exactly as tall
  * with a carousel as with a single picture. A pill in a strip above the frame
@@ -412,9 +412,19 @@ export function PostCarousel({
       </div>
 
       {/*
-        "2/5", top-right, and the pips over the bottom edge — both INSIDE the
+        "2/5", top-LEFT, and the pips over the bottom edge — both INSIDE the
         frame, the way Instagram overlays them, so the frame is the same height
         with or without a carousel.
+
+        ── Why top-left rather than Android's top-right ────────────────────
+        Because the player's speaker lives in the top-right corner now, and a
+        page counter has to give way to a control. The pill is a LABEL: it is
+        `aria-hidden`, it cannot be pressed, and it says something the person
+        can also see from the pips. The speaker is the control people reach for
+        most on a video, and a control that moved to a different corner
+        depending on whether the post happened to have a second photograph
+        would be the worst of both. So the label moved, once, and the transport
+        keeps the same geometry everywhere it is mounted.
 
         Both sit on PHOTOGRAPHY, which can be any colour, so neither may rely
         on a theme colour alone — white pips on a white sky are invisible and a
@@ -436,7 +446,7 @@ export function PostCarousel({
       */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute right-3 top-3 rounded-mo-pill bg-mo-bg/70 px-2 py-0.5 text-xs font-medium tabular-nums text-mo-ink backdrop-blur-sm"
+        className="pointer-events-none absolute left-3 top-3 rounded-mo-pill bg-mo-bg/70 px-2 py-0.5 text-xs font-medium tabular-nums text-mo-ink backdrop-blur-sm"
       >
         {pillLabel(page, count)}
       </span>

@@ -41,16 +41,17 @@ export type { AutoplayCoordinator, AutoplayOptions, Box, ViewportInset } from ".
 export {
   CONTROLS_HIDE_MS,
   SEEK_STEP_SECONDS,
+  chromeVisible,
   formatClock,
   intentOnActiveChange,
   keyAction,
-  playGlyphVisible,
   progressFraction,
   restingLineVisible,
   scrubTarget,
   scrubberVisible,
   seekTarget,
   shouldPlay,
+  tapOutcome,
   toggleIntent,
 } from "./controls"
 export type { ChromeState, ControlAction, PlaybackIntent } from "./controls"

@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest"
 import {
   CONTROLS_HIDE_MS,
   SEEK_STEP_SECONDS,
+  chromeVisible,
   formatClock,
   intentOnActiveChange,
   keyAction,
-  playGlyphVisible,
   progressFraction,
   restingLineVisible,
   scrubTarget,
   scrubberVisible,
   seekTarget,
   shouldPlay,
+  tapOutcome,
   toggleIntent,
   type PlaybackIntent,
 } from "./controls"
@@ -173,38 +174,53 @@ describe("keyAction", () => {
   })
 })
 
-describe("playGlyphVisible", () => {
-  const base = { playing: true, started: true, hovered: false, focused: false, recentlyMoved: false }
+describe("chromeVisible", () => {
+  const base = {
+    playing: true,
+    started: true,
+    hovered: false,
+    focused: false,
+    recentlyMoved: false,
+    revealed: false,
+  }
 
   it("always shows over a stopped video", () => {
-    // The rule that makes a pause button usable at all: chrome that faded
+    // The rule that makes a pause button usable at all: a transport that faded
     // while the video was stopped would leave a still frame with no way to
     // restart it and no clue anything had been paused.
-    expect(playGlyphVisible({ ...base, playing: false })).toBe(true)
+    expect(chromeVisible({ ...base, playing: false })).toBe(true)
   })
 
   it("shows on a poster that has never run", () => {
-    // The other nineteen cards in a feed. A still with a play triangle is how
+    // The other nineteen cards in a feed. A still with a play button is how
     // the web says "this is a video".
-    expect(playGlyphVisible({ ...base, playing: false, started: false })).toBe(true)
+    expect(chromeVisible({ ...base, playing: false, started: false })).toBe(true)
   })
 
   it("hides over a video that is playing and untouched", () => {
-    expect(playGlyphVisible(base)).toBe(false)
+    expect(chromeVisible(base)).toBe(false)
   })
 
   it("shows while the pointer is over the video and moving", () => {
-    expect(playGlyphVisible({ ...base, hovered: true, recentlyMoved: true })).toBe(true)
+    expect(chromeVisible({ ...base, hovered: true, recentlyMoved: true })).toBe(true)
   })
 
   it("fades once the pointer has been still, even while hovering", () => {
-    expect(playGlyphVisible({ ...base, hovered: true, recentlyMoved: false })).toBe(false)
+    expect(chromeVisible({ ...base, hovered: true, recentlyMoved: false })).toBe(false)
   })
 
   it("stays while something inside has keyboard focus", () => {
     // A focused control that is invisible is a control a sighted keyboard
-    // user has lost.
-    expect(playGlyphVisible({ ...base, focused: true })).toBe(true)
+    // user has lost. Focus alone is enough — no pointer, no timer.
+    expect(chromeVisible({ ...base, focused: true })).toBe(true)
+    expect(chromeVisible({ ...base, focused: true, recentlyMoved: false })).toBe(true)
+  })
+
+  it("shows for a touch reveal, which has no hover behind it", () => {
+    // The phone case. `hovered` is false and stays false for a finger; the
+    // tap sets `revealed` instead and it decays on the same timer.
+    expect(chromeVisible({ ...base, revealed: true, recentlyMoved: true })).toBe(true)
+    expect(chromeVisible({ ...base, revealed: true, recentlyMoved: false })).toBe(false)
   })
 
   it("matches the phone's tube player's auto-hide delay", () => {
@@ -213,31 +229,51 @@ describe("playGlyphVisible", () => {
 })
 
 describe("scrubberVisible", () => {
-  const base = { playing: false, started: true, hovered: false, focused: false, recentlyMoved: false }
+  const base = {
+    playing: false,
+    started: true,
+    hovered: false,
+    focused: false,
+    recentlyMoved: false,
+    revealed: false,
+  }
 
   it("never appears on a video that has not run", () => {
     // This is the one that keeps a feed usable. Nineteen stopped posters each
     // wearing a scrubber is nineteen empty bars and — far worse — nineteen
-    // extra slider tab stops before the bottom of the page.
+    // extra slider tab stops before the bottom of the page. MomentumVideo
+    // enforces it by not rendering the `role="slider"` at all.
     expect(scrubberVisible({ ...base, started: false })).toBe(false)
     expect(scrubberVisible({ ...base, started: false, hovered: true, recentlyMoved: true })).toBe(false)
     expect(scrubberVisible({ ...base, started: false, focused: true })).toBe(false)
+    expect(scrubberVisible({ ...base, started: false, revealed: true, recentlyMoved: true })).toBe(false)
   })
 
   it("appears on a video that has run and is now stopped", () => {
     expect(scrubberVisible(base)).toBe(true)
   })
 
-  it("otherwise behaves like the glyph", () => {
-    const playing = { ...base, playing: true }
-    expect(scrubberVisible(playing)).toBe(false)
-    expect(scrubberVisible({ ...playing, hovered: true, recentlyMoved: true })).toBe(true)
-    expect(scrubberVisible({ ...playing, focused: true })).toBe(true)
+  it("is otherwise exactly the rest of the transport", () => {
+    const cases = [
+      { ...base, playing: true },
+      { ...base, playing: true, hovered: true, recentlyMoved: true },
+      { ...base, playing: true, focused: true },
+      { ...base, playing: true, revealed: true, recentlyMoved: true },
+      { ...base, playing: true, hovered: true, recentlyMoved: false },
+    ]
+    for (const c of cases) expect(scrubberVisible(c)).toBe(chromeVisible(c))
   })
 })
 
 describe("restingLineVisible", () => {
-  const base = { playing: true, started: true, hovered: false, focused: false, recentlyMoved: false }
+  const base = {
+    playing: true,
+    started: true,
+    hovered: false,
+    focused: false,
+    recentlyMoved: false,
+    revealed: false,
+  }
 
   it("is the scrubber's shadow: shown exactly when the scrubber is not", () => {
     // Never both, or the bottom edge carries two progress indicators.
@@ -245,6 +281,7 @@ describe("restingLineVisible", () => {
       base,
       { ...base, hovered: true, recentlyMoved: true },
       { ...base, focused: true },
+      { ...base, revealed: true, recentlyMoved: true },
       { ...base, playing: false },
       { ...base, started: false },
     ]
@@ -259,6 +296,44 @@ describe("restingLineVisible", () => {
 
   it("says nothing about a video that has not run", () => {
     expect(restingLineVisible({ ...base, started: false })).toBe(false)
+  })
+})
+
+describe("tapOutcome", () => {
+  it("always toggles for a mouse", () => {
+    // A mouse cannot press blind: getting to the video moves the pointer, and
+    // the movement is what summons the transport.
+    expect(tapOutcome("mouse", true)).toBe("toggle")
+    expect(tapOutcome("mouse", false)).toBe("toggle")
+    // An unknown or absent pointerType is treated as a mouse rather than
+    // swallowing the press.
+    expect(tapOutcome("", false)).toBe("toggle")
+  })
+
+  it("makes the first tap on a hidden transport a reveal, not a toggle", () => {
+    // The whole touch story. Without this, reaching for the controls on a
+    // phone silently stops the video instead of showing them.
+    expect(tapOutcome("touch", false)).toBe("reveal")
+    expect(tapOutcome("pen", false)).toBe("reveal")
+  })
+
+  it("toggles once the transport is already on screen", () => {
+    expect(tapOutcome("touch", true)).toBe("toggle")
+    expect(tapOutcome("pen", true)).toBe("toggle")
+  })
+
+  it("means a paused video is never two taps away from playing", () => {
+    // A stopped video always has its transport up (`chromeVisible`), so the
+    // reveal branch cannot fire there and the first tap plays it.
+    const stopped = {
+      playing: false,
+      started: true,
+      hovered: false,
+      focused: false,
+      recentlyMoved: false,
+      revealed: false,
+    }
+    expect(tapOutcome("touch", chromeVisible(stopped))).toBe("toggle")
   })
 })
 

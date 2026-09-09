@@ -200,45 +200,75 @@ export interface ChromeState {
   started: boolean
   hovered: boolean
   focused: boolean
+  /**
+   * Has the pointer moved, or a control been used, within CONTROLS_HIDE_MS?
+   * The auto-hide timer, expressed as a flag.
+   */
   recentlyMoved: boolean
+  /**
+   * Did a TOUCH ask for the chrome, inside the same window?
+   *
+   * A finger has no hover, so `hovered` is never usefully true on a phone and
+   * a transport gated on it alone would be permanently unreachable there. A
+   * tap on a playing video sets this instead, and it decays on the same timer.
+   * `tapOutcome` is the other half of the rule.
+   */
+  revealed: boolean
 }
 
 /**
- * Whether the big centre play/pause glyph is drawn.
+ * Whether the transport is on screen — the bottom bar AND the speaker, as one.
  *
- * A stopped video ALWAYS shows it, and that is the rule that makes the pause
- * button usable at all: a control that faded while the video was stopped would
- * leave a still frame with no way to restart it and no clue that anything had
- * been paused. It doubles as the poster affordance on the other thirteen cards
- * — the coordinator plays one video at a time, so everything else in a feed is
- * a still, and a still with a play glyph is how the web says "this is a video".
+ * ── One answer, where there used to be three ─────────────────────────────
+ * Each control had its own rule, which is how this player ended up with a big
+ * glyph in the CENTRE of the picture coming and going on a different schedule
+ * from the scrubber beneath it. A centre play button on a feed video is a
+ * design error twice over: it sits exactly where a person is trying to look,
+ * and it competes with the press-anywhere-to-toggle behaviour that every video
+ * on the web already has — the thing under the cursor is a button that does
+ * the same job as the picture behind it, so a mistimed fade reads as "the
+ * pause button didn't work". It is gone. The transport is one object now, and
+ * one object has one visibility.
  *
- * Keyboard focus keeps it for the same reason a focused control must never be
- * invisible: a sighted keyboard user has otherwise lost it.
+ * The rules, in order:
+ *
+ *   NOT PLAYING → always. This is what makes a pause button usable at all: a
+ *     transport that faded over a stopped video would leave a still frame with
+ *     no way to restart it and no sign that anything had been paused. It is
+ *     also the poster affordance on the other nineteen cards in a feed — the
+ *     coordinator plays one video at a time, so everything else is a still,
+ *     and a still with a play button is how the web says "this is a video".
+ *
+ *   FOCUSED → always, for the reason a focused control may never be invisible:
+ *     a sighted keyboard user has otherwise lost the thing they are driving.
+ *     Not hover's poor relation; it is the entire keyboard story.
+ *
+ *   HOVERED or REVEALED, and recently → the mouse case and the touch case.
+ *     They differ only in what starts the timer, so they share everything after
+ *     it.
  */
-export function playGlyphVisible(input: ChromeState): boolean {
+export function chromeVisible(input: ChromeState): boolean {
   if (!input.playing) return true
   if (input.focused) return true
-  return input.hovered && input.recentlyMoved
+  return (input.hovered || input.revealed) && input.recentlyMoved
 }
 
 /**
  * Whether the scrubber and its clock are drawn.
  *
- * The stricter of the two rules, and the difference is the whole point. A feed
- * holds twenty cards and nineteen of them are stopped at zero; giving each one
- * a full transport paints nineteen empty progress bars across the page and —
- * far worse — puts nineteen extra `role="slider"` tab stops between a keyboard
- * user and the bottom of the feed.
+ * The chrome's rule AND one more, and the extra condition is the whole point.
+ * A feed holds twenty cards and nineteen of them are stopped at zero; giving
+ * each one a live scrubber paints nineteen empty progress bars across the page
+ * and — far worse — puts nineteen extra `role="slider"` tab stops between a
+ * keyboard user and the bottom of the feed.
  *
- * So a scrubber needs something to scrub: a video that has run. After that it
- * behaves like the glyph — always up while stopped, on hover, on focus.
+ * So a scrubber needs something to scrub: a video that has run. `MomentumVideo`
+ * enforces it harder than this function can, by keeping `role="slider"` out of
+ * the document entirely until then — an untouched feed has zero of them, not
+ * nineteen wearing `tabIndex={-1}`.
  */
 export function scrubberVisible(input: ChromeState): boolean {
-  if (!input.started) return false
-  if (!input.playing) return true
-  if (input.focused) return true
-  return input.hovered && input.recentlyMoved
+  return input.started && chromeVisible(input)
 }
 
 /**
@@ -248,6 +278,30 @@ export function scrubberVisible(input: ChromeState): boolean {
  */
 export function restingLineVisible(input: ChromeState): boolean {
   return input.started && !scrubberVisible(input)
+}
+
+/**
+ * What a press on the PICTURE means.
+ *
+ * A mouse always toggles. It cannot press blind: reaching the video moves the
+ * pointer, and the movement is itself what summons the chrome, so by the time
+ * the click lands the person has already seen what they are pressing.
+ *
+ * A finger is different, and this is the rule that makes the transport usable
+ * on a phone at all. There is no hover, so a tap on a playing video whose
+ * chrome has faded would toggle something invisible — somebody reaches for a
+ * video to find its controls and silently stops it instead. So the FIRST tap
+ * reveals, and only a tap while the transport is already on screen toggles.
+ * Which is what every video app on a phone does.
+ *
+ * Pen counts as touch. It hovers on some digitisers and not on others, and the
+ * cost of guessing wrong is a control nobody can find.
+ */
+export function tapOutcome(pointerType: string, isChromeVisible: boolean): "reveal" | "toggle" {
+  if (pointerType === "touch" || pointerType === "pen") {
+    return isChromeVisible ? "toggle" : "reveal"
+  }
+  return "toggle"
 }
 
 /**
