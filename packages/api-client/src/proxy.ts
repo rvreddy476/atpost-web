@@ -31,6 +31,22 @@ const FORWARDED_HEADERS = [
     // this the validator never reaches the gateway and every hit is a full
     // payload the client already holds.
     "if-none-match",
+    // Idempotency. `POST /v1/posts` REQUIRES this header — 400
+    // MISSING_IDEMPOTENCY_KEY without it and 400 INVALID_IDEMPOTENCY_KEY for
+    // anything that is not a UUID, both verified against the live gateway —
+    // and post-service uses it to make a retried create durably idempotent.
+    //
+    // It is named here because this list is an ALLOWLIST: a header the browser
+    // sets and this route does not name is dropped silently, and the failure
+    // that produces is a nasty one to chase. The request visibly carries an
+    // Idempotency-Key in the network tab and the gateway answers that one is
+    // required.
+    //
+    // The Tube upload studio (apps/tube/src/tube/uploadApi.ts) is the first
+    // caller to send one. Commerce's checkout sends `idempotency_key` in the
+    // BODY — a different mechanism on a different service, unaffected either
+    // way.
+    "idempotency-key",
 ]
 
 export async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {

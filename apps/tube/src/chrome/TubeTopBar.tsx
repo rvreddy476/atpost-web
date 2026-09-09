@@ -47,55 +47,49 @@ import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
 import { TubeProfileMenu } from "./TubeProfileMenu"
 import { TubeSearch } from "./TubeSearch"
-import { TUBE_APP_ONLY_REASON } from "./links"
 
 /**
- * Upload, which the web cannot do — said out loud rather than left out.
+ * Upload. A real control as of the upload studio, and it was not one before.
  *
- * ── Why the control is here at all ────────────────────────────────────────
- * There is no composer anywhere in this repository: no /create route in any
- * of the six zones, no upload form, no `POST /v1/posts` call outside the
- * Android client. Publishing a long video also needs a channel, a cover
- * picker and a trim step, which is a feature and not a button.
+ * ── What this used to be, and why the note is worth keeping ───────────────
+ * Until the studio shipped this was an `aria-disabled` span carrying
+ * TUBE_APP_ONLY_REASON, because the claim was true: there was no composer
+ * anywhere in this repository, no upload form, and no `POST /v1/posts` call
+ * outside the Android client. This zone's rule — stated in ./rail.ts and
+ * followed by every other unavailable row — is that an entry becomes a link
+ * on the day something serves it, and not one day before. `/upload` is
+ * served, so this is a link.
  *
- * The alternative — draw nothing — was rejected for the reason
- * `packages/ui/src/RoleSwitcher.tsx` records and this zone follows
- * everywhere: somebody who posts from the Android app and finds no upload
- * anywhere in Tube on the web concludes the web cannot be used for their
- * channel, which is a bigger and vaguer claim than the true one. So it is
- * present, named, focusable, `aria-disabled`, and carries the reason as text
- * a screen reader reaches through `aria-describedby`.
+ * The href is zone-relative, like every other destination inside this shell.
+ * An absolute "/tube/upload" would work from here and break the moment the
+ * zone is mounted anywhere else, and next/link resolves a relative href
+ * against the current route rather than the zone root — which is the exact
+ * bug that sent the reels back control to /reels/social.
  *
- * It becomes a real control on the day something serves it, and not before.
+ * The studio itself handles the signed-out and no-channel cases, so this
+ * control does not gate on either. Somebody who clicks Upload while signed
+ * out should land on the thing they asked for and be told what it needs, not
+ * find the button inert with no explanation.
  */
 function UploadControl() {
   return (
     <>
-      <span
-        role="button"
-        aria-disabled="true"
-        tabIndex={0}
-        aria-describedby="tube-upload-why"
-        className="hidden h-10 shrink-0 cursor-default items-center gap-2 rounded-mo-pill border border-mo px-4 text-sm font-semibold text-mo-body sm:flex"
+      <Link
+        href="/upload"
+        className="hidden h-10 shrink-0 items-center gap-2 rounded-mo-pill border border-mo px-4 text-sm font-semibold text-mo-body transition-colors hover:border-mo-strong hover:text-mo-ink sm:flex"
       >
         <Upload aria-hidden="true" className="h-4 w-4" />
         Upload
-      </span>
+      </Link>
       {/* The narrow version keeps the glyph and drops the word, and keeps a
           real accessible name so it is not announced as an unlabelled box. */}
-      <span
-        role="button"
-        aria-disabled="true"
+      <Link
+        href="/upload"
         aria-label="Upload"
-        tabIndex={0}
-        aria-describedby="tube-upload-why"
-        className="grid h-10 w-10 shrink-0 cursor-default place-items-center rounded-mo-pill border border-mo text-mo-body sm:hidden"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-mo-pill border border-mo text-mo-body transition-colors hover:border-mo-strong hover:text-mo-ink sm:hidden"
       >
         <Upload aria-hidden="true" className="h-4 w-4" />
-      </span>
-      <span id="tube-upload-why" className="sr-only">
-        {TUBE_APP_ONLY_REASON}
-      </span>
+      </Link>
     </>
   )
 }

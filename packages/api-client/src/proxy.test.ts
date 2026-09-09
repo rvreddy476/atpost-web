@@ -81,4 +81,20 @@ describe('proxyRequest', () => {
     const sent = fetchMock.mock.calls[0][1].headers as Headers
     expect(sent.get('x-user-id')).toBeNull()
   })
+
+  // `POST /v1/posts` answers 400 MISSING_IDEMPOTENCY_KEY without this header.
+  // Dropping it here is a failure with no visible cause: the browser's network
+  // tab shows the header on the request, and the gateway says it is missing.
+  it('forwards the idempotency key that post-service requires', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('ok'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await proxyRequest(
+      request(undefined, { 'idempotency-key': '3f1c0f7e-9f5b-4a2e-8f7a-0d1b2c3d4e5f' }),
+      { params: Promise.resolve({ path: ['posts'] }) },
+    )
+
+    const sent = fetchMock.mock.calls[0][1].headers as Headers
+    expect(sent.get('idempotency-key')).toBe('3f1c0f7e-9f5b-4a2e-8f7a-0d1b2c3d4e5f')
+  })
 })
