@@ -31,22 +31,29 @@
  *     vocabulary rather than match it.
  *
  *   · "YouTube icon, TV icon" in the brief is ONE destination, not two. Tube
- *     is the long-video app — `feature/tube` on Android, `/v1/videos` on the
- *     gateway — and the mobile set gives it exactly one glyph, `UsIcons.Tv`.
- *     Drawing two icons for one place would be an invented name.
+ *     is the long-video app — `feature/tube` on Android, `/v1/feed/videos` on
+ *     the gateway — and the mobile set gives it exactly one glyph,
+ *     `UsIcons.Tv`. Drawing two icons for one place would be an invented name.
+ *
+ *     (This comment used to say Tube's endpoint was `/v1/videos`, which is
+ *     half right and was worth correcting rather than leaving. `/v1/videos` IS
+ *     a gateway prefix and IS Tube's, but behind it are post-service's creator
+ *     tools and watch progress — `GET /v1/videos/{postId}`, `…/progress`,
+ *     `/v1/videos/continue-watching`. `GET /v1/videos` on its own is a 404,
+ *     verified. The list of videos is `/v1/feed/videos`, on feed-service.)
  *
  * ── Why a destination with no web zone still appears ──────────────────────
- * The web has four zones and the shell's rewrite table is the whole list:
- * /shop, /admin, /social, /apps, /reels (apps/shell/next.config.ts, and the
- * same list again in apps/shell/src/lib/moduleRedirect.ts). Tube, Friends and
+ * The web has six zones and the shell's rewrite table is the whole list:
+ * /shop, /admin, /social, /apps, /reels, /tube (apps/shell/next.config.ts, and
+ * the same list again in apps/shell/src/lib/moduleRedirect.ts). Friends and
  * Messages are not among them.
  *
  * The prior art for what to do about that is `packages/ui/src/RoleSwitcher.tsx`
  * and its reasoning transfers exactly. A delivery partner whose role vanishes
  * from the web does not conclude "that is a phone feature", they conclude the
  * platform has lost their approval. Someone who has used the Android app and
- * finds no Reels anywhere on the web concludes the same thing about their
- * content. So the entry is present, named, and honestly unusable: rendered
+ * finds no Messages anywhere on the web concludes the same thing about their
+ * conversations. So the entry is present, named, and honestly unusable: rendered
  * with `aria-disabled` rather than dropped, so it is still reachable by
  * keyboard and a screen-reader user is told the same thing a sighted one can
  * see — and never as an `href` to a route that would 404, which is the one
@@ -140,8 +147,12 @@ export const DESTINATIONS: readonly AppDestination[] = [
     id: "tube",
     label: "Tube",
     icon: Tv,
-    href: null,
-    unavailableReason: APP_ONLY_REASON,
+    // A real zone as of the tube build: apps/tube on port 3012, and the
+    // shell's rewrite table now carries /tube. This entry was `href: null`
+    // with APP_ONLY_REASON until the zone existed, which is this file's rule —
+    // an entry becomes a link on the day something serves it, and not before.
+    href: "/tube",
+    unavailableReason: null,
     description: "Long video",
   },
   {

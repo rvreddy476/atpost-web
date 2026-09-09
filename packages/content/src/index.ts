@@ -118,3 +118,14 @@ export { blurhashAverageColor, decodeBlurhash, isValidBlurhash } from "./blurhas
 
 export { aspectRatio, earliestExpiry, isExpired, pickImage, pickThumb } from "./variants"
 export { absoluteTime, formatDuration, relativeTime } from "./relativeTime"
+
+/**
+ * "1.2K" — the one compaction rule the product has.
+ *
+ * It lived in apps/reels while reels was the only surface with counts to draw.
+ * apps/tube is the second, and a formatter with two callers that ROUND
+ * differently shows the same post two different figures on two tabs of one
+ * product. ./counts.ts carries the argument; apps/reels re-exports this from
+ * its own rail.ts so nothing in that zone had to move with it.
+ */
+export { formatCount } from "./counts"

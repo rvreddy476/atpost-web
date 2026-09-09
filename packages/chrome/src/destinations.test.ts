@@ -30,11 +30,11 @@ import {
  *
  * This list and the `zones` table in apps/shell/next.config.ts move together —
  * which is the whole point of the assertion below. `/reels` joined both when
- * apps/reels was built; before that the Reels row was `href: null` with
- * APP_ONLY_REASON, and this test is what would have caught it being linked a
- * release too early.
+ * apps/reels was built and `/tube` when apps/tube was; before that each row
+ * was `href: null` with APP_ONLY_REASON, and this test is what would have
+ * caught either being linked a release too early.
  */
-const LIVE_ZONES = ["/shop", "/admin", "/social", "/apps", "/reels"]
+const LIVE_ZONES = ["/shop", "/admin", "/social", "/apps", "/reels", "/tube"]
 
 describe("DESTINATIONS", () => {
   it("carries the mobile client's own top-level vocabulary", () => {
@@ -98,14 +98,21 @@ describe("DESTINATIONS", () => {
     expect(LIVE_ZONES).toContain(HOME_PATH)
   })
 
-  it("still has no zone for Tube, which is what the video tab is waiting on", () => {
-    // Reels became a link the day apps/reels existed. Tube has not, and this
-    // is the line that has to change when it does — together with the shell's
-    // `zones` table and `moduleHomes`. Delete this test then, do not weaken it.
-    const tube = DESTINATIONS.find((d) => d.id === "tube")
-    expect(tube?.href).toBeNull()
-    expect(tube?.unavailableReason).toBe(APP_ONLY_REASON)
-  })
+  /*
+   * A test called "still has no zone for Tube" stood here, asserting
+   * `tube.href === null` and `tube.unavailableReason === APP_ONLY_REASON`. It
+   * has been DELETED rather than weakened, on the instruction it carried
+   * itself: "Delete this test then, do not weaken it."
+   *
+   * It did its job. It existed so the Tube row could not become a link before
+   * something served one, and it went in the same change that added apps/tube,
+   * the shell's rewrite to :3012, and the `/tube` entries in `moduleHomes` and
+   * `moduleLabels`. Nothing replaced it, because two general assertions above
+   * already cover what is left to protect: "never has an href and an
+   * unavailable reason at the same time", and "only ever links to a zone the
+   * shell actually serves" — and `/tube` is in LIVE_ZONES now, so the second is
+   * what fails if the rewrite table is ever reverted without this file.
+   */
 })
 
 describe("currentDestinationId", () => {

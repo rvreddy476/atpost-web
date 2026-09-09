@@ -1,0 +1,66 @@
+/* The Momentum theme, then Tailwind.
+
+   @momentum/tokens is imported FIRST and deliberately: it declares every
+   --mo-* custom property and, at the end, points the --brand-* contract that
+   @atpost/ui reads at those same values. Tailwind's layers come after, so a
+   utility can always win over a base rule.
+
+   There are no colours in this file. A zone that paints its own #0F1419 here
+   is a zone that will be a slightly different black from every other zone in
+   six months. Everything visual lives in packages/tokens/tokens.css. */
+@import "@momentum/tokens/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* next/font generates a family name per font and exposes it as a variable.
+   Handing those to the token sheet's own variables is the seam that lets
+   @momentum/tokens stay a plain stylesheet with no idea how a zone loaded its
+   fonts. Both keep their full system fallback behind them, so a failed font
+   request degrades rather than breaks. */
+:root {
+  --mo-font-display: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+/* NOTE the absence of the `html, body { overflow: hidden }` that apps/reels
+   has. That rule exists there because the reels viewer IS the viewport and a
+   document that also scrolled would fight the snap scroller inside it. Every
+   surface in this zone is an ordinary scrolling page — a browse grid and a
+   watch page with a description and an action row under the picture — so
+   locking the document here would simply make the bottom of a long
+   description unreachable. */
+
+/* The expanded player, when the browser will not give us a real fullscreen.
+
+   ── Why a class and not a portal ─────────────────────────────────────────
+   The whole promise of the expand control is that the video KEEPS PLAYING.
+   Moving the player to a different parent in the React tree unmounts and
+   remounts it, which tears down hls.js, drops the playhead, and — because the
+   WatchSession goes with it — ends the analytics view and starts a new one, so
+   one watch arrives at the server as two. So the element never moves; only its
+   box changes. See src/watch/expand.ts for the whole argument. */
+.tube-theatre {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  width: 100vw;
+  /* dvh, not vh: on a phone browser with a retracting toolbar, 100vh is taller
+     than the visible viewport and the bottom of the transport sits under the
+     chrome the whole time. */
+  height: 100dvh;
+  max-width: none;
+  border-radius: 0;
+  background: #000;
+}
+
+/* The page behind an in-page expansion must not scroll — a wheel over a fixed
+   overlay otherwise moves the document underneath it, so leaving the expansion
+   lands somewhere else than where it was entered. The class is put on <body>
+   by the expand hook and taken off again on exit, on Escape, and on unmount. */
+body.tube-theatre-open {
+  overflow: hidden;
+}

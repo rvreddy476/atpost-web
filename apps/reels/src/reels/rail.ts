@@ -29,6 +29,10 @@
  * browser — which is the assertion that actually matters.
  */
 
+// The count formatter, which now lives in a package because tube needs it too.
+// See the note beside the re-export at the bottom of this file.
+import { formatCount } from "@momentum/content"
+
 export type RailKind = "like" | "comment" | "share" | "save"
 
 export interface RailControl {
@@ -56,21 +60,25 @@ export function railCountLabel(count: number, noun: string): string {
   return count > 0 ? formatCount(count) : noun
 }
 
-/** "999", "1.2K", "12K", "1.4M". Never "1.0K". */
-export function formatCount(count: number): string {
-  if (!Number.isFinite(count) || count <= 0) return "0"
-  const n = Math.floor(count)
-  if (n < 1_000) return String(n)
-  if (n < 1_000_000) return `${trim(n / 1_000)}K`
-  return `${trim(n / 1_000_000)}M`
-}
-
-function trim(value: number): string {
-  // One decimal, but only when it says something: 1.2K is informative and
-  // 1.0K is just a longer 1K.
-  const one = Math.floor(value * 10) / 10
-  return Number.isInteger(one) ? String(one) : one.toFixed(1)
-}
+/**
+ * "999", "1.2K", "12K", "1.4M". Never "1.0K".
+ *
+ * The implementation MOVED to `@momentum/content`'s counts.ts on the day
+ * apps/tube became its second caller — a compaction rule with two callers that
+ * round differently shows the same post two different figures on two tabs of
+ * one product. It is re-exported from here rather than every call site in this
+ * zone being rewritten, and ./rail.test.ts still pins the behaviour through
+ * this name, which is the assertion that the move changed nothing.
+ *
+ * It is imported at the top of this file rather than re-exported inline,
+ * because `export … from` does not bind the name locally and `railCountLabel`
+ * above calls it.
+ *
+ * `railCountLabel` itself did NOT move. Falling back to the control's own name
+ * when the count is zero is a rule about a RAIL — a "0" under a heart reads as
+ * a score, "Like" reads as an invitation — and not a rule about a number.
+ */
+export { formatCount }
 
 export function railControls(input: RailInput): RailControl[] {
   const out: RailControl[] = [

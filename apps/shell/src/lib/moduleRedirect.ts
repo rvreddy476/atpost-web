@@ -8,7 +8,7 @@
  * hand them a 404. When a zone comes back it comes back here and in the
  * shell's `zones` rewrite table together, or the two drift again.
  */
-const moduleHomes = ['/shop', '/admin', '/social', '/apps', '/reels'] as const
+const moduleHomes = ['/shop', '/admin', '/social', '/apps', '/reels', '/tube'] as const
 
 export type ModuleHome = (typeof moduleHomes)[number]
 
@@ -67,6 +67,9 @@ const moduleLabels: Record<ModuleHome, string> = {
   '/social': 'your feed',
   '/apps': 'mini apps',
   '/reels': 'reels',
+  // Lower case and no article, like the two above it: the sentence around it
+  // is "take you to …", and Tube is a name rather than a place with a "the".
+  '/tube': 'Tube',
 }
 
 /**
