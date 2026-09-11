@@ -29,5 +29,5 @@
     "end_reason": null,
     "sessions": 1
   },
-  "notes": "Before M-29 a heartbeat carried no loop_count, so the session row's loop_count stayed 0 until the play_end arrived; when it never arrived, the clamp (M-26) bound watched_ms to duration x 1 = 5000 and three genuine passes were lost. The web tracker now sends its capped loop count and the duration on every beat; the server takes both under GREATEST like every other running figure. Android still sends neither on heartbeats (M-12 queue): an Android session that loses its final event is still credited one pass, which is the conservative side."
+  "notes": "Before M-29 a heartbeat carried no loop_count, so the session row's loop_count stayed 0 until the play_end arrived; when it never arrived, the clamp (M-26) bound watched_ms to duration x 1 = 5000 and three genuine passes were lost. The web tracker now sends its capped loop count and the duration on every beat; the server takes both under GREATEST like every other running figure. Android sends both on every heartbeat as of 12 Sep 2026, so the same holds there."
 }
