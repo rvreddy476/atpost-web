@@ -47,6 +47,9 @@ export interface WatchHeartbeatEvent extends VideoEventCommon {
   buffering_ms_increment: number
   seek_count_increment: number
   playback_speed: number
+  /** Loops so far, capped at 20, and the duration — on every beat (M-29). */
+  loop_count: number
+  content_duration_ms: number
 }
 
 export interface MilestoneEvent extends VideoEventCommon {

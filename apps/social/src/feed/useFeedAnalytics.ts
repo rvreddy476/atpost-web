@@ -162,6 +162,8 @@ export function useFeedAnalytics(): FeedAnalytics {
               buffering_ms_increment: event.bufferingMsIncrement,
               seek_count_increment: event.seekCountIncrement,
               playback_speed: event.playbackSpeed,
+              loop_count: event.loopCount,
+              content_duration_ms: event.contentDurationMs,
             },
           })
           break

@@ -129,6 +129,10 @@ export function validateEvent(ev: AnalyticsEvent, nowMs: number = Date.now()): s
       if (!finiteInRange(q.seek_count_increment, 0, LIMITS.MAX_SEEK_INCREMENT)) {
         return "seek_count_increment out of range"
       }
+      if (!finiteInRange(q.content_duration_ms, 1, LIMITS.MAX_DURATION_MS)) {
+        return "content_duration_ms must be > 0"
+      }
+      if (!finiteInRange(q.loop_count, 0, LIMITS.MAX_LOOP_COUNT)) return "loop_count out of range"
       if (!finiteInRange(q.playback_speed, LIMITS.MIN_PLAYBACK_SPEED, LIMITS.MAX_PLAYBACK_SPEED)) {
         return "playback_speed out of range"
       }

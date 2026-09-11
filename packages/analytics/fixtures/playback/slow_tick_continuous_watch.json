@@ -8,12 +8,12 @@
   "content": { "content_type": "flick", "duration_ms": 30000 },
   "events": [
     { "type": "play_start", "at_ms": 0, "payload": { "content_duration_ms": 30000, "start_method": "autoplay", "is_muted": false, "is_autoplay": true, "time_to_first_frame_ms": 130, "initial_buffer_ms": 0 } },
-    { "type": "watch_heartbeat", "at_ms": 6000, "payload": { "watched_ms_increment": 6000, "watched_ms_total": 6000, "playhead_position_ms": 6000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
-    { "type": "watch_heartbeat", "at_ms": 11000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 11000, "playhead_position_ms": 11000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
-    { "type": "watch_heartbeat", "at_ms": 16000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 16000, "playhead_position_ms": 16000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
-    { "type": "watch_heartbeat", "at_ms": 21000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 21000, "playhead_position_ms": 21000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
-    { "type": "watch_heartbeat", "at_ms": 26000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 26000, "playhead_position_ms": 26000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
-    { "type": "watch_heartbeat", "at_ms": 30000, "payload": { "watched_ms_increment": 4000, "watched_ms_total": 30000, "playhead_position_ms": 30000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 6000, "payload": { "watched_ms_increment": 6000, "watched_ms_total": 6000, "playhead_position_ms": 6000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1, "loop_count": 0, "content_duration_ms": 30000 } },
+    { "type": "watch_heartbeat", "at_ms": 11000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 11000, "playhead_position_ms": 11000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1, "loop_count": 0, "content_duration_ms": 30000 } },
+    { "type": "watch_heartbeat", "at_ms": 16000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 16000, "playhead_position_ms": 16000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1, "loop_count": 0, "content_duration_ms": 30000 } },
+    { "type": "watch_heartbeat", "at_ms": 21000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 21000, "playhead_position_ms": 21000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1, "loop_count": 0, "content_duration_ms": 30000 } },
+    { "type": "watch_heartbeat", "at_ms": 26000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 26000, "playhead_position_ms": 26000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1, "loop_count": 0, "content_duration_ms": 30000 } },
+    { "type": "watch_heartbeat", "at_ms": 30000, "payload": { "watched_ms_increment": 4000, "watched_ms_total": 30000, "playhead_position_ms": 30000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1, "loop_count": 0, "content_duration_ms": 30000 } },
     { "type": "play_end", "at_ms": 30000, "payload": { "watched_ms_total": 30000, "max_continuous_watch_ms": 30000, "content_duration_ms": 30000, "loop_count": 0, "end_reason": "ended" } }
   ],
   "expected": {

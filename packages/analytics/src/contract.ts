@@ -189,6 +189,14 @@ export interface WatchHeartbeatPayload extends CommonPayload {
   buffering_ms_increment: number
   seek_count_increment: number
   playback_speed: number
+  /**
+   * Loops so far (capped at 20) and the duration, on every beat (M-29). The
+   * server clamps each running total to duration x (loop_count + 1) as it
+   * arrives, and a session closed by inactivity — the play_end never left
+   * the browser — is credited its loops rather than a single pass.
+   */
+  loop_count: number
+  content_duration_ms: number
 }
 
 export interface MilestonePayload extends CommonPayload {

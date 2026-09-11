@@ -122,6 +122,25 @@ describe("loops", () => {
     const end = h.events.find((e) => e.kind === "play_end")
     expect(end && end.kind === "play_end" && end.loopCount).toBe(0)
   })
+
+  it("tells every heartbeat how many loops came before it (M-29)", () => {
+    // A tab closed mid-loop never sends play_end; the server closes the
+    // session from its heartbeats and clamps watch time to
+    // duration x (loops + 1). A beat that does not say how many loops it
+    // has seen leaves a three-pass flick credited as one.
+    const h = started(5_000)
+    // Three full passes: 0 -> 5000, wrap, 0 -> 5000, wrap, 0 -> 5000.
+    for (let pass = 0; pass < 3; pass++) {
+      for (let s = 1; s <= 5; s++) h.session.sample(s * 1000, 1000)
+    }
+    const beats = h.events.filter((e) => e.kind === "heartbeat")
+    expect(beats.length).toBeGreaterThanOrEqual(2)
+    const last = beats[beats.length - 1]
+    expect(last.kind === "heartbeat" && last.loopCount).toBe(2)
+    expect(last.kind === "heartbeat" && last.contentDurationMs).toBe(5_000)
+    // The first beat, before any wrap, says zero — not undefined.
+    expect(beats[0].kind === "heartbeat" && beats[0].loopCount).toBe(0)
+  })
 })
 
 describe("heartbeats", () => {

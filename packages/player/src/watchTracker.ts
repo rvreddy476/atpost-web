@@ -76,6 +76,15 @@ export type WatchEvent =
       kind: "heartbeat"
       /** 1-based, for the local dedupe key. Not a wire field. */
       sequence: number
+      /**
+       * The loops so far, capped like play_end's. A session that loses its
+       * final event (tab closed, M-08) is finalised from its heartbeats, and
+       * without this the server could only credit one pass of a looped flick
+       * (M-29): its clamp is duration x (loops + 1).
+       */
+      loopCount: number
+      /** So the server can clamp each running total as it arrives (M-26). */
+      contentDurationMs: number
       watchedMsIncrement: number
       watchedMsTotal: number
       playheadPositionMs: number
@@ -271,6 +280,8 @@ export class WatchSession {
     this.emit({
       kind: "heartbeat",
       sequence: s.heartbeatSequence,
+      loopCount: Math.min(s.loopCount, MAX_LOOP_COUNT),
+      contentDurationMs: this.info.contentDurationMs,
       watchedMsIncrement: Math.round(watchedIncrement),
       watchedMsTotal: Math.round(s.watchedMs),
       playheadPositionMs: Math.max(0, Math.round(playheadMs)),
