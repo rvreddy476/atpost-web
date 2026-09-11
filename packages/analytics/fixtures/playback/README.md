@@ -116,12 +116,14 @@ produce from the same `viewer` behaviour; that fixture is the target.
    throttled, a slow main thread) sees a playhead delta larger than the
    ceiling and classifies continuous playback as a seek. Exposed by
    **`slow_tick_continuous_watch`**: Android reports `watched_ms_total`
-   short by the late tick and `seek_count_increment: 1`. Honest note: the
-   web tracker has the same ceiling formula. `MomentumVideo` passes the
-   measured `elapsed` into `sample()`, but `watchTracker.ts` sizes the
-   ceiling from `SAMPLE_INTERVAL_MS`, not from `elapsedMs`. The plan lists
-   this under Android; it is shared, and the fixture is the target for
-   both.
+   short by the late tick and `seek_count_increment: 1`. The web tracker
+   had the same formula until M-27: `MomentumVideo` passes the measured
+   `elapsed` into `sample()`, and `watchTracker.ts` now sizes the ceiling
+   as `max(elapsedMs, SAMPLE_INTERVAL_MS) x 2 x speed`, so a late tick
+   under continuous playback is credited and a genuine jump is still a
+   seek (unit test "a slow tick is not a seek"). Android's sampler has no
+   measured elapsed to use; the fix there is to measure the tick and size
+   the ceiling from it the same way.
 
 Also queued for that session, from Phase 5D: Android still reports
 `surface=feed` for reels and lacks `REELS` in its enum.

@@ -26,8 +26,9 @@
  *   heartbeats claiming zero.
  *
  * A seek contributes NOTHING. A jump backwards, or forwards by more than two
- * sample intervals' worth of playback, is a seek and not viewing — otherwise
- * dragging the scrubber to the end would pay out a full view.
+ * ticks' worth of playback — the tick as actually measured, never less than
+ * the nominal interval — is a seek and not viewing; otherwise dragging the
+ * scrubber to the end would pay out a full view.
  *
  * ── Loops ─────────────────────────────────────────────────────────────────
  * A short flick loops, and a loop is a backwards jump that IS viewing. It is
@@ -225,9 +226,16 @@ export class WatchSession {
       s.watchedMs += tail
       s.continuousMs += tail
     } else {
-      // Two sample intervals of headroom, scaled by playback rate, so that a
-      // dropped frame or a slow tick is not mistaken for a scrub.
-      const ceiling = SAMPLE_INTERVAL_MS * 2 * Math.max(1, this.playbackSpeed)
+      // Two ticks of headroom, scaled by playback rate, so that a dropped frame
+      // or a slow tick is not mistaken for a scrub. The tick is the MEASURED
+      // one: a setInterval is not promised its interval, and hls.js parsing on
+      // a scrolling feed routinely lands a 2-3s tick during continuous
+      // playback — sizing the ceiling from the nominal interval charged that
+      // as a seek, discarded the watch time and sent a false seek count
+      // (M-27, fixture slow_tick_continuous_watch). The nominal interval stays
+      // as the floor so a fast tick cannot shrink the ceiling either.
+      const tickMs = Math.max(Number.isFinite(elapsedMs) ? elapsedMs : 0, SAMPLE_INTERVAL_MS)
+      const ceiling = tickMs * 2 * Math.max(1, this.playbackSpeed)
       if (delta < 0 || delta > ceiling) {
         // A seek. No watch time, and the continuous run is broken.
         s.seekCount += 1

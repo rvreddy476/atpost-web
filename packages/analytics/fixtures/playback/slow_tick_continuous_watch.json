@@ -30,5 +30,5 @@
     "end_reason": "ended",
     "sessions": 1
   },
-  "notes": "Divergence 3 (M-12): both trackers size the seek ceiling from the NOMINAL sample interval (SAMPLE_INTERVAL_MS x 2 x speed) rather than the elapsed time actually measured between the two samples, so a 3 s late tick at 1x is classified as a seek: watched_ms_total comes out 3000 short and seek_count_increment is 1. The web tracker receives the measured elapsed (MomentumVideo passes it to sample()) and still ignores it for the ceiling; Android's ticker has no measured elapsed at all. The plan lists this under Android; it is shared."
+  "notes": "Divergence 3 (M-12, web side closed as M-27): the seek ceiling is sized from the elapsed time actually measured between the two samples, max(elapsed, SAMPLE_INTERVAL_MS) x 2 x speed, never from the nominal interval alone. The web tracker does this: MomentumVideo passes the measured elapsed to sample() and watchTracker.ts sizes the ceiling from it, so this stream is what it emits; the unit test in packages/player/src/watchTracker.test.ts (a slow tick is not a seek) pins it. Android still sizes the ceiling from the constant and has no measured elapsed at all, so against this fixture it reports watched_ms_total 3000 short and seek_count_increment 1 — the remaining target for the next Android session."
 }

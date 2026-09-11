@@ -228,3 +228,43 @@ describe("end", () => {
     expect(h.session.watchedMs).toBe(before)
   })
 })
+
+describe("a slow tick is not a seek", () => {
+  // The sampler is a 1s setInterval, but the browser does not promise one:
+  // hls.js parsing on a scrolling feed routinely lands a 2-3s tick. The player
+  // passes the MEASURED elapsed into sample(), and the seek ceiling has to be
+  // sized from it — a ceiling sized from the nominal tick charges genuine
+  // continuous watching as a scrub, discards the watch time, and sends a
+  // false seek_count_increment. Fixture: slow_tick_continuous_watch.
+  it("credits a 2.5s tick whose playhead advanced 2.5s, and reports no seek", () => {
+    const h = started(60_000)
+    playForward(h.session, 2)
+    h.session.sample(4500, 2500) // janky tick: 2.5s of wall clock, 2.5s of playhead
+    expect(h.session.watchedMs).toBe(4500)
+    playForward(h.session, 3, 4500)
+    // 4.5s of clock had passed at the slow tick, so the first beat fires on the
+    // next one, carrying every millisecond including the slow tick's 2500.
+    const beat = h.events.find((e) => e.kind === "heartbeat")
+    expect(beat && beat.kind === "heartbeat" && beat.seekCountIncrement).toBe(0)
+    expect(beat && beat.kind === "heartbeat" && beat.watchedMsTotal).toBe(5500)
+  })
+
+  it("still calls a 10s jump across a 2.5s tick a seek", () => {
+    const h = started(60_000)
+    playForward(h.session, 2)
+    h.session.sample(12_000, 2500) // 2.5s passed, the playhead moved 10s: a scrub
+    expect(h.session.watchedMs).toBe(2000)
+    playForward(h.session, 3, 12_000)
+    const beat = h.events.find((e) => e.kind === "heartbeat")
+    expect(beat && beat.kind === "heartbeat" && beat.seekCountIncrement).toBe(1)
+  })
+
+  it("does not let a fast tick shrink the ceiling below the nominal one", () => {
+    // A 200ms tick with 1.5s of playhead advance is inside the nominal 2s
+    // ceiling and must stay credited; the measured elapsed only ever widens it.
+    const h = started(60_000)
+    playForward(h.session, 2)
+    h.session.sample(3500, 200)
+    expect(h.session.watchedMs).toBe(3500)
+  })
+})
