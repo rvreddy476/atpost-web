@@ -1,0 +1,37 @@
+{
+  "name": "backward_seek_and_rewatch",
+  "description": "A 30 s flick: twenty seconds watched, a scrub back to 10 s, then played to the end. The rewatched ten seconds are watch time (watched_ms 40000) but not new coverage (covered_ms 30000): the two measures answer different questions, and the view score reads the second.",
+  "viewer": [
+    "0-20 s: plays",
+    "20 s: scrubs back from 20 s to 10 s (a backwards jump that is not a loop wrap)",
+    "20-40 s wall: plays 10 s to the end again"
+  ],
+  "content": { "content_type": "flick", "duration_ms": 30000 },
+  "events": [
+    { "type": "play_start", "at_ms": 0, "payload": { "content_duration_ms": 30000, "start_method": "tap", "is_muted": false, "is_autoplay": false, "time_to_first_frame_ms": 150, "initial_buffer_ms": 0 } },
+    { "type": "watch_heartbeat", "at_ms": 5000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 5000, "playhead_position_ms": 5000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 10000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 10000, "playhead_position_ms": 10000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 15000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 15000, "playhead_position_ms": 15000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 20000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 20000, "playhead_position_ms": 20000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 25000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 25000, "playhead_position_ms": 15000, "buffering_ms_increment": 0, "seek_count_increment": 1, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 30000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 30000, "playhead_position_ms": 20000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 35000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 35000, "playhead_position_ms": 25000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "watch_heartbeat", "at_ms": 40000, "payload": { "watched_ms_increment": 5000, "watched_ms_total": 40000, "playhead_position_ms": 30000, "buffering_ms_increment": 0, "seek_count_increment": 0, "playback_speed": 1 } },
+    { "type": "play_end", "at_ms": 40000, "payload": { "watched_ms_total": 40000, "max_continuous_watch_ms": 20000, "content_duration_ms": 30000, "loop_count": 0, "end_reason": "ended" } }
+  ],
+  "expected": {
+    "watched_ms": 40000,
+    "watched_ms_reported": 40000,
+    "covered_ms": 30000,
+    "loop_count": 0,
+    "seek_count": 1,
+    "percent_viewed": 100,
+    "percent_covered": 100,
+    "is_display_view": true,
+    "view_score": 1.0,
+    "finalize_reason": "play_end",
+    "end_reason": "ended",
+    "sessions": 1
+  },
+  "notes": "The server clamps the play_end figure to duration x (loop_count + 1) = 30000, but the session keeps the GREATEST of every event's running total, and the heartbeats had already carried 40000. So the clamp only ever binds when heartbeats did not run ahead of it. Recorded, not endorsed: see README, 'Server behaviour these fixtures pin that may want changing'."
+}
