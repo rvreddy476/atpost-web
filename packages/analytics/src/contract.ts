@@ -34,13 +34,16 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * The five surfaces the server keeps as a dimension.
+ * The six surfaces the server keeps as a dimension.
  *
  * `normalizeSurface` maps anything else to "other" and does NOT error, so a
  * typo here is not a failed request — it is a silently lost dimension, which
- * is worse. The home feed is "feed".
+ * is worse (the server now counts each collapse on
+ * `analytics_surface_rejected_total{raw}`, so it is at least visible). The
+ * home feed is "feed"; short-form vertical video is "reels" (server-side
+ * since plan 5D, 2026-09-11).
  */
-export type AnalyticsSurface = "feed" | "posttube" | "profile" | "search" | "channel"
+export type AnalyticsSurface = "feed" | "reels" | "posttube" | "profile" | "search" | "channel"
 
 /**
  * The 12 types a web client sends. `type` on the envelope, not `event_name`.

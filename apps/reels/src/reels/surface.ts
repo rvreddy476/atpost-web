@@ -1,46 +1,34 @@
 /**
- * The analytics surface this zone reports, and why it is not "reels".
+ * The analytics surface this zone reports: "reels".
  *
  * ── What the server accepts ───────────────────────────────────────────────
  * analytics-service's `normalizeSurface` (internal/service/ingest.go) is a
- * five-arm switch:
+ * closed set:
  *
- *     case "feed", "posttube", "profile", "search", "channel":
- *             return strings.ToLower(strings.TrimSpace(value))
- *     default:
- *             return "other"
+ *     case "feed", "reels", "posttube", "profile", "search", "channel":
+ *             return normalized
  *
- * There is no arm for short-form vertical video. `"reels"`, `"flicks"` and
- * `"shorts"` would every one of them be accepted by the request — the switch
- * does not error — and stored as `"other"`. That is the worst failure
- * available: not a rejected batch anyone would notice, but a silently lost
- * dimension on the events a creator is PAID from.
- *
- * (There is a `reels_feed` string in the repo, in a doc comment on
- * `model/video_events.go`'s `VideoEventCommon`. That struct documents a
- * different, older shape which the ingest path never decodes. It is not a
- * licence to send `reels_feed` here.)
+ * Anything else is stored as `"other"` — the request does not fail — and,
+ * since plan 5D (2026-09-11), counted on
+ * `analytics_surface_rejected_total{raw}` so a wrong string is visible on
+ * /metrics rather than a silently lost dimension on the events a creator is
+ * PAID from. Before 5D there was no `"reels"` arm, and this constant was
+ * `"feed"` to match the phone; 99.8% of stored rows were `"other"`.
  *
  * ── What the Android client sends from the same screen ────────────────────
- * `"feed"`. `ReelsViewModel.startWatchAnalytics` passes
- * `surface = AnalyticsSurface.FEED`, and `AnalyticsSurface` is the same
- * five-value enum with the same comment on it. So Android's Reels and
- * Android's home feed are already indistinguishable in this dimension, by
- * decision rather than by accident.
+ * Still `"feed"`. `ReelsViewModel.startWatchAnalytics` passes
+ * `surface = AnalyticsSurface.FEED`, and `AnalyticsContract.kt`'s enum has no
+ * REELS value yet. That is the next Android session's change (the enum, the
+ * call site, and the Kotlin test that pins the accepted set); until it lands,
+ * phone reels sit in `"feed"` and web reels in `"reels"`. The server accepts
+ * both, and the split is the point: it is the only way to ever tell the two
+ * surfaces apart.
  *
- * This zone matches the phone. Sending anything else would put web reels in
- * the `"other"` bucket while phone reels are in `"feed"`, which makes the two
- * clients' numbers incomparable — a strictly worse outcome than sharing a
- * bucket with the home feed.
- *
- * ── If reels ever needs its own dimension ─────────────────────────────────
- * It takes a server change, not a client one: a sixth arm in
- * `normalizeSurface`, then the two client mirrors (`AnalyticsContract.kt`'s
- * enum and `packages/analytics/src/contract.ts`'s `AnalyticsSurface` union)
- * and the Kotlin test that pins the accepted set. Until all four move
- * together the value is discarded.
+ * ── The mirrors that must move together ───────────────────────────────────
+ * `normalizeSurface` (server), `packages/analytics/src/contract.ts`'s
+ * `AnalyticsSurface` union (web), `AnalyticsContract.kt`'s enum (Android).
  */
 
 import type { AnalyticsSurface } from "@momentum/analytics"
 
-export const SURFACE: AnalyticsSurface = "feed"
+export const SURFACE: AnalyticsSurface = "reels"
