@@ -297,11 +297,10 @@ export function ReelsViewer({ initialPostId }: { initialPostId?: string }) {
             has_reacted: result.on,
             counts: { ...item.counts, likes: result.count },
           })
-          if (result.on) analytics.recordEngagement("like", item, positionOf(item))
         })
         .catch(() => feed.patch(item.id, { has_reacted: item.has_reacted, counts: item.counts }))
     },
-    [analytics, feed, positionOf]
+    [feed]
   )
 
   const onSave = useCallback(

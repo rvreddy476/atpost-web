@@ -315,10 +315,9 @@ export function HomeFeed() {
         has_reacted: result.on,
         counts: { ...item.counts, likes: result.count },
       })
-      if (result.on) analytics.recordEngagement("like", item, positionOf(item))
       return result
     },
-    [patch, analytics, positionOf]
+    [patch]
   )
 
   const onSave = useCallback(

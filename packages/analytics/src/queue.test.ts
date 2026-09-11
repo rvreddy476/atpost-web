@@ -37,7 +37,7 @@ function makeQueue(outcomes: SendOutcome[] | ((events: AnalyticsEvent[]) => Send
 const ok: SendOutcome = { kind: "ok", result: { accepted: 1, duplicate: 0 } }
 
 const engagement = (contentId = CONTENT) => ({
-  type: "like" as const,
+  type: "share" as const,
   payload: { content_id: contentId, session_id: SESSION, surface: "feed" as const },
 })
 
@@ -53,7 +53,7 @@ describe("enqueue", () => {
     // rows stay queued — so it does it again forever. Catching it here is the
     // difference between losing one event and losing all telemetry.
     const { queue, dropped } = makeQueue([ok])
-    expect(queue.enqueue({ type: "like", payload: { content_id: "not-a-uuid", surface: "feed" } })).toBe(false)
+    expect(queue.enqueue({ type: "share", payload: { content_id: "not-a-uuid", surface: "feed" } })).toBe(false)
     expect(queue.size).toBe(0)
     expect(dropped[0].reason).toMatch(/uuid/)
   })

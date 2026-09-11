@@ -42,14 +42,21 @@
  */
 export type AnalyticsSurface = "feed" | "posttube" | "profile" | "search" | "channel"
 
-/** The 13 types the server accepts. `type` on the envelope, not `event_name`. */
+/**
+ * The 12 types a web client sends. `type` on the envelope, not `event_name`.
+ *
+ * `like` is deliberately absent. A like is state, not an event — only
+ * post-service knows whether it stuck — and the server learns of it from
+ * post-service's PostReacted on Kafka. Sending it from here as well counted
+ * every web like twice (audit M-05). The server still accepts `like` from
+ * old clients and collapses it onto the Kafka copy.
+ */
 export type AnalyticsEventType =
   | "impression"
   | "play_start"
   | "watch_heartbeat"
   | "milestone"
   | "play_end"
-  | "like"
   | "comment_create"
   | "share"
   | "save"
@@ -195,7 +202,7 @@ export interface PlayEndPayload extends CommonPayload {
   end_reason: EndReason
 }
 
-/** like / comment_create / share / save / follow_from_content carry no extras. */
+/** comment_create / share / save / follow_from_content carry no extras. */
 export type EngagementPayload = CommonPayload
 
 export interface NegativeSignalPayload extends CommonPayload {

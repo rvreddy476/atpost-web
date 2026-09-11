@@ -147,9 +147,13 @@ export function validateEvent(ev: AnalyticsEvent, nowMs: number = Date.now()): s
       if (!finiteInRange(q.content_duration_ms, 1, LIMITS.MAX_DURATION_MS)) {
         return "content_duration_ms must be > 0"
       }
-      // The server's ceiling is duration * 10, which allows looping.
-      if (!finiteInRange(q.watched_ms_total, 0, q.content_duration_ms * 10)) {
-        return "watched_ms_total exceeds ten playthroughs"
+      // The only ceiling is the twelve-hour one. The server clamps a looped
+      // total to duration x (loop_count + 1) and keeps the reported figure
+      // for audit; it no longer rejects it, so neither do we. The old
+      // "ten playthroughs" drop here threw away the most-watched reels'
+      // most engaged sessions (audit M-09).
+      if (!finiteInRange(q.watched_ms_total, 0, LIMITS.MAX_DURATION_MS)) {
+        return "watched_ms_total out of range"
       }
       if (!finiteInRange(q.max_continuous_watch_ms, 0, q.watched_ms_total)) {
         return "max_continuous_watch_ms exceeds watched_ms_total"

@@ -310,12 +310,11 @@ function Watch({
         // this too, so their number replaces ours rather than reconciling.
         counts: { ...item.counts, likes: result.count },
       })
-      if (result.on) analytics.recordEngagement("like", item, position)
       // `next` is what was asked for; `result.on` is what happened.
       void next
       return { on: result.on, count: result.count }
     },
-    [analytics, item, patch, position]
+    [item, patch]
   )
 
   const onSave = useCallback(

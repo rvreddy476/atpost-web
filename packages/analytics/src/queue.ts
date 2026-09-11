@@ -54,7 +54,9 @@ import {
 import { isFreshTimestamp, validateEvent } from "./validate"
 
 /**
- * The five types the server collapses to one row per session.
+ * The six types the server collapses to one row per session.
+ *
+ * `like` is not sent at all any more (see AnalyticsEventType in ./contract).
  *
  * `comment_create` is deliberately NOT here. Android collapses it locally, but
  * the server's `oncePerSession` set does not include it, so collapsing would
@@ -62,7 +64,6 @@ import { isFreshTimestamp, validateEvent } from "./validate"
  * counted. Android never emits it at all — a web client is the first producer.
  */
 const ONCE_PER_SESSION: ReadonlySet<AnalyticsEventType> = new Set([
-  "like",
   "share",
   "save",
   "follow_from_content",
