@@ -79,8 +79,8 @@ playhead delta — on both clients. At 2x a five-second beat carries
 | `plain_watch_to_end` | 30 s flick, start to finish | the baseline: 30000 / 30000 / display / 1.0 |
 | `pause_and_resume` | 10 s, 60 s pause, 20 s | a pause adds nothing, sends nothing, keeps the session |
 | `forward_seek` | 10 s, scrub to 30 s of 40, 10 s | a seek adds no watch time and no coverage; `seek_count` 1 |
-| `backward_seek_and_rewatch` | 20 s, scrub back to 10 s, 20 s | `watched_ms` 40000 (rewatch counts) vs `covered_ms` 30000 (it does not) |
-| `loop_past_twenty` | 5 s flick, 25 wraps | `loop_count` capped at 20; coverage is one pass |
+| `backward_seek_and_rewatch` | 20 s, scrub back to 10 s, 20 s | `watched_ms` 30000 (a rewatch is watch time, bounded to one pass with no loop, M-26) beside `watched_ms_reported` 40000; `covered_ms` 30000 |
+| `loop_past_twenty` | 5 s flick, 25 wraps | `loop_count` capped at 20; `watched_ms` clamped to 105000 beside `watched_ms_reported` 130000 (M-26); coverage is one pass |
 | `speed_2x` | 5 s wall at 2x, swipe away | media-time increments; 10000 covered, not 20000 |
 | `backgrounded_then_resumed` | 10 s, tab hidden 12 min, 20 s | one session across a backgrounding; the finaliser's inactivity close is corrected by later events |
 | `tab_closed_no_final_event` | 10 s, tab closed | heartbeats alone carry the view; closed by `inactivity` (M-08) |
@@ -133,17 +133,22 @@ Also queued for that session, from Phase 5D: Android still reports
 Fixtures record what the server produces today, so a deliberate change
 is a fixture edit in the same commit, not a silent drift.
 
-- **The M-09 clamp binds the `play_end` figure only.** The server clamps a
-  `play_end`'s `watched_ms_total` to `duration x (loop_count + 1)` and
-  `loop_count` to 20, but the session row keeps the GREATEST of every
-  event's running total, and heartbeats carry an unclamped total. So
-  `loop_past_twenty` lands `watched_ms: 130000` (26 passes of a 5 s
-  flick) beside `loop_count: 20`, where the plan's rule would say 105000;
-  `backward_seek_and_rewatch` lands 40000 on a 30 s video. Neither
-  changes `is_display_view` or `view_score` (both are coverage-based and
-  capped), so no money moves on it today; `watch_time_total_ms` in the
-  daily summary is what over-counts. Applying the clamp to the session
-  total at finalisation is the fix, and it needs a decision about
-  rewatch-by-scrub (fixture 4) — which the plan's rule would also cap at
-  one pass. Left for the founder; the two fixtures are where the answer
-  gets written down.
+- **One clamp binds every running total, not only `play_end` (M-26,
+  decided 2026-09-11).** Rewatched seconds within a session are genuine
+  watch time, but they are bounded the same way looping is:
+  `watched_ms <= content_duration_ms x (loop_count + 1)` whenever the
+  duration is known, with `loop_count` capped at 20. The server applies
+  it to each heartbeat's running total at ingest as well as to the
+  `play_end` figure — a heartbeat carries neither a duration nor a loop
+  count on this contract, so the clamp reads the session's snapshotted
+  duration and the greater of the event's and the session's loop count
+  — and the session row still takes the GREATEST of the clamped totals,
+  which stays monotonic because the ceiling only ever grows.
+  `watched_ms_reported` keeps the client's figure for audit. So
+  `loop_past_twenty` lands `watched_ms: 105000` beside
+  `watched_ms_reported: 130000`, and `backward_seek_and_rewatch` lands
+  30000 beside 40000. `is_display_view` and `view_score` were never
+  affected (coverage-based and capped); `watch_time_total_ms` in the
+  daily summary is what stopped over-counting. One consequence to know:
+  because heartbeats carry no `loop_count`, a looped session whose
+  `play_end` is lost (closed by inactivity) is credited one pass.

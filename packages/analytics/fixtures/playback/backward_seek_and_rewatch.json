@@ -1,6 +1,6 @@
 {
   "name": "backward_seek_and_rewatch",
-  "description": "A 30 s flick: twenty seconds watched, a scrub back to 10 s, then played to the end. The rewatched ten seconds are watch time (watched_ms 40000) but not new coverage (covered_ms 30000): the two measures answer different questions, and the view score reads the second.",
+  "description": "A 30 s flick: twenty seconds watched, a scrub back to 10 s, then played to the end. The rewatched ten seconds are watch time, but watch time is bounded by duration x (loop_count + 1) = 30000 with no loop (M-26), so watched_ms lands at 30000 with the client's 40000 kept in watched_ms_reported; they are not new coverage either (covered_ms 30000). The two measures answer different questions, and the view score reads the second.",
   "viewer": [
     "0-20 s: plays",
     "20 s: scrubs back from 20 s to 10 s (a backwards jump that is not a loop wrap)",
@@ -20,7 +20,7 @@
     { "type": "play_end", "at_ms": 40000, "payload": { "watched_ms_total": 40000, "max_continuous_watch_ms": 20000, "content_duration_ms": 30000, "loop_count": 0, "end_reason": "ended" } }
   ],
   "expected": {
-    "watched_ms": 40000,
+    "watched_ms": 30000,
     "watched_ms_reported": 40000,
     "covered_ms": 30000,
     "loop_count": 0,
@@ -33,5 +33,5 @@
     "end_reason": "ended",
     "sessions": 1
   },
-  "notes": "The server clamps the play_end figure to duration x (loop_count + 1) = 30000, but the session keeps the GREATEST of every event's running total, and the heartbeats had already carried 40000. So the clamp only ever binds when heartbeats did not run ahead of it. Recorded, not endorsed: see README, 'Server behaviour these fixtures pin that may want changing'."
+  "notes": "The one clamp (M-26): rewatched seconds within a session count as genuine watch time, but they are bounded the same way looping is, watched_ms <= content_duration_ms x (loop_count + 1) whenever the duration is known, and the bound applies to every heartbeat's running total as well as the play_end figure. A scrub-back rewatch with no loop wrap therefore never credits more than one pass: 30000 here, with watched_ms_reported keeping the 40000 the client counted. Before M-26 the heartbeats had already carried 40000 past the play_end-only clamp through GREATEST."
 }
