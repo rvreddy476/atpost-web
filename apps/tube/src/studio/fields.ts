@@ -30,7 +30,9 @@
  * "it's for children, or like, all these things require compliances".
  */
 
+import { MAX_EPISODES } from "@/links/sequence"
 import type { CreateLongVideoRequest } from "@/tube/uploadApi"
+import { SERIES_EPISODE_NUM_MAX, SERIES_MAX_EPISODES } from "@/watch/api"
 
 /* ── Visibility ───────────────────────────────────────────────────────────── */
 
@@ -240,6 +242,21 @@ export interface VideoDraft {
   scheduleMode: ScheduleMode
   /** A `datetime-local` value: `YYYY-MM-DDTHH:mm`, in the browser's own zone. */
   scheduleAt: string
+
+  /**
+   * The series to attach this video to, and at which number. Both null when
+   * it is not in one.
+   *
+   * ── Not part of the create body, on purpose ───────────────────────────
+   * `POST /v1/posts` knows nothing about series. An episode is a second
+   * write, `POST /v1/video-series/{id}/episodes`, made AFTER the post exists
+   * because the row needs the post's id. So these two fields never reach
+   * `toCreateRequest`, and ./fields.test.ts asserts that they do not: a
+   * `series_id` that leaked into the create body would be silently dropped
+   * by the server, and the creator would find out on the watch page.
+   */
+  seriesId: string | null
+  seriesEpisodeNum: number | null
 }
 
 /**
@@ -288,7 +305,76 @@ export function emptyDraft(): VideoDraft {
 
     scheduleMode: "now",
     scheduleAt: "",
+
+    seriesId: null,
+    seriesEpisodeNum: null,
   }
+}
+
+/* ── Series ───────────────────────────────────────────────────────────────── */
+
+/**
+ * The number a new episode gets: one past the highest, or 1.
+ *
+ * ── Gaps are not filled ───────────────────────────────────────────────────
+ * A series numbered 1, 2, 4 offers 5, not 3. That matches the server, which
+ * decided that a gap is a gap: nothing renumbers on the wire, `nextEpisode`
+ * on the watch page steps over the hole rather than stopping at it, and a
+ * creator who removed episode 3 may be keeping the number for a re-cut. A
+ * studio that quietly slid a new upload into the hole would be filing it
+ * under a number the creator had already used for something else. The
+ * number is editable in the field anyway; this is only the suggestion.
+ */
+export function nextEpisodeNum(episodeNums: readonly number[]): number {
+  let highest = 0
+  for (const n of episodeNums) {
+    if (Number.isFinite(n) && n > highest) highest = n
+  }
+  return highest + 1
+}
+
+/** What the studio knows about the chosen series when it validates. */
+export interface SeriesFacts {
+  /** The numbers already taken. Its length is the episode count. */
+  episodeNums: readonly number[]
+}
+
+/**
+ * What is wrong with the series choice, or null.
+ *
+ * Two caps, and they are different people's:
+ *
+ *   · `MAX_EPISODES` (3) is the founder's, "one to three sequence of videos",
+ *     and it is what the links editor will ADD up to. The studio keeps to the
+ *     same number so a creator cannot make a series here that the editor
+ *     then refuses to touch.
+ *   · `SERIES_MAX_EPISODES` (50) is the server's; the write past it is a
+ *     409 SERIES_FULL. It is only reachable for a series something else
+ *     filled, and it is checked so the message names the real limit rather
+ *     than an HTTP status.
+ *
+ * The number itself is bounded 1..999 by the server, and 0 is the one value
+ * that gets the least helpful error on the endpoint (it reads as "missing"),
+ * which is why the check is here and not left to the response.
+ */
+export function seriesIssue(
+  draft: Pick<VideoDraft, "seriesId" | "seriesEpisodeNum">,
+  series: SeriesFacts | null
+): string | null {
+  if (!draft.seriesId) return null
+  const count = series?.episodeNums.length ?? 0
+  if (count >= SERIES_MAX_EPISODES) {
+    return `This series already has ${count} episodes, which is the most the server allows.`
+  }
+  if (count >= MAX_EPISODES) {
+    return `This series already has ${count} episodes, the most this studio arranges.`
+  }
+  const num = draft.seriesEpisodeNum
+  if (num === null) return "Choose an episode number."
+  if (!Number.isInteger(num) || num < 1 || num > SERIES_EPISODE_NUM_MAX) {
+    return `Episode numbers run from 1 to ${SERIES_EPISODE_NUM_MAX}.`
+  }
+  return null
 }
 
 /* ── Validation ───────────────────────────────────────────────────────────── */
@@ -317,7 +403,11 @@ export interface DraftIssue {
  * of somebody's twenty on a title that was always too long is an hour of
  * their day for a mistake the browser could see.
  */
-export function validateDraft(draft: VideoDraft, now = Date.now()): DraftIssue[] {
+export function validateDraft(
+  draft: VideoDraft,
+  now = Date.now(),
+  series: SeriesFacts | null = null
+): DraftIssue[] {
   const issues: DraftIssue[] = []
 
   const title = draft.title.trim()
@@ -360,6 +450,11 @@ export function validateDraft(draft: VideoDraft, now = Date.now()): DraftIssue[]
       step: "details",
       message: `"${overlongTag.slice(0, 20)}…" is longer than ${TAG_MAX_LENGTH} characters.`,
     })
+  }
+
+  const seriesProblem = seriesIssue(draft, series)
+  if (seriesProblem) {
+    issues.push({ field: "series", step: "details", message: seriesProblem })
   }
 
   if (draft.madeForKids === null) {

@@ -30,6 +30,13 @@
  * element is ever not there rather than throwing. The player keeps owning
  * play/pause, sound and measurement; this only reads a clock and moves it.
  *
+ * The one exception is `replay`, which also calls `play()`. It is the same two
+ * lines the player's own transport runs when its button is pressed on an ended
+ * video (`if (video.ended) video.currentTime = 0; video.play()`), reached
+ * from the end screen's Replay control, and it is the only write here that is
+ * not a seek. A Replay that rewound and then sat paused at a poster would be a
+ * button called Replay that does not replay.
+ *
  * ── The element arrives late, so it is not looked for once ────────────────
  * The box is rendered before the player decides it has anything to play, and on
  * a post with no playable media the `<video>` never appears at all. A single
@@ -59,6 +66,8 @@ export interface Playhead {
   ready: boolean
   /** Move the playhead. A no-op when there is no element or no duration yet. */
   seek: (ms: number) => void
+  /** Back to the start, and playing. What the end screen's Replay does. */
+  replay: () => void
 }
 
 export function usePlayhead(box: HTMLElement | null): Playhead {
@@ -174,5 +183,28 @@ export function usePlayhead(box: HTMLElement | null): Playhead {
     }
   }, [])
 
-  return { positionMs, durationMs, ended, ready, seek }
+  /**
+   * Rewind and play.
+   *
+   * `play()` returns a promise that REJECTS rather than throwing when the
+   * browser refuses, and here it cannot reasonably refuse: Replay is a button,
+   * so the call is attributed to a gesture. The catch is for the same
+   * detached-source case `seek` guards, and for the one thing a rejection
+   * would otherwise become, which is an unhandled-promise line in the console
+   * for a video that simply stayed at its poster.
+   */
+  const replay = useCallback(() => {
+    const el = videoRef.current
+    if (!el) return
+    try {
+      el.currentTime = 0
+      setPositionMs(0)
+      setEnded(false)
+      void el.play().catch(() => undefined)
+    } catch {
+      // See `seek`.
+    }
+  }, [])
+
+  return { positionMs, durationMs, ended, ready, seek, replay }
 }

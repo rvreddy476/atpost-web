@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   emptyDraft,
+  nextEpisodeNum,
   normaliseTags,
   parseLocalDateTime,
   publishAction,
@@ -327,6 +328,83 @@ describe("toCreateRequest — the field mapping", () => {
       "is_age_restricted",
     ]) {
       expect(body).not.toHaveProperty(dead)
+    }
+  })
+})
+
+describe("nextEpisodeNum", () => {
+  it("is one past the highest number", () => {
+    expect(nextEpisodeNum([1, 2, 3])).toBe(4)
+  })
+
+  // A gap is a gap. The server does not renumber, the watch page steps over
+  // the hole, and a creator who removed episode 3 may be keeping the number.
+  it("does not fill a gap", () => {
+    expect(nextEpisodeNum([1, 2, 4])).toBe(5)
+  })
+
+  it("starts at 1 for an empty series, because 0 reads as 'missing' on the wire", () => {
+    expect(nextEpisodeNum([])).toBe(1)
+  })
+
+  it("ignores numbers that are not numbers", () => {
+    expect(nextEpisodeNum([Number.NaN, 2, Number.POSITIVE_INFINITY])).toBe(3)
+  })
+})
+
+describe("validateDraft — series", () => {
+  it("has nothing to say when the video is not in a series", () => {
+    expect(validateDraft(draft(), NOW, null)).toEqual([])
+    expect(validateDraft(draft(), NOW, { episodeNums: [1, 2, 3] })).toEqual([])
+  })
+
+  it("accepts a series with room and a number in range", () => {
+    const d = draft({ seriesId: "s1", seriesEpisodeNum: 3 })
+    expect(validateDraft(d, NOW, { episodeNums: [1, 2] })).toEqual([])
+  })
+
+  // The founder's number, and the links editor's: a series the studio can
+  // fill past three is one the editor would then refuse to touch.
+  it("refuses a series that is already full, under the details step", () => {
+    const d = draft({ seriesId: "s1", seriesEpisodeNum: 4 })
+    const issues = validateDraft(d, NOW, { episodeNums: [1, 2, 3] })
+    expect(issues.map((i) => i.field)).toEqual(["series"])
+    expect(issues[0].step).toBe("details")
+    expect(issues[0].message).toContain("3 episodes")
+  })
+
+  it("names the server's own cap when a series something else filled is at it", () => {
+    const fifty = Array.from({ length: 50 }, (_, i) => i + 1)
+    const issues = validateDraft(draft({ seriesId: "s1", seriesEpisodeNum: 51 }), NOW, {
+      episodeNums: fifty,
+    })
+    expect(issues[0].message).toContain("50 episodes")
+  })
+
+  it("demands an episode number once a series is chosen", () => {
+    const issues = validateDraft(draft({ seriesId: "s1", seriesEpisodeNum: null }), NOW, {
+      episodeNums: [],
+    })
+    expect(issues.map((i) => i.field)).toEqual(["series"])
+  })
+
+  it("bounds the number to 1..999", () => {
+    const facts = { episodeNums: [] }
+    expect(validateDraft(draft({ seriesId: "s1", seriesEpisodeNum: 0 }), NOW, facts)).toHaveLength(1)
+    expect(validateDraft(draft({ seriesId: "s1", seriesEpisodeNum: 1000 }), NOW, facts)).toHaveLength(1)
+    expect(validateDraft(draft({ seriesId: "s1", seriesEpisodeNum: 2.5 }), NOW, facts)).toHaveLength(1)
+    expect(validateDraft(draft({ seriesId: "s1", seriesEpisodeNum: 999 }), NOW, facts)).toEqual([])
+  })
+
+  // The series is a second write after the post exists. A `series_id` in
+  // the create body would be dropped by the server without a word.
+  it("never reaches the create request", () => {
+    const body = toCreateRequest(
+      draft({ seriesId: "s1", seriesEpisodeNum: 2 }),
+      "m"
+    ) as unknown as Record<string, unknown>
+    for (const key of ["series_id", "seriesId", "episode_num", "seriesEpisodeNum"]) {
+      expect(body).not.toHaveProperty(key)
     }
   })
 })

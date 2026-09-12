@@ -136,6 +136,24 @@ export function nextEpisode(
   return ordered[index + 1] ?? null
 }
 
+/**
+ * The episode before this one, or null. The mirror of `nextEpisode`, with the
+ * same three nulls and the same tolerance of a gap.
+ *
+ * It exists for the lock screen: `MomentumVideo` wires the OS "previous
+ * track" button only when handed a callback, and a series is the one surface
+ * in this zone with a real ordered queue for that button to walk.
+ */
+export function previousEpisode(
+  episodes: readonly SeriesEpisode[],
+  postId: string
+): SeriesEpisode | null {
+  const ordered = orderedEpisodes(episodes)
+  const index = ordered.findIndex((e) => e.post_id === postId)
+  if (index <= 0) return null
+  return ordered[index - 1] ?? null
+}
+
 /** What an episode row is called. The row's title, else its number. */
 export function episodeLabel(episode: SeriesEpisode): string {
   const title = episode.title?.trim()

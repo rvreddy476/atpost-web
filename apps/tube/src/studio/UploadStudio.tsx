@@ -44,6 +44,7 @@ import {
   uploadFailureMessage,
 } from "@/tube/uploadApi"
 import { TUBE_SIGN_IN_HREF } from "@/chrome/links"
+import { addSeriesEpisode, writeFailureMessage } from "@/links/api"
 import { ChannelGate } from "./ChannelGate"
 import {
   emptyDraft,
@@ -59,7 +60,23 @@ import { StepReview } from "./StepReview"
 import { StepSettings } from "./StepSettings"
 import { UploadStatus } from "./UploadStatus"
 import { useCoverStudio } from "./useCoverStudio"
+import { useSeriesPicker } from "./useSeriesPicker"
 import { useVideoUpload } from "./useVideoUpload"
+
+/**
+ * What happened to the series after the post was made.
+ *
+ * Kept beside the upload state rather than in it: ./machine.ts is the
+ * asset's life and "published" is its last word. The episode is a second
+ * write about a post that already exists, and its failure does not un-post
+ * anything, so it is a note on the Posted screen and not a phase.
+ */
+interface SeriesOutcome {
+  title: string
+  episodeNum: number
+  /** The sentence for a failed episode write. Null when it was added. */
+  failure: string | null
+}
 
 type Step = "file" | "details" | "settings" | "review"
 
@@ -71,7 +88,7 @@ const STEPS: { id: Step; label: string }[] = [
 ]
 
 export function UploadStudio() {
-  const { signedIn, status } = useSession()
+  const { signedIn, status, userId } = useSession()
 
   /* ── The channel gate ──────────────────────────────────────────────────── */
 
@@ -131,11 +148,16 @@ export function UploadStudio() {
   const [draft, setDraft] = useState<VideoDraft>(emptyDraft)
   const [publishing, setPublishing] = useState(false)
   const [publishError, setPublishError] = useState<string | null>(null)
+  const [seriesOutcome, setSeriesOutcome] = useState<SeriesOutcome | null>(null)
 
   const upload = useVideoUpload()
   const cover = useCoverStudio(file)
+  const series = useSeriesPicker(userId ?? null, draft.seriesId, Boolean(signedIn && channel))
 
-  const issues = useMemo(() => validateDraft(draft), [draft])
+  const issues = useMemo(
+    () => validateDraft(draft, undefined, series.facts),
+    [draft, series.facts]
+  )
   const patch = useCallback(
     (change: Partial<VideoDraft>) => setDraft((prev) => ({ ...prev, ...change })),
     []
@@ -194,7 +216,7 @@ export function UploadStudio() {
 
   const onPublish = useCallback(async () => {
     if (!canPublish(upload.state) || !upload.state.mediaId) return
-    if (validateDraft(draft).length > 0) return
+    if (validateDraft(draft, undefined, series.facts).length > 0) return
 
     setPublishError(null)
     setPublishing(true)
@@ -223,6 +245,34 @@ export function UploadStudio() {
         await publishVideo(post.id)
       }
 
+      // The episode, last, and in its own try: the post exists and is live
+      // by now, and a series write that fails must not turn that into a
+      // "publish failed" that invites a second post. A failure is a sentence
+      // on the Posted screen, with the link to where it can be fixed.
+      //
+      // `title: null` on purpose, matching the links editor: an episode with
+      // no title of its own reads as the video's, and a copy of the video's
+      // title stored on the episode row would go stale if the video's ever
+      // changed.
+      if (draft.seriesId && draft.seriesEpisodeNum !== null) {
+        const chosen = series.list.find((s) => s.id === draft.seriesId)
+        const outcome: SeriesOutcome = {
+          title: chosen?.title ?? "the series",
+          episodeNum: draft.seriesEpisodeNum,
+          failure: null,
+        }
+        try {
+          await addSeriesEpisode(draft.seriesId, {
+            postId: post.id,
+            episodeNum: draft.seriesEpisodeNum,
+            title: null,
+          })
+        } catch (error) {
+          outcome.failure = writeFailureMessage(error)
+        }
+        setSeriesOutcome(outcome)
+      }
+
       upload.markPublished(post.id, action === "schedule")
     } catch (error) {
       const message = uploadFailureMessage(error)
@@ -236,7 +286,7 @@ export function UploadStudio() {
     } finally {
       setPublishing(false)
     }
-  }, [cover.mediaId, draft, upload])
+  }, [cover.mediaId, draft, series.facts, series.list, upload])
 
   /* ── What is on screen ─────────────────────────────────────────────────── */
 
@@ -283,7 +333,14 @@ export function UploadStudio() {
   }
 
   if (upload.state.phase === "published" && upload.state.postId) {
-    return <Posted postId={upload.state.postId} channel={channel} scheduled={upload.state.scheduled} />
+    return (
+      <Posted
+        postId={upload.state.postId}
+        channel={channel}
+        scheduled={upload.state.scheduled}
+        series={seriesOutcome}
+      />
+    )
   }
 
   const ref = channelRef(channel)
@@ -327,6 +384,7 @@ export function UploadStudio() {
           issues={issues}
           cover={cover}
           categories={categories}
+          series={series}
         />
       ) : step === "settings" ? (
         <StepSettings draft={draft} patch={patch} issues={issues} />
@@ -338,6 +396,7 @@ export function UploadStudio() {
           cover={cover}
           publishing={publishing}
           publishError={publishError}
+          seriesTitle={series.list.find((s) => s.id === draft.seriesId)?.title ?? null}
           onPublish={() => void onPublish()}
           onGoToStep={setStep}
         />
@@ -423,10 +482,12 @@ function Posted({
   postId,
   channel,
   scheduled,
+  series,
 }: {
   postId: string
   channel: TubeChannel
   scheduled: boolean
+  series: SeriesOutcome | null
 }) {
   const ref = channelRef(channel)
   return (
@@ -440,6 +501,23 @@ function Posted({
           ? "It goes live at the time you picked. It is on your channel until then."
           : "It is on your channel now."}
       </p>
+      {series && !series.failure && (
+        <p className="mt-2 text-sm text-mo-body">
+          Episode {series.episodeNum} of {series.title}.
+        </p>
+      )}
+      {series?.failure && (
+        /* The post is live; only the episode row is missing. Said as exactly
+           that, with the server's own sentence, and with the one place the
+           row can be written from. The href is zone-relative for the reason
+           the two below give. */
+        <p role="alert" className="mt-3 text-sm text-mo-warn">
+          Posted, but it could not be added to the series: {series.failure}{" "}
+          <Link href={`/links/${postId}`} className="underline underline-offset-2">
+            Add it from Links.
+          </Link>
+        </p>
+      )}
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         {/*
           Both hrefs are ZONE-RELATIVE and both travel by `next/link`, which

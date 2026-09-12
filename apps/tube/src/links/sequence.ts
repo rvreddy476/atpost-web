@@ -7,34 +7,30 @@
  * and `SeriesNext` is the rail that offers episode 2 at the end of episode 1.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * THE ONE THING THAT SHAPES THIS WHOLE FILE: AN EPISODE CANNOT BE REMOVED
+ * THE ONE THING THAT SHAPES THIS WHOLE FILE: THIS EDITOR DOES NOT REMOVE
  *
- * There is no delete. Not "we have not wired it up" — it does not exist. The
- * route table in post-service's handler.go registers exactly four:
+ * When this file was written (2026-09-10) the server had no delete at all:
+ * the `vseries` group in post-service's handler.go registered exactly four
+ * routes (create, get, list episodes, add episode), and `DELETE` on a series
+ * or on an episode answered gin's bare `404 page not found`, the signature of
+ * an unrouted path. That is no longer true. As of 2026-09-12 the server has
+ * delete routes for a series and for an episode. What is still true is that
+ * THIS EDITOR DOES NOT CALL THEM: nothing in ./api.ts sends a DELETE, and
+ * every refusal below was designed for a world without one. Wiring removal
+ * in is its own change with its own questions (what happens to the numbers
+ * after a removed episode, and to a viewer mid-series), and until it lands
+ * the editor's behaviour is exactly what it was.
  *
- *     vseries.POST("",                     h.CreateVideoSeries)
- *     vseries.GET ("/:seriesId",           h.GetVideoSeries)
- *     vseries.GET ("/:seriesId/episodes",  h.GetVideoSeriesEpisodes)
- *     vseries.POST("/:seriesId/episodes",  h.AddVideoSeriesEpisode)
+ * So the two consequences stand, and both are user-visible rather than
+ * internal:
  *
- * and nothing else. Verified against the running gateway on 2026-09-10:
- * `DELETE /v1/video-series/{id}/episodes/3`, `…/episodes/{postId}`,
- * `…/episodes`, and `PATCH`/`PUT`/`DELETE` on the series itself all answer
- * gin's bare `404 page not found` — which is what an UNROUTED path looks like,
- * as opposed to the service's own enveloped `{"error":{"code":"NOT_FOUND"}}`
- * that `GET /v1/video-series/{a real-shaped id that does not exist}` returns.
- * The playlists group immediately below it in the same file DOES have
- * `DELETE /:playlistId` and `DELETE /:playlistId/items/:postId`. Series were
- * simply never given them.
- *
- * Two consequences, and both are user-visible rather than internal:
- *
- *   1. A SERIES CAN GROW AND BE REARRANGED BUT NEVER SHRINK. Once episode 3
- *      exists, some video is episode 3 for ever; the only thing a creator can
- *      change is WHICH one. So this editor refuses to shorten a saved series
- *      and says why, rather than appearing to shorten it and leaving a
- *      stranded row on the server. `strandedEpisodes` is what that refusal is
- *      computed from.
+ *   1. FROM HERE, A SERIES CAN GROW AND BE REARRANGED BUT NOT SHRINK. Once
+ *      episode 3 exists, some video is episode 3 until something removes it,
+ *      and this editor is not yet that something; the only thing a creator
+ *      can change here is WHICH video it is. So the editor refuses to shorten
+ *      a saved series and says why, rather than appearing to shorten it and
+ *      leaving a stranded row on the server. `strandedEpisodes` is what that
+ *      refusal is computed from.
  *
  *   2. THE SAME POST CAN OCCUPY TWO EPISODE NUMBERS, and that is not
  *      hypothetical — it was reproduced: upserting post C at episode 1 while
@@ -54,12 +50,15 @@ import { isUuid } from "./model"
 /**
  * How many episodes this editor will write.
  *
- * The founder's number — "one to three sequence of videos" — and, as with
- * `MAX_ALTERNATES`, there is no server maximum, so it is ours to impose. It is
- * imposed on what this screen can ADD; a series that already has more episodes
- * than this (written by the phone, or by a contract probe) is loaded and shown
- * in full rather than truncated, because truncating it here is exactly the
- * shrink the server cannot perform.
+ * The founder's number, "one to three sequence of videos". The server's own
+ * cap is far above it (`SERIES_MAX_EPISODES` in ../watch/api.ts, fifty, a
+ * 409 SERIES_FULL past that), so this one is ours to impose. It is imposed on
+ * what this screen can ADD; a series that already has more episodes than
+ * this (written by the phone, by the upload studio, or by a contract probe)
+ * is loaded and shown in full rather than truncated, because truncating it
+ * here is exactly the shrink this editor cannot perform. The upload studio's
+ * "Series" card keeps to the same number so it cannot make a series this
+ * screen then refuses to touch.
  */
 export const MAX_EPISODES = 3
 

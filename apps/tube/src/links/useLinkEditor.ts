@@ -356,10 +356,12 @@ export function useLinkEditor(postId: string, creatorId: string | null) {
         const allSeries = seriesResult.status === "fulfilled" ? seriesResult.value : []
 
         // 3. Which series, if any, this video is already an episode of.
-        //    `findSeriesForVideo` in ../watch/api.ts does the same walk for the
-        //    watch page; it is repeated here rather than reused because this
-        //    screen needs the FULL series list anyway for the picker, so the
-        //    first of its two requests is already paid for.
+        //    The watch page asks `GET /v1/posts/{id}/series` for this
+        //    (`fetchPostSeries` in ../watch/api.ts, since 2026-09-12). This
+        //    screen still walks the creator's series instead, because it needs
+        //    the FULL list anyway for the picker and the walk's first request
+        //    is therefore already paid for. Switching it to the one call would
+        //    save a few episode reads per open; it is not wrong as it stands.
         let chosen: VideoSeries | null = null
         let episodes: SeriesEpisode[] = []
         for (const series of allSeries.slice(0, MAX_LIBRARY_PAGES)) {
@@ -536,10 +538,11 @@ export function useLinkEditor(postId: string, creatorId: string | null) {
    * This writes IMMEDIATELY, unlike everything else on the screen, and the
    * section says so. A series is a container: episodes are addressed by its id,
    * so there is nothing to put them in until it exists. Worth being blunt with
-   * the creator about the cost, because it is not recoverable — there is no
-   * `DELETE /v1/video-series/{id}`, verified, so an empty series made by
-   * mistake is permanent. It is invisible to viewers until it has episodes,
-   * which is the only mitigation there is.
+   * the creator about the cost, because this editor cannot undo it: the
+   * server has had a delete route for a series since 2026-09-12, but nothing
+   * in ./api.ts calls it, so from here an empty series made by mistake stays.
+   * It is invisible to viewers until it has episodes, which is the only
+   * mitigation there is until removal is wired in.
    */
   const makeSeries = useCallback(
     async (title: string, description: string) => {

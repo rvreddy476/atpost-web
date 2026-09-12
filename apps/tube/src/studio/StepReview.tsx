@@ -39,6 +39,8 @@ interface Props {
   cover: CoverStudio
   publishing: boolean
   publishError: string | null
+  /** The chosen series' name, when the draft names one and the list has it. */
+  seriesTitle: string | null
   onPublish: () => void
   onGoToStep: (step: "details" | "settings") => void
 }
@@ -50,6 +52,7 @@ export function StepReview({
   cover,
   publishing,
   publishError,
+  seriesTitle,
   onPublish,
   onGoToStep,
 }: Props) {
@@ -86,6 +89,17 @@ export function StepReview({
             <Row label="Paid promotion" value={draft.paidPromotion ? "Declared" : "None"} />
             <Row label="Altered content" value={draft.alteredContent ? "Declared" : "None"} />
             <Row label="Category" value={draft.category || "Not chosen"} tone={draft.category ? "normal" : "bad"} />
+            {/* Restated here although it is the one thing on this page that
+                IS fixable later, because the episode write happens after the
+                post and a wrong number replaces somebody's episode. */}
+            <Row
+              label="Series"
+              value={
+                draft.seriesId
+                  ? `Episode ${draft.seriesEpisodeNum ?? "?"} of ${seriesTitle ?? "the series"}`
+                  : "Not in a series"
+              }
+            />
             <Row
               label="Cover"
               value={

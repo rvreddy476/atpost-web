@@ -42,9 +42,17 @@
  * failed fetch of any of these as "there are none" rather than as a page
  * error, because none of them is the video.
  *
- * ── The one thing still missing: a post → series lookup ───────────────────
- * `GET /v1/posts/{id}/series` and `GET /v1/posts/{id}/video-series` are both
- * 404. `findSeriesForVideo` below is the workaround and says what it costs.
+ * ── The post → series lookup, added 2026-09-12 ────────────────────────────
+ *
+ *   GET /v1/posts/{id}/series               → 200 {data:PostSeries} | 404
+ *
+ * Built in parallel with this page and coded against its written contract
+ * rather than against a running instance, so it is the one entry above that
+ * has NOT been checked at the gateway. Until 2026-09-12 there was no reverse
+ * lookup at all and this file walked the creator's series one by one, four
+ * deep, on every watch page; that walk is gone. `fetchPostSeries` is the one
+ * call, and the 404 it answers for a post in no series is the NORMAL case,
+ * handled the way `fetchWatchProgress` handles its own 404.
  *
  * ── And `GET /v1/videos/{id}` is not the watch page's row ─────────────────
  * Checked, because it is the obvious candidate for replacing the feed walk.
@@ -267,67 +275,144 @@ export async function fetchCreatorVideoSeries(creatorId: string): Promise<VideoS
   return res.data?.data ?? []
 }
 
-export interface SeriesForVideo {
-  series: VideoSeries
-  episodes: SeriesEpisode[]
+/* ── Which series this video is in ──────────────────────────────────────── */
+
+/**
+ * How many episodes a series may hold. The server's own cap: the 51st
+ * `POST …/episodes` is `409 SERIES_FULL`. Episode NUMBERS go to 999, so a
+ * series can be sparse (numbers 1, 2 and 40 with three rows) but never long.
+ */
+export const SERIES_MAX_EPISODES = 50
+
+/** The highest episode number the server accepts. 1 is the lowest; 0 reads as absent. */
+export const SERIES_EPISODE_NUM_MAX = 999
+
+/**
+ * A neighbouring episode as `GET /v1/posts/{id}/series` names it.
+ *
+ * Deliberately thinner than `SeriesEpisode`: the wire row for `next` and
+ * `prev` carries no `series_id` and no `added_at`, and the normaliser below
+ * widens the episode list rather than every consumer learning two shapes.
+ */
+export interface PostSeriesNeighbour {
+  post_id: string
+  episode_num: number
+  title?: string | null
 }
 
 /**
- * Which series this video is an episode of, if any.
+ * The answer to "which series is this post an episode of".
  *
- * ═══════════════════════════════════════════════════════════════════════════
- * THIS IS AN N+1, AND IT IS ONE BECAUSE THE SERVER HAS NO REVERSE LOOKUP
- *
- * `video_series_episodes` is keyed `(series_id, episode_num)` with only a
- * secondary index on `post_id`, and nothing exposes that direction:
- * `GET /v1/posts/{id}/series` and `GET /v1/posts/{id}/video-series` are both
- * `404 page not found` at the gateway, verified 2026-09-09. So the only path
- * from a post to its series is: list the creator's series, then ask each one
- * for its episodes until this post turns up.
- *
- * That is one request plus one per series, on every watch page, for an
- * affordance most videos do not have. It is bounded rather than refused
- * because the affordance is one the founder asked for by name and the data is
- * real — but the bound is deliberately tight, and the FIRST match wins so a
- * creator whose newest series contains this video costs two requests rather
- * than five.
- *
- * `GET /v1/posts/{postId}/series` answering `{series, episodes}` would replace
- * this whole function with one call. When it exists, this is the only place
- * that changes.
- *
- * Failures are swallowed to `null`: a series rail that could not be built is
- * an absent rail, and it must never be a reason a watchable page shows an
- * error.
+ * `next` and `prev` are the SERVER's opinion, computed from the same
+ * `episode_num` order the client derives, and they are kept on the type
+ * because a caller that only wants "what plays after this" should not have to
+ * hold fifty rows to find out. `episodes` is the whole list, in order, with
+ * `series_id` filled in on every row so it is the same `SeriesEpisode` the
+ * rail and the links editor already draw.
  */
-export const SERIES_PROBE_MAX = 4
+export interface PostSeries {
+  series: VideoSeries
+  episodes: SeriesEpisode[]
+  current: { episode_num: number }
+  next: PostSeriesNeighbour | null
+  prev: PostSeriesNeighbour | null
+}
 
-export async function findSeriesForVideo(
-  creatorId: string,
-  postId: string,
-  maxSeries = SERIES_PROBE_MAX
-): Promise<SeriesForVideo | null> {
-  if (!creatorId || !postId) return null
-  let candidates: VideoSeries[]
+/** The wire shape, loosely, before the normaliser has looked at it. */
+interface RawPostSeries {
+  series?: Partial<VideoSeries> | null
+  episodes?: Array<Partial<SeriesEpisode> | null> | null
+  current?: { episode_num?: number } | null
+  next?: Partial<PostSeriesNeighbour> | null
+  prev?: Partial<PostSeriesNeighbour> | null
+}
+
+function neighbour(
+  raw: Partial<PostSeriesNeighbour> | null | undefined
+): PostSeriesNeighbour | null {
+  if (!raw || typeof raw.post_id !== "string" || !raw.post_id) return null
+  if (typeof raw.episode_num !== "number" || !Number.isFinite(raw.episode_num)) return null
+  return { post_id: raw.post_id, episode_num: raw.episode_num, title: raw.title ?? null }
+}
+
+/**
+ * The envelope's `data`, as a `PostSeries`, or null when it is not one.
+ *
+ * Pure, and exported for exactly that reason: the contract this was written
+ * against is a document rather than a running server, so the one thing that
+ * can be asserted today is that a payload of the documented shape comes out
+ * right, and that the two honest absences (no data at all, and `next: null`
+ * on the last episode) stay absences rather than becoming something that
+ * looks like an episode. Every row lacking a `series_id` is given the series'
+ * own, because `SeriesEpisode` requires one and the rail keys its list on it.
+ */
+export function parsePostSeries(data: unknown): PostSeries | null {
+  const raw = data as RawPostSeries | null | undefined
+  const id = raw?.series?.id
+  if (!raw || typeof id !== "string" || !id) return null
+
+  const s = raw.series ?? {}
+  const series: VideoSeries = {
+    id,
+    creator_id: s.creator_id ?? "",
+    title: s.title ?? "",
+    ...(s.description !== undefined ? { description: s.description } : {}),
+    ...(s.episode_count !== undefined ? { episode_count: s.episode_count } : {}),
+    ...(s.is_complete !== undefined ? { is_complete: s.is_complete } : {}),
+    ...(s.is_public !== undefined ? { is_public: s.is_public } : {}),
+  }
+
+  const episodes: SeriesEpisode[] = []
+  for (const e of raw.episodes ?? []) {
+    if (!e || typeof e.post_id !== "string" || !e.post_id) continue
+    if (typeof e.episode_num !== "number" || !Number.isFinite(e.episode_num)) continue
+    episodes.push({
+      series_id: e.series_id || id,
+      post_id: e.post_id,
+      episode_num: e.episode_num,
+      title: e.title ?? null,
+      ...(e.added_at ? { added_at: e.added_at } : {}),
+    })
+  }
+
+  const currentNum = raw.current?.episode_num
+  return {
+    series,
+    episodes,
+    current: { episode_num: typeof currentNum === "number" ? currentNum : NaN },
+    next: neighbour(raw.next),
+    prev: neighbour(raw.prev),
+  }
+}
+
+/** Is this the api-client's shape for a 404? */
+export function isNotFound(error: unknown): boolean {
+  return (error as { response?: { status?: number } } | null)?.response?.status === 404
+}
+
+/**
+ * Which series this video is an episode of, or null.
+ *
+ * `404` is the normal answer and is not an error: most videos are in no
+ * series, and the server answers the same 404 for "in a series you cannot
+ * see", deliberately, so a private series cannot be probed from its episodes.
+ * Both arrive here as null. Anything else is rethrown, and the caller (the
+ * only one, ./useWatchLinks.ts) turns THAT into "no rail" as well, because a
+ * series rail that could not be built must never be a reason a watchable page
+ * shows an error. The distinction is kept at this layer anyway so the hook can
+ * tell "there is none" from "we could not find out" if it ever wants to say so
+ * on screen, the way it already does for chapters.
+ */
+export async function fetchPostSeries(postId: string): Promise<PostSeries | null> {
   try {
-    candidates = await fetchCreatorVideoSeries(creatorId)
-  } catch {
-    return null
+    const res = await api.get<Envelope<unknown>>(
+      `/v1/posts/${encodeURIComponent(postId)}/series`
+    )
+    return parsePostSeries(res.data?.data)
+  } catch (error) {
+    if (isNotFound(error)) return null
+    throw error
   }
-
-  // Newest first is what the endpoint returns, and it is the right order to
-  // probe in: a video being watched is far likelier to belong to a recent
-  // series than to the creator's first one.
-  for (const series of candidates.slice(0, Math.max(0, maxSeries))) {
-    try {
-      const episodes = await fetchSeriesEpisodes(series.id)
-      if (episodes.some((e) => e.post_id === postId)) return { series, episodes }
-    } catch {
-      // One unreadable series must not stop the search for the others.
-      continue
-    }
-  }
-  return null
 }
 
 /* ── Resume ─────────────────────────────────────────────────────────────── */

@@ -1,7 +1,8 @@
 "use client"
 
 /**
- * The series — "next episode", and the episode list under it.
+ * The series: "next episode", the episode list under it, and the switch that
+ * decides whether the next one starts by itself.
  *
  * A series is the third of the founder's linked-video mechanisms and the only
  * one of the three with an ORDER: a card is a moment, an end screen is a
@@ -16,29 +17,45 @@
  * watch page it would tear down and rebuild the player to arrive where it
  * already was.
  *
- * ── Nothing here has real data yet, and the page says so ──────────────────
- * There is no post→series endpoint and `/v1/video-series` is not routed by the
- * gateway at all — the header of ./api.ts has both, verified. So this renders
- * only under `?links=preview`, from ./fixtures.ts, with a badge. See
- * ./useWatchLinks.ts.
+ * ── Where the rows come from ──────────────────────────────────────────────
+ * `GET /v1/posts/{id}/series`, one request, through ./useWatchLinks.ts. Until
+ * 2026-09-12 there was no such endpoint and this rail rendered only under
+ * `?links=preview` from ./fixtures.ts; the preview still works and still wears
+ * its badge, so a fixture can never pass for a series somebody made.
+ *
+ * ── The autoplay switch lives here as well as on the countdown ────────────
+ * The countdown card is the place somebody discovers the preference; this rail
+ * is the place they come back to change it. A switch that only exists for ten
+ * seconds at the end of a video is a setting nobody can find.
  */
 
 import Link from "next/link"
 import { ListVideo, SkipForward } from "lucide-react"
 import type { SeriesEpisode } from "./api"
 import { PreviewBadge } from "./Chapters"
+import { AutoplayNextSwitch } from "./NextEpisodeCountdown"
 import { episodeLabel, nextEpisode, orderedEpisodes, watchHref } from "./links"
 
 export interface SeriesNextProps {
   episodes: SeriesEpisode[]
-  /** The video being watched — how the list finds where "next" is from. */
+  /** The video being watched, which is how the list finds where "next" is from. */
   postId: string
   /** The series' own name, when something can supply one. */
   seriesTitle?: string
   isPreview?: boolean
+  /** The viewer's "Autoplay next episode" preference, and how to change it. */
+  autoplayNext?: boolean
+  onAutoplayNextChange?: (next: boolean) => void
 }
 
-export function SeriesNext({ episodes, postId, seriesTitle, isPreview }: SeriesNextProps) {
+export function SeriesNext({
+  episodes,
+  postId,
+  seriesTitle,
+  isPreview,
+  autoplayNext,
+  onAutoplayNextChange,
+}: SeriesNextProps) {
   if (episodes.length === 0) return null
 
   const ordered = orderedEpisodes(episodes)
@@ -56,11 +73,14 @@ export function SeriesNext({ episodes, postId, seriesTitle, isPreview }: SeriesN
           {seriesTitle?.trim() || "In this series"}
         </h2>
         {isPreview && <PreviewBadge />}
+        {autoplayNext !== undefined && onAutoplayNextChange && (
+          <AutoplayNextSwitch checked={autoplayNext} onChange={onAutoplayNextChange} compact />
+        )}
       </div>
 
       {/* The count is the orientation. "Episode 2 of 4" is the one sentence
           that tells somebody both where they are and how much is left, and it
-          is only drawn when this video is actually IN the list — a series
+          is only drawn when this video is actually IN the list: a series
           fetched for the wrong post would otherwise claim a position it has
           not got. */}
       {currentIndex !== -1 && (

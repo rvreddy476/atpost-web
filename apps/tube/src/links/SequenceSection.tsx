@@ -8,22 +8,22 @@
  * that has an order at all.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * TWO THINGS ON THIS PANEL ARE NOT DESIGN CHOICES, THEY ARE THE SERVER
+ * TWO THINGS ON THIS PANEL ARE NOT DESIGN CHOICES, THEY ARE WHAT THIS EDITOR
+ * CAN WRITE
  *
- * 1. CREATING A SERIES WRITES IMMEDIATELY, AND IS PERMANENT. Everything else
- *    on this screen is held until Save. A series cannot be, because episodes
- *    are addressed by its id and there is nothing to put them in until it
- *    exists. And there is no `DELETE /v1/video-series/{id}` — verified, the
- *    route group has four routes and none of them removes anything — so an
- *    empty series made by mistake stays for ever. The panel says both, before
- *    the button.
+ * 1. CREATING A SERIES WRITES IMMEDIATELY. Everything else on this screen is
+ *    held until Save. A series cannot be, because episodes are addressed by
+ *    its id and there is nothing to put them in until it exists. And this
+ *    editor cannot delete one afterwards: the server grew a delete route on
+ *    2026-09-12, but nothing in ./api.ts calls it yet, so from here an empty
+ *    series made by mistake stays. The panel says both, before the button.
  *
- * 2. AN EPISODE CANNOT BE REMOVED, ONLY REPLACED. Same absence. So the remove
- *    control appears only on a trailing slot the server has not seen yet
- *    (`canRemoveSlot`), and an arrangement that would abandon a saved episode
- *    number is refused with the number named rather than warned about and
- *    saved anyway. ./sequence.ts has the whole argument and the route table it
- *    rests on.
+ * 2. FROM HERE, AN EPISODE IS REPLACED, NOT REMOVED. Same reason. So the
+ *    remove control appears only on a trailing slot the server has not seen
+ *    yet (`canRemoveSlot`), and an arrangement that would abandon a saved
+ *    episode number is refused with the number named rather than warned
+ *    about and saved anyway. ./sequence.ts has the whole argument, including
+ *    what changed on the server and what did not change here.
  *
  * Reordering, on the other hand, is completely safe and is the thing this
  * panel is for: `episodeWrites` recomputes every slot's number from its
@@ -141,8 +141,8 @@ export function SequenceSection({
           <div className="mt-3">
             <Notice tone="warn">
               This one button saves straight away, unlike everything else here —
-              episodes have to belong to a series that already exists. There is
-              no way to delete a series afterwards, so an empty one made by
+              episodes have to belong to a series that already exists. This
+              editor cannot delete a series afterwards, so an empty one made by
               mistake stays. It is invisible to viewers until it has episodes.
             </Notice>
           </div>
@@ -210,7 +210,7 @@ export function SequenceSection({
                         title={
                           removable
                             ? undefined
-                            : "An episode cannot be removed once it is saved — this platform has no route for it. You can put a different video in its place."
+                            : "This editor cannot remove an episode once it is saved. You can put a different video in its place."
                         }
                         className="rounded-mo p-1 text-mo-body transition-colors duration-150 ease-mo hover:text-mo-bad focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-mo-body"
                       >
@@ -285,8 +285,7 @@ export function SequenceSection({
             <div className="mt-3">
               <Notice tone="bad">
                 Saving would leave episode {stranded.join(", ")} behind, and this
-                platform has no way to remove an episode from a series — the
-                server has no delete route for one. Put a video back in that
+                editor cannot remove an episode from a series yet. Put a video back in that
                 slot, or replace it with a different one.
               </Notice>
             </div>

@@ -29,8 +29,10 @@ import {
   type DraftIssue,
   type VideoDraft,
 } from "./fields"
+import { SeriesField } from "./SeriesField"
 import { StudioCard, StudioField, studioInputClass } from "./StudioControls"
 import type { CoverStudio } from "./useCoverStudio"
+import type { SeriesPicker } from "./useSeriesPicker"
 
 interface Props {
   draft: VideoDraft
@@ -38,9 +40,10 @@ interface Props {
   issues: DraftIssue[]
   cover: CoverStudio
   categories: { id: string; label: string }[]
+  series: SeriesPicker
 }
 
-export function StepDetails({ draft, patch, issues, cover, categories }: Props) {
+export function StepDetails({ draft, patch, issues, cover, categories, series }: Props) {
   const errorFor = (field: string) => issues.find((i) => i.field === field)?.message ?? null
   const options = categories.length > 0 ? categories : FALLBACK_CATEGORIES
 
@@ -156,6 +159,8 @@ export function StepDetails({ draft, patch, issues, cover, categories }: Props) 
             />
           </div>
         </StudioCard>
+
+        <SeriesField draft={draft} patch={patch} series={series} error={errorFor("series")} />
 
         <StudioCard
           title="Where and when it was made"

@@ -62,6 +62,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Maximize2, Minimize2 } from "lucide-react"
 import { useSession } from "@atpost/api-client/session"
 import type { FeedItem } from "@atpost/types/feed"
@@ -88,11 +89,14 @@ import {
   videoTitle,
   viewsLabel,
 } from "@/tube/video"
+import { readAutoplayNext, writeAutoplayNext } from "./autoplayPreference"
 import { Chapters } from "./Chapters"
 import { ChannelRow, SUBSCRIBE_LABELS } from "./ChannelRow"
 import { COLUMN_GAP_PX, gridTemplateColumns } from "./columns"
+import { EndScreen } from "./EndScreen"
 import { expandAriaLabel, expandLabel, frameClass, isExpanded } from "./expand"
-import { PREVIEW_SERIES_TITLE } from "./fixtures"
+import { nextEpisode, previousEpisode, watchHref } from "./links"
+import { NextEpisodeCountdown } from "./NextEpisodeCountdown"
 import { CardPrompt, EndScreenOverlay } from "./Overlays"
 import { resumeNotice } from "./progress"
 import { Related } from "./Related"
@@ -104,6 +108,7 @@ import {
   inEndScreenWindow,
   orderedChapters,
 } from "./timeline"
+import { useAutoplayNext } from "./useAutoplayNext"
 import { useColumns } from "./useColumns"
 import { usePlayhead } from "./usePlayhead"
 import { useRelated } from "./useRelated"
@@ -214,9 +219,26 @@ function Watch({
 
   /* ── Everything the video links to ────────────────────────────────────── */
 
-  const links = useWatchLinks(item.id, item.author_id, true)
+  const links = useWatchLinks(item.id, true)
   const related = useRelated(item.id, true)
   const chapters = useMemo(() => orderedChapters(links.chapters), [links.chapters])
+
+  /**
+   * The episode either side of this one, from the same rows the rail draws.
+   *
+   * Derived here rather than taken from the server's `next` pointer so the
+   * countdown, the lock-screen buttons and the rail's "Next:" link are three
+   * views of ONE answer. `?links=preview` fixtures have no server pointer at
+   * all, and they still get a countdown this way.
+   */
+  const seriesNext = useMemo(
+    () => nextEpisode(links.seriesEpisodes, item.id),
+    [links.seriesEpisodes, item.id]
+  )
+  const seriesPrev = useMemo(
+    () => previousEpisode(links.seriesEpisodes, item.id),
+    [links.seriesEpisodes, item.id]
+  )
 
   /**
    * Cards somebody has closed. By id, for the life of this view.
@@ -266,16 +288,72 @@ function Watch({
    * Read once, on mount, rather than during render: `prefersReducedMotion()`
    * touches `window.matchMedia` and would make this component render
    * differently on the server than in the browser. `false` on the first paint
-   * is also the safe direction — it means the video does not start, and a video
+   * is also the safe direction: it means the video does not start, and a video
    * that has not started yet is a poster with a play button on it.
    *
-   * There is no autoplay COORDINATOR here, and there does not need to be: this
-   * page mounts exactly one player. The rail mounts none — see ./Related.tsx.
+   * The same reading gates the countdown below. A page that will not start the
+   * video somebody navigated to has no business starting one they did not.
    */
   const [active, setActive] = useState(false)
+  const [reducedMotion, setReducedMotion] = useState(false)
   useEffect(() => {
-    setActive(!prefersReducedMotion())
+    const less = prefersReducedMotion()
+    setReducedMotion(less)
+    setActive(!less)
   }, [])
+
+  /* ── What plays next, and whether it plays by itself ──────────────────── */
+
+  /**
+   * There is still no autoplay coordinator between PLAYERS, and there does not
+   * need to be: this page mounts exactly one, and the rail mounts none (see
+   * ./Related.tsx). What there is, since 2026-09-12, is a coordinator between
+   * VIDEOS: when this one ends and it is an episode of a series, the next
+   * episode is offered on a ten-second countdown with a Cancel, and nothing
+   * else on the page ever starts on its own. ./autoplayNext.ts has the rules;
+   * ./useAutoplayNext.ts has the clock and the navigation.
+   *
+   * The preference is read after mount for the reason `active` is: it lives
+   * in localStorage, which the server does not have. `true` on the first
+   * paint is the founder's default, and it is only ever read, never acted on,
+   * before the effect has run, because nothing has ended yet.
+   */
+  const [autoplayNext, setAutoplayNext] = useState(true)
+  useEffect(() => {
+    setAutoplayNext(readAutoplayNext(viewerId))
+  }, [viewerId])
+  const onAutoplayNextChange = useCallback(
+    (next: boolean) => {
+      setAutoplayNext(next)
+      writeAutoplayNext(viewerId, next)
+    },
+    [viewerId]
+  )
+
+  const autoplay = useAutoplayNext({
+    ended: playhead.ended,
+    next: seriesNext,
+    enabled: autoplayNext,
+    reducedMotion,
+  })
+
+  /**
+   * The lock-screen skip buttons, wired only when a series gives them
+   * somewhere to go. `MomentumVideo` registers the OS handlers only when
+   * handed a callback, and a recommendations rail must never hand it one: a
+   * rail is a list of suggestions, not a queue, and a "next" button on the
+   * lock screen would promise an order the page does not have. A series IS
+   * that order.
+   */
+  const router = useRouter()
+  const onNextTrack = useMemo(
+    () => (seriesNext ? () => router.push(watchHref(seriesNext.post_id)) : undefined),
+    [router, seriesNext]
+  )
+  const onPreviousTrack = useMemo(
+    () => (seriesPrev ? () => router.push(watchHref(seriesPrev.post_id)) : undefined),
+    [router, seriesPrev]
+  )
 
   const watch = analytics.sessionFor(item, position)
   const onWatchEvent = useCallback(
@@ -450,16 +528,38 @@ function Watch({
               ariaLabel={media.alt_text || title}
               session={watch}
               onWatchEvent={onWatchEvent}
-              /* The OS media controls describe what is playing. No
-                 onPreviousTrack/onNextTrack: those are wired only where there
-                 is a real ordered QUEUE the player owns. A recommendations rail
-                 is a list of suggestions, not a queue — nothing here decides
-                 what plays next on its own — so a lock-screen "next" button
-                 would promise an order this page does not have. */
+              /* The OS media controls describe what is playing. The skip
+                 buttons are `undefined` outside a series; see `onNextTrack`
+                 above for why a rail must never supply them. */
               mediaSession={metadataForPost(item, media)}
+              onNextTrack={onNextTrack}
+              onPreviousTrack={onPreviousTrack}
               resolveUrl={resolveUrl}
             />
           )}
+
+          {/* The countdown to the next episode, centred, while it runs. */}
+          {!missing && media && autoplay.state.kind === "counting" && (
+            <NextEpisodeCountdown
+              target={autoplay.state.target}
+              secondsLeft={autoplay.state.secondsLeft}
+              autoplayNext={autoplayNext}
+              onAutoplayNextChange={onAutoplayNextChange}
+              onPlayNow={autoplay.playNow}
+              onCancel={autoplay.cancel}
+            />
+          )}
+
+          {/* The end screen: once the video has ended and nothing is counting
+              down. Not while `fired`, which is a navigation in flight, and
+              not while counting, because two overlays offering "next" at
+              once is one too many. */}
+          {!missing &&
+            media &&
+            playhead.ended &&
+            (autoplay.state.kind === "idle" || autoplay.state.kind === "cancelled") && (
+              <EndScreen related={related.items} next={seriesNext} onReplay={playhead.replay} />
+            )}
 
           {/* The in-video card, at its timestamp. Top-left — the one corner
               nothing else on this player wants. */}
@@ -602,10 +702,10 @@ function Watch({
           <SeriesNext
             episodes={links.seriesEpisodes}
             postId={item.id}
-            seriesTitle={
-              links.isPreview ? PREVIEW_SERIES_TITLE : (links.seriesTitle ?? undefined)
-            }
+            seriesTitle={links.seriesTitle ?? undefined}
             isPreview={links.isPreview}
+            autoplayNext={autoplayNext}
+            onAutoplayNextChange={onAutoplayNextChange}
           />
 
           <div className="mt-8 border-t border-mo pt-5">
