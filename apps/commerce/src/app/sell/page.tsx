@@ -1,58 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import Link from "next/link"
-import { StoreHeader } from "@/components/StoreHeader"
-import { useOnboardingStatus, useStartOnboarding } from "@/hooks/useSellerOnboarding"
+import { SellerShell } from "@/components/sell/SellerShell"
 import { useMyProducts, useSubmitProduct } from "@/hooks/useSellerDashboard"
-import { Button, Input, Table, TBody, TD, TH, THead, TR } from "@atpost/ui"
-import { useSession } from "@/hooks/useCommerce"
-
-function OnboardingForm() {
-  const start = useStartOnboarding()
-  const [storeName, setStoreName] = useState("")
-  const [email, setEmail] = useState("")
-  const [error, setError] = useState("")
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    setError("")
-    try {
-      await start.mutateAsync({
-        store_name: storeName,
-        email,
-        seller_type: "individual",
-        business_type: "individual",
-      } as Parameters<typeof start.mutateAsync>[0])
-    } catch (err: unknown) {
-      const e2 = err as { response?: { data?: { error?: { message?: string } } } }
-      setError(e2?.response?.data?.error?.message ?? "Could not start onboarding")
-    }
-  }
-
-  return (
-    <div className="panel panel-pad mx-auto max-w-md">
-      <h1 className="shop-display text-2xl">Become a seller</h1>
-      <p className="mt-1 text-sm text-shop-muted">Create your store to start listing products.</p>
-      <form onSubmit={submit} className="mt-4 flex flex-col gap-3">
-        <Input placeholder="Store name" value={storeName} onChange={(e) => setStoreName(e.target.value)} required />
-        <Input type="email" placeholder="Contact email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        {error && <p className="text-sm text-shop-bad">{error}</p>}
-        {/* The shop's ONE ember button. Opening a store is the platform-level
-            act — it is not a purchase, so it is not gold, and it is the only
-            action in this zone that is neither. `.btn-ember` carries the 19px/
-            700 the token sheet requires of anything sitting on the gradient:
-            dark ink on the red end measures 4.03, which is legible as large
-            text only. The plain CSS classes are declared after
-            @tailwind utilities, so they out-rank the Button's own
-            `bg-brand-text` default variant. */}
-        <Button type="submit" disabled={start.isPending} className="btn btn-ember btn-block">
-          {start.isPending ? "Creating…" : "Create store"}
-        </Button>
-      </form>
-    </div>
-  )
-}
+import { Table, TBody, TD, TH, THead, TR } from "@atpost/ui"
 
 function MyProducts() {
   const { data: products, isLoading } = useMyProducts()
@@ -115,39 +66,17 @@ function MyProducts() {
   )
 }
 
+/**
+ * MSeller's front door: the product list, inside the shell that gates on a
+ * session and a seller profile and draws the Products / Orders / Returns /
+ * Earnings sections. The gating and the onboarding form used to live in this
+ * file; they moved to components/sell so the new sections could share them.
+ * `/shop` as the login return path is what this page has always sent.
+ */
 export default function SellPage() {
-  // Selling requires an account. If nobody is signed in, send them to the one
-  // auth page and bring them straight back here afterwards.
-  //
-  // `known` is the guard that matters: it is true on the first paint now that
-  // the layout seeds the session from the request's cookies, so a signed-in
-  // seller no longer sees "Redirecting to sign in…" for a frame. It can still
-  // be false in a zone that has not wired the provider, and redirecting on a
-  // question nobody has answered yet would bounce a signed-in seller to login.
-  const { signedIn, known } = useSession()
-
-  useEffect(() => {
-    if (known && !signedIn) window.location.replace("/login?redirect=%2Fshop")
-  }, [known, signedIn])
-
-  const status = useOnboardingStatus()
-
   return (
-    <div className="min-h-screen bg-shop-bg">
-      <StoreHeader />
-      <main className="shop-page-narrow">
-        {!signedIn ? (
-          <p className="text-shop-faint">
-            {known ? "Redirecting to sign in…" : "Checking your account…"}
-          </p>
-        ) : status.isLoading ? (
-          <p className="text-shop-faint">Loading…</p>
-        ) : status.data && !status.isError ? (
-          <MyProducts />
-        ) : (
-          <OnboardingForm />
-        )}
-      </main>
-    </div>
+    <SellerShell redirectTo="/shop">
+      <MyProducts />
+    </SellerShell>
   )
 }
