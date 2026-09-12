@@ -26,18 +26,19 @@ export interface FollowButtonProps {
    * The three words, when "Follow" is the wrong one for the surface.
    *
    * ── Why this is a prop and not a second component ─────────────────────
-   * Momentum Tube calls this act SUBSCRIBING. That is the founder's word,
-   * it is the word on the channel page's own count ("1.2K subscribers"),
-   * and a control saying "Follow" directly under it would be two names for
-   * one thing on one screen. The EDGE is identical — there is no
-   * subscription route on this gateway, `POST /v1/graph/follow` is what
-   * both surfaces call, verified — so what differs is vocabulary and
-   * nothing else.
+   * A surface whose vocabulary differs from the product's default should
+   * change the words and not the behaviour: copying this component to
+   * change three strings would be a second implementation of the optimistic
+   * update, the rollback and the three-state rule above, and a second place
+   * for them to drift. So the words are a parameter.
    *
-   * Copying this component into apps/tube to change three strings would be
-   * a second implementation of the optimistic update, the rollback and the
-   * three-state rule above, and a second place for them to drift. So the
-   * words are a parameter and the behaviour is not.
+   * Momentum Tube was the first surface to use it, passing "Subscribe" and
+   * "Subscribed" while subscribing to a channel WAS a follow with different
+   * words on it. Since 2026-09-12 a channel subscription is its own edge
+   * with its own routes (`/v1/channels/{ref}/subscribe`) and a second
+   * control, the notification bell, so Tube draws its own pair in
+   * apps/tube/src/channel/SubscribeControls.tsx and no longer passes this.
+   * The prop stays: the argument for it did not depend on Tube.
    *
    * Omit it and the labels are the product's default, which is what
    * apps/social and apps/reels pass by not passing anything.

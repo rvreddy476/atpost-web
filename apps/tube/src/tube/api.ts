@@ -15,7 +15,7 @@
  * is a mistake on the server, and it is recorded rather than smoothed over.
  *
  * ── Routes verified against the running gateway on 2026-09-09 ─────────────
- *   GET  /v1/feed/videos       ?limit&cursor&following_only&category -> [item]
+ *   GET  /v1/feed/videos       ?limit&cursor&following_only&subscribed_only&category -> [item]
  *   POST /v1/graph/relationships/batch {viewer_id,target_ids} -> UNENVELOPED
  *   POST /v1/graph/follow      {user_id}   -> {status:"followed"|"requested"}
  *   POST /v1/graph/unfollow    {user_id}   -> {status:"unfollowed"}
@@ -139,8 +139,20 @@ export interface TubeFeedQuery {
    * the request is then byte-identical to what it was before the chip rail.
    */
   category?: string | null
-  /** Subscriptions: authors the viewer follows, and nobody else. */
+  /** The home rail's "Following" chip: authors the viewer follows, and nobody else. */
   followingOnly?: boolean
+  /**
+   * The Subscriptions page: channels the viewer SUBSCRIBES to, newest first.
+   *
+   * A different edge from `followingOnly`, and since 2026-09-12 a different
+   * parameter (`subscribed_only=true`). Subscribing creates the follow edge
+   * too, so every subscribed channel is also followed, but not every followed
+   * account has a channel or is subscribed to, and the founder's decision is
+   * that the Subscriptions tab shows exactly the channels somebody pressed
+   * Subscribe on. The "Following" chip stays on the follow graph, which is
+   * what its word says.
+   */
+  subscribedOnly?: boolean
   /** No session: the public shelf above instead of the ranked feed. */
   anonymous?: boolean
 }
@@ -189,6 +201,7 @@ export async function fetchVideosPage(
         : {
             ...(query.category ? { category: query.category } : {}),
             ...(query.followingOnly ? { following_only: true } : {}),
+            ...(query.subscribedOnly ? { subscribed_only: true } : {}),
           }),
     },
   })
@@ -216,6 +229,10 @@ export function feedQueryKey(query: TubeFeedQuery = {}): string {
   return [
     query.anonymous ? "public" : "ranked",
     query.followingOnly ? "following" : "all",
+    // Its own segment rather than a third word in the one above: the server
+    // accepts both narrowings at once, and a key that could not say so would
+    // treat "subscribed" and "subscribed and following" as one query.
+    query.subscribedOnly ? "subscribed" : "any",
     query.category || "*",
   ].join("|")
 }

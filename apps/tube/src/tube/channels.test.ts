@@ -7,7 +7,6 @@ import {
   bareHandle,
   channelHref,
   channelRef,
-  channelsFromFeed,
   isLongVideoRow,
   itemChannelHref,
   subscribersLabel,
@@ -192,60 +191,6 @@ describe("isLongVideoRow", () => {
   })
 })
 
-describe("channelsFromFeed — the rail's subscribed list", () => {
-  const rows = [
-    item({
-      id: "1",
-      channel: { user_id: "b", name: "Call B Studio", handle: "call.userb" },
-      author: { id: "b", display_name: "Call UserB" },
-    }),
-    item({
-      id: "2",
-      channel: { user_id: "a", name: "CQS Proof Channel", handle: "@cqsproof1" },
-      author: { id: "a", display_name: "Cqs creator" },
-    }),
-    item({
-      id: "3",
-      channel: { user_id: "b", name: "Call B Studio", handle: "call.userb" },
-      author: { id: "b", display_name: "Call UserB" },
-    }),
-  ]
-
-  it("is one row per channel, in the order their newest video appears", () => {
-    // The feed is newest first, so the FIRST row an author has is their
-    // newest — which is why de-duplication gives the right order for free.
-    // Transcribed from `channelBubbles` in the Android client.
-    expect(channelsFromFeed(rows, null).map((c) => c.user_id)).toEqual(["b", "a"])
-  })
-
-  it("normalises the handle it stores, so the rail's links are not doubled", () => {
-    expect(channelsFromFeed(rows, null)[1].handle).toBe("cqsproof1")
-  })
-
-  it("leaves the viewer's own channel out — the rail is who you watch", () => {
-    expect(channelsFromFeed(rows, "b").map((c) => c.user_id)).toEqual(["a"])
-  })
-
-  it("falls back to the author when the row predates channels", () => {
-    const legacy = [item({ id: "4", author: { id: "c", display_name: "Someone Real" } })]
-    expect(channelsFromFeed(legacy, null)).toEqual([
-      { user_id: "c", name: "Someone Real", handle: "", avatar_url: null },
-    ])
-  })
-
-  it("drops a row with an id and no name rather than listing 'Someone'", () => {
-    // A rail of identical placeholder rows is unusable in a way a missing row
-    // is not: this list is how a viewer PICKS a channel.
-    const nameless = [item({ id: "5", author: { id: "d" } })]
-    expect(channelsFromFeed(nameless, null)).toEqual([])
-  })
-
-  it("survives a page with no channels and no authors at all", () => {
-    expect(channelsFromFeed([item()], null)).toEqual([])
-    expect(channelsFromFeed([], null)).toEqual([])
-  })
-})
-
 describe("feedQueryKey — what makes the feed hook start over", () => {
   /**
    * A cursor and a seen-set belong to ONE query. If two different queries
@@ -254,7 +199,9 @@ describe("feedQueryKey — what makes the feed hook start over", () => {
    */
   it("is stable for the same question asked twice", () => {
     expect(feedQueryKey({ category: "comedy" })).toBe(feedQueryKey({ category: "comedy" }))
-    expect(feedQueryKey({})).toBe(feedQueryKey({ category: null, followingOnly: false }))
+    expect(feedQueryKey({})).toBe(
+      feedQueryKey({ category: null, followingOnly: false, subscribedOnly: false })
+    )
     expect(feedQueryKey()).toBe(feedQueryKey({}))
   })
 
@@ -264,9 +211,19 @@ describe("feedQueryKey — what makes the feed hook start over", () => {
       feedQueryKey({ category: "comedy" }),
       feedQueryKey({ category: "music" }),
       feedQueryKey({ followingOnly: true }),
+      feedQueryKey({ subscribedOnly: true }),
       feedQueryKey({ anonymous: true }),
     ])
-    expect(keys.size).toBe(5)
+    expect(keys.size).toBe(6)
+  })
+
+  it("keeps the Subscriptions feed apart from the Following chip", () => {
+    // Two different server parameters over two different edges: the follow
+    // graph and the channel subscription. A hook that thought they were one
+    // question would page a subscriptions cursor through a following list.
+    expect(feedQueryKey({ subscribedOnly: true })).not.toBe(feedQueryKey({ followingOnly: true }))
+    expect(feedQueryKey({ subscribedOnly: true })).not.toBe(feedQueryKey({}))
+    expect(feedQueryKey({ subscribedOnly: true })).toContain("subscribed")
   })
 
   it("separates the public shelf from the ranked feed", () => {

@@ -10,8 +10,8 @@
  *
  * Two files rather than one long one for the reason ./api.ts gives about
  * itself: a file whose name is a lie about half its contents is worse than
- * two short ones. This one is also the file a channel-subscription endpoint
- * lands in on the day one exists — see `fetchSubscribedChannels`.
+ * two short ones. This is also where the channel-subscription routes live,
+ * since 2026-09-12 when they became real: see the Subscriptions section.
  *
  * ── The envelope is not unwrapped for you ─────────────────────────────────
  * `@atpost/api-client` is a plain axios instance; every gateway response is
@@ -23,7 +23,6 @@
  *   GET /v1/posts/categories                  200 [{id,label}]      PUBLIC
  *   GET /v1/channels/{handle_or_user_id}      200 channel | 404     PUBLIC
  *   GET /v1/channels/search?q=&limit=         200 [channel]         PUBLIC
- *   GET /v1/profiles/{user_id}                200 profile           PUBLIC
  *   GET /v1/creators/{user_id}/playlists      200 []                PUBLIC
  *   GET /v1/posts/by-author/{id}?type=&limit= 200 [bare post]       PUBLIC
  *   GET /v1/posts/recent?content_type=&limit= 200 [bare post]       PUBLIC
@@ -33,12 +32,49 @@
  * That last line is the one that shaped the signed-out home page, and the
  * public lines above it are why it did not have to be a wall. See
  * `fetchPublicVideosPage`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ROUTES CODED AGAINST THE SUBSCRIPTION CONTRACT, 2026-09-12, SESSION REQUIRED
+ *
+ * These are being built on the server while this file is written, so they
+ * are the contract as agreed rather than a wire read; the first person to
+ * run them against a stack should update this table.
+ *
+ *   GET    /v1/channels/subscriptions?limit&cursor
+ *          {data:[{channel:{user_id,name,handle,avatar_url,subscriber_count},
+ *                  notify_on, subscribed_at}], meta:{next_cursor}}
+ *   GET    /v1/channels/{ref}/subscription
+ *          {subscribed:false} | {subscribed:true, notify_on, subscribed_at}
+ *   POST   /v1/channels/{ref}/subscribe   {notify_on?}         idempotent
+ *          {status:"subscribed", notify_on, follow:"followed"|"requested",
+ *           subscriber_count}
+ *   DELETE /v1/channels/{ref}/subscribe
+ *          {status:"unsubscribed", subscriber_count}
+ *   PATCH  /v1/channels/{ref}/subscription {notify_on}
+ *          {subscribed:true, notify_on}   400 INVALID_NOTIFY_ON, 404 NOT_SUBSCRIBED
+ *
+ * `{ref}` is a handle or the owner's user id, the same `{key}` the channel
+ * route takes. `GET /v1/channels/{ref}` itself now carries `subscriber_count`
+ * and, with a session, `is_subscribed` and `notify_on`.
+ *
+ * The literal path `/v1/channels/subscriptions` used to be read as a HANDLE
+ * by the router and answer "Channel not found"; the contract puts the list
+ * route ahead of the `{ref}` route. If the rail's channel list is empty on a
+ * stack where it should not be, that ordering is the first thing to check.
  */
 
 import api from "@atpost/api-client"
 import type { FeedItem } from "@atpost/types/feed"
 import type { ChannelRef, TubeChannel } from "./channels"
-import { bareHandle, channelsFromFeed, isLongVideoRow } from "./channels"
+import { bareHandle, isLongVideoRow } from "./channels"
+import {
+  parseNotifyOn,
+  parseSubscription,
+  subscriptionsToChannels,
+  type ChannelSubscription,
+  type NotifyOn,
+  type SubscriptionRow,
+} from "./subscription"
 
 interface Envelope<T> {
   data?: T
@@ -123,25 +159,22 @@ export async function fetchOwnChannel(): Promise<TubeChannel | null> {
 }
 
 /**
- * The subscriber count, which is the channel owner's FOLLOWER count.
+ * A channel's subscriber count, off its own row.
  *
- * Not a second opinion about the same number — the only opinion. A channel
- * row carries `video_count` and nothing else countable, and there is no
- * subscription edge on this platform separate from the follow edge (see
- * ./channels.ts). `/v1/profiles/{user_id}` is public and carries
- * `follower_count`, so this is one extra request on the channel page and
- * nowhere else.
+ * There used to be a `fetchSubscriberCount` here that read the owner's
+ * `follower_count` from `/v1/profiles/{user_id}`, because the follow edge was
+ * the only edge. The channel row carries `subscriber_count` now and that is
+ * the number the page is about, so the watch page reads it from the same
+ * `GET /v1/channels/{ref}` the channel page draws its header from.
  *
- * Returns null rather than 0 when it cannot be read. A channel page that
- * prints "No subscribers yet" because a side request failed has stated
- * something false about somebody's channel; a page with no number there has
- * merely said less.
+ * Null rather than 0 when the row is missing the field or the request fails.
+ * A row that prints "No subscribers yet" because a side request failed has
+ * stated something false about somebody's channel; a row with no number
+ * there has merely said less.
  */
-export async function fetchSubscriberCount(userId: string): Promise<number | null> {
-  const res = await api.get<Envelope<{ follower_count?: number }>>(
-    `/v1/profiles/${encodeURIComponent(userId)}`
-  )
-  const count = res.data?.data?.follower_count
+export async function fetchChannelSubscriberCount(ref: string): Promise<number | null> {
+  const channel = await fetchChannel(ref)
+  const count = channel?.subscriber_count
   return typeof count === "number" ? count : null
 }
 
@@ -257,36 +290,141 @@ export async function fetchCreatorPlaylists(userId: string): Promise<TubePlaylis
 /* ── Subscriptions ────────────────────────────────────────────────────────── */
 
 /**
- * The channels the viewer subscribes to.
- *
- * ═══════════════════════════════════════════════════════════════════════════
- * THIS IS THE ONE-LINE SWAP
- *
- * The brief asked for the channel-subscription call to sit behind a single
- * named function so that replacing it is a one-line change. This is that
- * function, and here is the whole state of the question as of 2026-09-09:
- *
- *   · `GET /v1/channels/subscriptions` — 404. Not a missing route: the
- *     router reads "subscriptions" as a HANDLE and answers
- *     `{"error":{"code":"NOT_FOUND","message":"Channel not found"}}`.
- *   · `POST /v1/channels/{id}/subscribe` — 404 from the router itself, the
- *     bare "404 page not found" body rather than the house envelope.
- *   · `GET /v1/graph/following/{user_id}` — 200, and it answers a flat array
- *     of USER IDS. It is the closest thing that exists, and it is still the
- *     wrong list: it includes people who have no channel, and turning it into
- *     channels means one `/v1/channels/{id}` per id.
- *
- * So subscribing IS following, and the subscribed-channel list is derived
- * from the Following slice of the video feed — exactly as the Android client
- * derives its channel strip (`channelBubbles`, see ./channels.ts). When the
- * backend agent lands a real endpoint, the body of THIS function is what
- * changes; every caller already asks for `ChannelRef[]` and nothing else.
+ * The path for one channel's subscription routes. `{ref}` is a handle or the
+ * owner's user id; the "@" is stripped for the same reason `fetchChannel`
+ * strips it, and the id is encoded because a handle is user-typed text.
  */
-export async function fetchSubscribedChannels(viewerId: string | null): Promise<ChannelRef[]> {
-  const res = await api.get<Envelope<FeedItem[]>>("/v1/feed/videos", {
-    params: { limit: 50, following_only: true },
-  })
-  return channelsFromFeed(res.data?.data ?? [], viewerId)
+function channelPath(ref: string, tail: string): string {
+  const key = bareHandle(ref) ?? ref
+  return `/v1/channels/${encodeURIComponent(key)}/${tail}`
+}
+
+/**
+ * Is the viewer subscribed to this channel, and are they being told about
+ * its uploads.
+ *
+ * Throws on a failed request rather than answering "not subscribed": the
+ * caller (`useSubscription`) leaves the control ABSENT on a throw, and a
+ * function that turned a timeout into `{subscribed:false}` would have it
+ * offer Subscribe to somebody who already is. Never called for the viewer's
+ * own channel or without a session; the hook enforces that, not this.
+ */
+export async function fetchSubscription(ref: string): Promise<ChannelSubscription> {
+  const res = await api.get<Envelope<unknown>>(channelPath(ref, "subscription"))
+  return parseSubscription(res.data?.data)
+}
+
+/** What `POST …/subscribe` answers, in this zone's words. */
+export interface SubscribeOutcome {
+  notifyOn: NotifyOn
+  /**
+   * The follow edge the subscribe created underneath. "requested" is a
+   * private account, and it is carried for analytics rather than drawn: the
+   * subscription itself is real in both cases (./subscription.ts, header).
+   */
+  follow: "followed" | "requested"
+  /** The server's own count, or null when the body did not carry one. */
+  subscriberCount: number | null
+}
+
+/**
+ * Subscribe: follow the owner AND turn notifications on, in one request.
+ *
+ * Idempotent on the server, so a double-press is two identical answers
+ * rather than an error; `useSubscription` still drops the second press while
+ * the first is in flight, because two round trips whose net effect is nothing
+ * is not what anybody wants from a double-tap.
+ *
+ * `notify_on` is sent only when the caller has an opinion. Omitting it lets
+ * the server apply the founder's default (on), which keeps the one place that
+ * default is written on the server rather than duplicated here.
+ */
+export async function subscribe(ref: string, notifyOn?: NotifyOn): Promise<SubscribeOutcome> {
+  const res = await api.post<
+    Envelope<{ status?: string; notify_on?: unknown; follow?: string; subscriber_count?: unknown }>
+  >(channelPath(ref, "subscribe"), notifyOn ? { notify_on: notifyOn } : {})
+  const body = res.data?.data
+  if (body?.status !== "subscribed") {
+    // An unrecognised status is not assumed to be success. The hook rolls
+    // back and says so, which is better than a button that says Subscribed
+    // over an edge nobody confirmed.
+    throw new Error(`Unexpected subscribe status: ${String(body?.status)}`)
+  }
+  return {
+    notifyOn: parseNotifyOn(body.notify_on),
+    follow: body.follow === "requested" ? "requested" : "followed",
+    subscriberCount: typeof body.subscriber_count === "number" ? body.subscriber_count : null,
+  }
+}
+
+/** Unsubscribe: remove the notification preference and the follow edge. */
+export async function unsubscribe(ref: string): Promise<{ subscriberCount: number | null }> {
+  const res = await api.delete<Envelope<{ status?: string; subscriber_count?: unknown }>>(
+    channelPath(ref, "subscribe")
+  )
+  const body = res.data?.data
+  if (body?.status !== "unsubscribed") {
+    throw new Error(`Unexpected unsubscribe status: ${String(body?.status)}`)
+  }
+  return {
+    subscriberCount: typeof body.subscriber_count === "number" ? body.subscriber_count : null,
+  }
+}
+
+/**
+ * The bell. Changes which uploads the viewer is told about and nothing else.
+ *
+ * 404 NOT_SUBSCRIBED is a real answer here and it is left to throw: it means
+ * the subscription went away under this page (another tab, the phone), and
+ * the honest thing is for the bell's write to fail visibly rather than for
+ * this function to quietly re-subscribe somebody to fix its own request.
+ */
+export async function setNotifyOn(ref: string, notifyOn: NotifyOn): Promise<NotifyOn> {
+  const res = await api.patch<Envelope<{ subscribed?: boolean; notify_on?: unknown }>>(
+    channelPath(ref, "subscription"),
+    { notify_on: notifyOn }
+  )
+  return parseNotifyOn(res.data?.data?.notify_on)
+}
+
+/**
+ * How many subscriptions the rail asks for at once, and how many pages it is
+ * willing to walk. Fifty is the ceiling every `/v1/feed/*` surface clamps to
+ * and is assumed to be this one's too; four pages is two hundred channels,
+ * past which a rail of names is not a navigation structure anyone scrolls
+ * and the page-two cursor is better spent by a dedicated list.
+ */
+const SUBSCRIPTIONS_PAGE = 50
+const SUBSCRIPTIONS_MAX_PAGES = 4
+
+/**
+ * The channels the viewer subscribes to, in the server's order.
+ *
+ * This function was, until 2026-09-12, the documented one-line swap: the
+ * subscriptions route was a 404 that read "subscriptions" as a handle, so
+ * the list was derived from a page of `following_only` video. The route is
+ * real now and the derivation is deleted, not kept as a fallback, because
+ * the two lists MEAN different things ("channels you follow that have
+ * posted" against "channels you subscribe to") and a rail that fell back
+ * from one to the other would change its meaning on a network error.
+ *
+ * Every caller asks for `ChannelRef[]` and nothing else; the viewer's id is
+ * no longer needed because the server knows who is asking.
+ */
+export async function fetchSubscribedChannels(): Promise<ChannelRef[]> {
+  const rows: SubscriptionRow[] = []
+  let cursor: string | undefined
+  for (let page = 0; page < SUBSCRIPTIONS_MAX_PAGES; page += 1) {
+    const params: { limit: number; cursor?: string } = { limit: SUBSCRIPTIONS_PAGE, cursor }
+    const res = await api.get<Envelope<SubscriptionRow[]>>("/v1/channels/subscriptions", {
+      params,
+    })
+    const body: Envelope<SubscriptionRow[]> | undefined = res.data
+    if (Array.isArray(body?.data)) rows.push(...body.data)
+    cursor = body?.meta?.next_cursor || undefined
+    if (!cursor) break
+  }
+  return subscriptionsToChannels(rows)
 }
 
 /* ── Search ───────────────────────────────────────────────────────────────── */

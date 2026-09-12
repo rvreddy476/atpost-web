@@ -17,11 +17,12 @@
  *
  * The channel list is the row that makes this a video app rather than a feed
  * with a video tab: it is the only place in the product where the people you
- * watch are a NAVIGATION structure instead of a ranking input. ../tube/
- * channels.ts has the note on where that list comes from today and what it
- * costs — briefly, there is no subscriptions endpoint, so it is derived from
- * the Following slice of the video feed exactly as the Android client derives
- * its channel strip.
+ * watch are a NAVIGATION structure instead of a ranking input. It is
+ * `GET /v1/channels/subscriptions` in the server's order, mapped by
+ * `subscriptionsToChannels` in ../tube/subscription.ts; until 2026-09-12 it
+ * was derived from the Following slice of the video feed because there was
+ * no subscriptions endpoint, which is why the empty sentence below used to
+ * say "once they post a video" and no longer does.
  *
  * ── Two widths, one list ──────────────────────────────────────────────────
  * `TubeRailContent` is rendered by both the ≥lg column and the <lg drawer, so
@@ -162,7 +163,7 @@ export function TubeRailContent({
                 </ul>
               ) : (
                 <p className="px-3 pb-1 text-xs leading-snug text-mo-body">
-                  Channels you follow appear here once they post a video.
+                  Channels you subscribe to appear here.
                 </p>
               )}
             </>

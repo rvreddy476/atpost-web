@@ -24,10 +24,10 @@
  * chrome must survive its own optional data.
  *
  * ── Nothing is asked for while signed out ─────────────────────────────────
- * `/v1/profiles/me`, `/v1/channels/me` and the Following feed are all 401 for
- * an anonymous browser. Asking anyway would put three guaranteed failures in
- * the console on every signed-out page load, which is how a real error stops
- * being noticed.
+ * `/v1/profiles/me`, `/v1/channels/me` and `/v1/channels/subscriptions` are
+ * all 401 for an anonymous browser. Asking anyway would put three guaranteed
+ * failures in the console on every signed-out page load, which is how a real
+ * error stops being noticed.
  */
 
 import { useEffect, useState } from "react"
@@ -55,7 +55,7 @@ export interface TubeViewer {
 }
 
 export function useTubeViewer(): TubeViewer {
-  const { signedIn, status, user } = useSession()
+  const { signedIn, status } = useSession()
   const [displayName, setDisplayName] = useState<string | null>(null)
   const [ownChannel, setOwnChannel] = useState<TubeChannel | null>(null)
   const [channels, setChannels] = useState<ChannelRef[]>([])
@@ -93,7 +93,10 @@ export function useTubeViewer(): TubeViewer {
         /* "Your videos" stays dark with the reason it already carries. */
       })
 
-    fetchSubscribedChannels(user?.id ?? null)
+    // The server knows who is asking, so the viewer's id is not passed: the
+    // old feed-derived list needed it to leave the viewer's own channel out,
+    // and a subscriptions list cannot contain it in the first place.
+    fetchSubscribedChannels()
       .then((rows) => {
         if (live) setChannels(rows)
       })
@@ -107,7 +110,7 @@ export function useTubeViewer(): TubeViewer {
     return () => {
       live = false
     }
-  }, [signedIn, status, user?.id])
+  }, [signedIn, status])
 
   return {
     displayName,

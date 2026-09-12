@@ -68,7 +68,7 @@ import { useSession } from "@atpost/api-client/session"
 import type { FeedItem } from "@atpost/types/feed"
 import { BRAND } from "@momentum/brand"
 import { absoluteTime, relativeTime } from "@momentum/content"
-import { ActionBar, FollowButton } from "@momentum/interactions"
+import { ActionBar } from "@momentum/interactions"
 import {
   MomentumVideo,
   metadataForPost,
@@ -77,21 +77,17 @@ import {
   primaryVideo,
   type WatchEvent,
 } from "@momentum/player"
+import { SubscribeControls } from "@/channel/SubscribeControls"
 import { setBookmark, toggleLike } from "@/tube/api"
+import { fetchChannelSubscriberCount } from "@/tube/channelApi"
 import { resolveUrl } from "@/tube/resolveUrl"
-import { useFollowState } from "@/tube/useFollowState"
+import { useSubscription } from "@/tube/useSubscription"
 import { useTubeAnalytics } from "@/tube/useTubeAnalytics"
 import { useTubeFeed } from "@/tube/useTubeFeed"
-import {
-  creatorName,
-  noPictureReason,
-  showsFollow,
-  videoTitle,
-  viewsLabel,
-} from "@/tube/video"
+import { creatorName, noPictureReason, videoTitle, viewsLabel } from "@/tube/video"
 import { readAutoplayNext, writeAutoplayNext } from "./autoplayPreference"
 import { Chapters } from "./Chapters"
-import { ChannelRow, SUBSCRIBE_LABELS } from "./ChannelRow"
+import { ChannelRow } from "./ChannelRow"
 import { COLUMN_GAP_PX, gridTemplateColumns } from "./columns"
 import { EndScreen } from "./EndScreen"
 import { expandAriaLabel, expandLabel, frameClass, isExpanded } from "./expand"
@@ -157,8 +153,8 @@ export function WatchScreen({ postId }: { postId: string }) {
   // Keyed on the post so that navigating from one video to another — which the
   // recommendations rail and the series list now make easy, and which nothing
   // on this page could do before — gets a fresh player, a fresh watch session,
-  // a fresh resume lookup and a fresh follow lookup, rather than a component
-  // quietly reusing the previous video's state.
+  // a fresh resume lookup and a fresh subscription lookup, rather than a
+  // component quietly reusing the previous video's state.
   return <Watch key={item.id} item={item} position={feed.position} patch={feed.patch} />
 }
 
@@ -176,7 +172,46 @@ function Watch({
   const signedIn = Boolean(session.signedIn)
   const analytics = useTubeAnalytics()
   const expand = useExpand()
-  const follow = useFollowState(viewerId, item.author_id)
+
+  /* ── The channel, and the viewer's subscription to it ─────────────────── */
+
+  /**
+   * The owner is the channel's user when the row carries a channel and the
+   * author otherwise; a long video's author IS its channel's owner, so these
+   * are one id spelt two ways rather than two candidates.
+   *
+   * The count is read off the channel's own row (`GET /v1/channels/{ref}`),
+   * because a feed row's `channel` carries no count. It is a side request
+   * that fails alone: null draws no number, never "0". ../watch/ChannelRow.tsx
+   * says why that matters under a creator's name.
+   */
+  const ownerId = item.channel?.user_id ?? item.author_id
+  const [subscriberCount, setSubscriberCount] = useState<number | null>(null)
+  useEffect(() => {
+    setSubscriberCount(null)
+    if (!ownerId) return
+    let live = true
+    fetchChannelSubscriberCount(ownerId)
+      .then((count) => {
+        if (live) setSubscriberCount(count)
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [ownerId])
+
+  /**
+   * One of the thirteen events, and it means exactly what happened here:
+   * somebody subscribed to a channel because of a video, from the video. The
+   * name is the analytics vocabulary's, kept because the subscribe creates
+   * the follow edge underneath and the dashboards already count it.
+   */
+  const onSubscribed = useCallback(() => {
+    analytics.recordEngagement("follow_from_content", item, position)
+  }, [analytics, item, position])
+
+  const subscription = useSubscription(viewerId, ownerId, subscriberCount, { onSubscribed })
 
   const media = primaryVideo(item)
   const missing = noPictureReason(item)
@@ -447,39 +482,23 @@ function Watch({
     setNotice(`Comments open in the ${BRAND.mobileApp} for now.`)
   }, [])
 
-  const onFollow = useCallback(
-    async (next: "follow" | "unfollow") => {
-      const settled = await follow.toggle(next)
-      if (next === "follow") {
-        // One of the thirteen events, and it means exactly what happened here:
-        // somebody followed a channel because of a video, from the video.
-        analytics.recordEngagement("follow_from_content", item, position)
-      }
-      return settled
-    },
-    [analytics, follow, item, position]
-  )
-
   const title = videoTitle(item)
   const expanded = isExpanded(expand.mode)
 
   /**
    * The subscribe control an end-screen `channel_subscribe` tile draws.
    *
-   * The page's real one, passed down rather than rebuilt — an end screen must
-   * not get a second, dumber follow button that does not know about the
-   * "requested" state a private account produces. Null when the control should
-   * not be offered at all (the viewer's own video, or an edge still unknown),
-   * and the tile then says so rather than drawing a button that does nothing.
+   * The page's real one, from the same edge the channel row draws, passed
+   * down rather than rebuilt: an end screen must not get a second, dumber
+   * button that disagrees with the row above it about whether the viewer is
+   * subscribed. Null when the control should not be offered at all (the
+   * viewer's own video, signed out, or an edge still unknown), and the tile
+   * then says so rather than drawing a button that does nothing. The null
+   * is decided here and not by `SubscribeControls` rendering nothing, because
+   * the tile's `subscribe ?? fallback` needs a real null to fall back on.
    */
-  const subscribeControl = showsFollow(viewerId, item.author_id, follow.state) ? (
-    <FollowButton
-      key={`end-${item.author_id}:${follow.state ?? "unknown"}`}
-      state={follow.state ?? "none"}
-      displayName={creatorName(item)}
-      onToggle={onFollow}
-      labels={SUBSCRIBE_LABELS}
-    />
+  const subscribeControl = subscription.state ? (
+    <SubscribeControls edge={subscription} name={creatorName(item)} />
   ) : null
 
   return (
@@ -637,12 +656,7 @@ function Watch({
             )}
           </p>
 
-          <ChannelRow
-            item={item}
-            viewerId={viewerId}
-            followState={follow.state}
-            onFollow={onFollow}
-          />
+          <ChannelRow item={item} subscription={subscription} />
 
           {/* The action row, horizontally, which is what @momentum/interactions'
               ActionBar already IS. apps/reels draws its own vertical rail over

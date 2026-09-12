@@ -9,25 +9,31 @@
  * ═══════════════════════════════════════════════════════════════════════════
  * FOUR REQUESTS, AND EACH ONE FAILS ALONE
  *
- *   GET /v1/channels/{ref}                 the channel itself — the page
- *   GET /v1/profiles/{user_id}             follower_count, i.e. subscribers
+ *   GET /v1/channels/{ref}                 the channel itself, which is the
+ *                                          page, and its subscriber_count
  *   GET /v1/posts/by-author/{id}?type=…    the videos
  *   GET /v1/creators/{user_id}/playlists   the playlists tab
- *   POST /v1/graph/relationships/batch     is the viewer subscribed
+ *   GET /v1/channels/{ref}/subscription    is the viewer subscribed, and
+ *                                          are they being notified
  *
  * Only the FIRST can take the page down, because it is the page: without a
  * channel there is nothing to draw a header for, and a 404 from it is a
- * genuine "no such channel". The other four are each a section that says less
- * when it fails rather than a page that fails. A subscriber count that did
- * not load renders as nothing at all rather than as "No subscribers yet",
- * because printing a zero for a number we could not read would state
+ * genuine "no such channel". The other three are each a section that says
+ * less when it fails rather than a page that fails. A subscriber count the
+ * row did not carry renders as nothing at all rather than as "No subscribers
+ * yet", because printing a zero for a number we could not read would state
  * something false about somebody's channel.
  *
+ * The count used to be a fifth request, the owner's `follower_count` off a
+ * profile, because subscribing was a follow with different words on it and
+ * there was no other number. Since 2026-09-12 a channel subscription is its
+ * own edge and the channel row carries its own count.
+ *
  * ═══════════════════════════════════════════════════════════════════════════
- * TWO THINGS THE BRIEF ASKED FOR THAT THIS API DOES NOT HAVE
+ * ONE THING THE BRIEF ASKED FOR THAT THIS API DOES NOT HAVE
  *
  * Recorded here as well as in ../tube/channels.ts, because this is the file
- * where somebody will look for them.
+ * where somebody will look for it.
  *
  *   · NO BANNER IMAGE. There is no cover, header or banner field on a channel
  *     and none on the profile either. The band across the top is a gradient
@@ -35,20 +41,14 @@
  *     channels, and openly decorative. `bannerImage` is the one function that
  *     changes the day the API grows a real one.
  *
- *   · NO SUBSCRIBER COUNT ON THE CHANNEL. `video_count` is the only count the
- *     channel row carries. The number under the name is the owner's
- *     `follower_count`, which is the honest source: subscribing IS following
- *     on this platform — there is no `/v1/channels/{id}/subscribe` route at all,
- *     verified — so the follower edge is the subscription.
- *
- * ── The subscribe control says "Subscribe" and does a follow ──────────────
- * Not a euphemism, and not two names for one thing: the WORD is the founder's
- * and the page's ("1.2K subscribers" sits directly above it), and the EDGE is
- * `POST /v1/graph/follow`, which is the only one that exists. The button is
- * @momentum/interactions' `FollowButton` with its `labels` prop rather than a
- * copy of it, so the optimistic update, the rollback and the three-state rule
- * (`requested` is a real answer for a private account) have one
- * implementation.
+ * ── Subscribe is one button that does two things ──────────────────────────
+ * The founder's decision: pressing Subscribe follows the owner AND turns
+ * notifications on; Unsubscribe removes both; every subscriber is notified
+ * by default and the bell beside the button is the per-channel exception.
+ * The button and the bell are ./SubscribeControls.tsx, drawn from the edge
+ * ../tube/useSubscription.ts holds, and that hook is where the optimistic
+ * update, the rollback and the visible failure live once for the three
+ * surfaces that draw this control.
  */
 
 import { useCallback, useEffect, useState } from "react"
@@ -57,18 +57,11 @@ import { AlertTriangle, Tv } from "lucide-react"
 import { useSession } from "@atpost/api-client/session"
 import { BRAND } from "@momentum/brand"
 import { Avatar, InfiniteFeed, absoluteTime } from "@momentum/content"
-import { FollowButton, type FollowState } from "@momentum/interactions"
 import type { FeedItem } from "@atpost/types/feed"
-// Aliased: `setFollow` is also the name of this screen's state setter, and a
-// shadowed import would silently call the setter with two arguments instead of
-// posting to the graph — a Subscribe button that appears to work and does
-// nothing.
-import { fetchFollowStates, setFollow as putFollow } from "@/tube/api"
 import {
   fetchAuthorVideos,
   fetchChannel,
   fetchCreatorPlaylists,
-  fetchSubscriberCount,
   type TubePlaylist,
 } from "@/tube/channelApi"
 import {
@@ -78,9 +71,11 @@ import {
   videosLabel,
   type TubeChannel,
 } from "@/tube/channels"
+import { useSubscription, type SubscriptionEdge } from "@/tube/useSubscription"
 import { VideoCard } from "@/browse/VideoCard"
 import { VIDEO_GRID } from "@/browse/grid"
 import { BrowseSkeleton } from "@/browse/states"
+import { SubscribeControls } from "./SubscribeControls"
 import {
   CHANNEL_TABS,
   CHANNEL_TAB_LABEL,
@@ -110,16 +105,16 @@ function PlateTitle({ children }: { children: React.ReactNode }) {
 
 function ChannelHeader({
   channel,
-  subscribers,
-  follow,
-  onToggleFollow,
+  subscription,
 }: {
   channel: TubeChannel
-  subscribers: number | null
-  follow: FollowState | null
-  onToggleFollow: (next: "follow" | "unfollow") => Promise<FollowState>
+  subscription: SubscriptionEdge
 }) {
   const handle = atHandle(channel.handle)
+  // The edge's count and not the row's: they are the same number until the
+  // viewer presses Subscribe, and from then on the edge's is the one that
+  // moved with the press and was replaced by the server's answer.
+  const subscribers = subscription.subscriberCount
 
   return (
     <header className="mb-6">
@@ -156,22 +151,15 @@ function ChannelHeader({
           )}
         </div>
 
-        {/* Absent, not disabled, while the edge is UNKNOWN — `follow` is null
-            until `relationships/batch` answers, and it is null forever for
-            the viewer's own channel and for a signed-out browser. A Subscribe
-            button that appears and then flips to Subscribed is worse than one
-            that arrives late: the person in between has been told something
-            false about who they follow. Straight from `showsFollow` in
-            ../tube/video.ts, which made the same call for the watch page. */}
-        {follow && (
-          <FollowButton
-            state={follow}
-            displayName={channel.name}
-            onToggle={onToggleFollow}
-            labels={{ none: "Subscribe", following: "Subscribed" }}
-            className="shrink-0 px-4 py-2"
-          />
-        )}
+        {/* Absent, not disabled, while the edge is UNKNOWN: the edge is
+            undefined until `…/subscription` answers, and it is undefined
+            forever for the viewer's own channel and for a signed-out browser.
+            A Subscribe button that appears and then flips to Subscribed is
+            worse than one that arrives late: the person in between has been
+            told something false about their own subscriptions.
+            `SubscribeControls` renders nothing on an unknown edge, so the
+            rule is in one place and not in three. */}
+        <SubscribeControls edge={subscription} name={channel.name} className="shrink-0" />
       </div>
     </header>
   )
@@ -235,8 +223,6 @@ export function ChannelScreen({ channelRef, tab }: { channelRef: string; tab: Ch
 
   const [channel, setChannel] = useState<TubeChannel | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading")
-  const [subscribers, setSubscribers] = useState<number | null>(null)
-  const [follow, setFollow] = useState<FollowState | null>(null)
 
   const [videos, setVideos] = useState<FeedItem[]>([])
   const [videosCursor, setVideosCursor] = useState<string | null>(null)
@@ -268,20 +254,11 @@ export function ChannelScreen({ channelRef, tab }: { channelRef: string; tab: Ch
     }
   }, [channelRef])
 
-  /* The count, the videos and the playlists, once the owner is known. */
+  /* The videos and the playlists, once the owner is known. */
   const ownerId = channel?.user_id ?? null
   useEffect(() => {
     if (!ownerId) return
     let live = true
-
-    setSubscribers(null)
-    fetchSubscriberCount(ownerId)
-      .then((count) => {
-        if (live) setSubscribers(count)
-      })
-      .catch(() => {
-        /* Nothing is drawn. See the header — null is not zero. */
-      })
 
     setVideos([])
     setVideosCursor(null)
@@ -314,35 +291,14 @@ export function ChannelScreen({ channelRef, tab }: { channelRef: string; tab: Ch
     }
   }, [ownerId])
 
-  /* Am I subscribed? Never asked for my own channel, never while signed out. */
-  useEffect(() => {
-    const viewerId = user?.id
-    if (!ownerId || !viewerId || ownerId === viewerId) {
-      setFollow(null)
-      return
-    }
-    let live = true
-    fetchFollowStates(viewerId, [ownerId])
-      .then((edges) => {
-        if (live) setFollow(edges.get(ownerId) ?? "none")
-      })
-      .catch(() => {
-        // The control stays absent rather than guessing "none", which would
-        // offer Subscribe to somebody who already is.
-      })
-    return () => {
-      live = false
-    }
-  }, [ownerId, user?.id])
-
-  const onToggleFollow = useCallback(
-    async (next: "follow" | "unfollow") => {
-      if (!ownerId) throw new Error("No channel")
-      const state = await putFollow(ownerId, next)
-      setFollow(state)
-      return state
-    },
-    [ownerId]
+  /* Am I subscribed? The hook never asks for my own channel or while signed
+     out, and it leaves the edge unknown on a failed lookup; the header draws
+     no control on an unknown edge. Seeded with the row's count so the number
+     under the name can move with the press. */
+  const subscription = useSubscription(
+    user?.id ?? null,
+    ownerId,
+    typeof channel?.subscriber_count === "number" ? channel.subscriber_count : null
   )
 
   const loadMoreVideos = useCallback(() => {
@@ -413,12 +369,7 @@ export function ChannelScreen({ channelRef, tab }: { channelRef: string; tab: Ch
 
   return (
     <div>
-      <ChannelHeader
-        channel={channel}
-        subscribers={subscribers}
-        follow={follow}
-        onToggleFollow={onToggleFollow}
-      />
+      <ChannelHeader channel={channel} subscription={subscription} />
       <ChannelTabs base={base} current={tab} />
 
       {tab === "videos" && (

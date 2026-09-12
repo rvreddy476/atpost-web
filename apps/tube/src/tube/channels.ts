@@ -21,8 +21,19 @@
  * accept either a bare handle or a user id, which is why `channelRef` below
  * does not try to tell them apart.
  *
- * ── Two fields the channel page wants and this row does not carry ─────────
- * Recorded here rather than invented:
+ * ── What the row gained on 2026-09-12, and what it still does not carry ───
+ *
+ *   · `subscriber_count`, and for a signed-in viewer `is_subscribed` and
+ *     `notify_on`. Channel subscriptions are a real edge now, with their own
+ *     routes (`/v1/channels/{ref}/subscribe`, `…/subscription`,
+ *     `/v1/channels/subscriptions`), and the count under a channel's name is
+ *     the count of THAT edge rather than the owner's `follower_count` read
+ *     off a profile. ./subscription.ts is the pure half of it and
+ *     ./channelApi.ts the network half. The count is optional in the type
+ *     because the server is being built against this contract while this is
+ *     written, and a row from before the column exists must not crash the
+ *     page: `ChannelScreen` draws nothing for a missing number rather than
+ *     zero.
  *
  *   · NO BANNER. There is no cover, header or banner field on a channel, and
  *     none on `/v1/profiles/{id}` either — that row has display_name, bio,
@@ -30,14 +41,6 @@
  *     gradient from the handle. It is honestly decorative: it never claims to
  *     be a picture the creator chose, and the day the API grows one this is
  *     the single function that changes.
- *
- *   · NO SUBSCRIBER COUNT. `video_count` is the only count on the channel.
- *     The number under a channel's name is `follower_count` from
- *     `GET /v1/profiles/{user_id}` — which is the honest number, because
- *     subscribing IS following on this platform: there is no
- *     `/v1/channels/{id}/subscribe` route (404, verified), the Android client's
- *     Subscriptions page is `following_only=true` over the video feed, and
- *     the subscribe control is `POST /v1/graph/follow {user_id}`.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * THE HANDLE IS THE ADDRESS, AND IT IS THE ONLY ONE
@@ -61,11 +64,28 @@ export interface TubeChannel {
   avatar_media_id: string | null
   avatar_url: string | null
   video_count: number
+  /**
+   * How many people subscribe. Absent from a row written before the column
+   * existed; null is never SENT but is accepted so a caller can hold "not
+   * read" and "zero" apart, which `subscribersLabel` needs them to be.
+   */
+  subscriber_count?: number | null
+  /** Only when the request carried a session. Read by `useSubscription`'s
+      own GET rather than from here, so the three surfaces that draw the
+      control share ONE source for the viewer's edge. */
+  is_subscribed?: boolean
+  notify_on?: string
   created_at: string
   updated_at: string
 }
 
-/** One row of the rail's subscribed-channel list, and of a search result. */
+/**
+ * One row of the rail's subscribed-channel list, and of a search result.
+ * Built from a subscriptions row by `subscriptionsToChannels` in
+ * ./subscription.ts and from a search hit by `searchChannels` in
+ * ./channelApi.ts; both normalise the handle so the rail's links are the
+ * same links the search box makes.
+ */
 export interface ChannelRef {
   user_id: string
   name: string
@@ -233,59 +253,13 @@ export function isLongVideoRow(
   )
 }
 
-/* ── The subscribed-channel list ──────────────────────────────────────────── */
-
-/**
- * The channels behind a page of "following only" video, newest first.
- *
- * ── Why this is derived and not fetched ───────────────────────────────────
- * There is no subscriptions endpoint. `/v1/channels/subscriptions` is a 404
- * (it is read as a HANDLE and answers "Channel not found"), and
- * `/v1/channels/{id}/subscribe` is a bare 404 from the router — both verified
- * against the running gateway on 2026-09-09. `GET /v1/graph/following/{id}`
- * exists and answers a list of USER IDS, which would then need one channel
- * lookup each and would still list people who have no channel at all.
- *
- * The Android client solved it the same way and this is transcribed from it
- * rather than reasoned out afresh — `channelBubbles` in
- * `feature/tube/ui/home/TubeChannelBubble.kt`: one bubble per author of the
- * Following feed, in the order their newest video appears, the viewer's own
- * left out. Because the feed is newest first, the first row an author has IS
- * their newest, so `distinctBy` gives the right order for free.
- *
- * What this list therefore MEANS is "channels you follow that have posted",
- * not "channels you follow". That is a real difference and it is why the rail
- * says "Subscriptions" over it and not "All your subscriptions". When a real
- * endpoint arrives, `fetchSubscribedChannels` in ./channelApi.ts is the one
- * function that changes and this one is deleted.
+/*
+ * The rail's subscribed-channel list used to be derived HERE from a page of
+ * `following_only` video, transcribed from the Android client's channel
+ * bubbles, because there was no subscriptions endpoint. There is one now
+ * (`GET /v1/channels/subscriptions`), and its rows are mapped by
+ * `subscriptionsToChannels` in ./subscription.ts. The derivation and its note
+ * are gone rather than kept "in case": a list that meant "channels you follow
+ * that have posted" is a different list from "channels you subscribe to", and
+ * keeping both is how a rail ends up showing the wrong one.
  */
-export function channelsFromFeed(
-  items: readonly FeedItem[],
-  viewerId: string | null
-): ChannelRef[] {
-  const out: ChannelRef[] = []
-  const seen = new Set<string>()
-
-  for (const item of items) {
-    const id = item.channel?.user_id?.trim() || item.author?.id?.trim() || item.author_id?.trim()
-    if (!id) continue
-    if (viewerId && id === viewerId) continue
-    if (seen.has(id)) continue
-    seen.add(id)
-
-    const name = item.channel?.name?.trim() || item.author?.display_name?.trim()
-    // A row with an id and no name at all is skipped rather than drawn as
-    // "Someone": this list is how a viewer PICKS a channel, and a rail of
-    // identical placeholder rows is unusable in a way a missing row is not.
-    if (!name) continue
-
-    out.push({
-      user_id: id,
-      name,
-      handle: bareHandle(item.channel?.handle) ?? "",
-      avatar_url: item.channel?.avatar_url ?? null,
-    })
-  }
-
-  return out
-}

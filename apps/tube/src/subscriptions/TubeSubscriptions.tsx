@@ -1,51 +1,49 @@
 "use client"
 
 /**
- * `/tube/subscriptions` — long video from the channels the viewer follows.
+ * `/tube/subscriptions`: long video from the channels the viewer subscribes
+ * to, newest first.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * WHAT "SUBSCRIPTION" MEANS ON THIS PLATFORM, AS OF 2026-09-09
+ * WHAT "SUBSCRIPTION" MEANS ON THIS PLATFORM, AS OF 2026-09-12
  *
- * It means FOLLOWING, and that is a finding rather than a shortcut. Verified
- * against the running gateway:
+ * A channel subscription is its own edge. The founder's decision: Subscribe
+ * is one button that follows the owner AND turns notifications on,
+ * Unsubscribe removes both, and this tab is a real feed of the subscribed
+ * channels' videos rather than the follow graph's. On the wire that is
+ * `GET /v1/feed/videos?subscribed_only=true` (the same rows `/v1/feed/watch`
+ * answers), and ../tube/api.ts sends it as `subscribedOnly`.
  *
- *   · `GET  /v1/channels/subscriptions`      404 — the router reads
- *     "subscriptions" as a HANDLE and answers "Channel not found".
- *   · `POST /v1/channels/{id}/subscribe`     404 from the router itself.
- *   · `POST /v1/graph/follow {user_id}`      200 {"status":"followed"} — the
- *     route every Follow button in this product already calls.
+ * Until 2026-09-12 this page was `following_only=true`, because subscribing
+ * WAS following and there was no other edge to narrow by. The two are not
+ * the same list any more: subscribing creates the follow edge underneath, so
+ * every subscribed channel is followed, but a followed account need not have
+ * a channel and need not have been subscribed to. The home rail's
+ * "Following" chip keeps the follow graph, which is what its word says; this
+ * page says "subscribe", and so it asks about subscriptions.
  *
- * The Android client agrees: its Subscriptions page is
- * `VideoFeedQuery.Following`, which is `/v1/feed/watch?following_only=true`
- * (`SubscriptionsViewModel.kt`). So a channel is subscribed to by following
- * the account that owns it, and this page is the video feed narrowed to those
- * accounts.
- *
- * ── `following_only=true` FAILS CLOSED, and here that is a feature ────────
- * The parameter filters the candidate set to authors the viewer follows and
- * returns an EMPTY array for an account that follows nobody, rather than
+ * ── `subscribed_only=true` FAILS CLOSED, and here that is a feature ───────
+ * The parameter filters the candidate set to subscribed channels and returns
+ * an EMPTY array for an account that subscribes to nobody, rather than
  * backfilling with strangers. On the home grid that would be a trap — a new
- * account would see an empty Tube with nothing on screen to explain it, which
- * is why ../tube/api.ts refused to send it while the browse grid was the only
- * surface. On THIS page it is exactly right: the page's whole subject is "the
- * channels you follow", so an empty answer is information, and the empty
- * state below says what it means and offers the way to fix it.
+ * account would see an empty Tube with nothing on screen to explain it. On
+ * THIS page it is exactly right: the page's whole subject is "the channels
+ * you subscribe to", so an empty answer is information, and the empty state
+ * below says what it means and offers the way to fix it.
  *
- * ── The endpoint is /v1/feed/videos and not /v1/feed/watch ───────────────
- * The phone uses `watch` for this and `videos` for its home. Both are the
- * same ranked timeline window; the difference is that `videos` tops a short
- * first page up from `/v1/posts/recent` and `watch` does not. With
- * `following_only=true` that fill is filtered out anyway — it is a discovery
- * top-up of strangers, and strangers are precisely what this narrowing
- * removes — so the two answer the same thing here. One endpoint for both
- * surfaces in this zone is one place for a paging bug to live instead of two,
- * and `fetchVideosPage` already knows this one's cursor family.
+ * ── Two causes for an empty page, and the copy names both ─────────────────
+ * An account that subscribes to nobody, and an account whose channels have
+ * not uploaded a long video. The server cannot tell them apart from here,
+ * since the feed is empty in both cases, so the sentence says both rather
+ * than guessing at one, and the way out is the same for both: open a channel
+ * and press Subscribe.
  *
  * ── The subscribed CHANNELS, as opposed to their videos, are in the rail ──
  * Deliberately not repeated here as a strip of avatars. The rail is on screen
- * on this page too, it already lists them with their faces, and a second copy
- * of the same list one inch away would be two things to keep in agreement for
- * no new information. ../chrome/TubeRail.tsx draws it.
+ * on this page too, it already lists them with their faces (from
+ * `GET /v1/channels/subscriptions`), and a second copy of the same list one
+ * inch away would be two things to keep in agreement for no new information.
+ * ../chrome/TubeRail.tsx draws it.
  */
 
 import { useSession } from "@atpost/api-client/session"
@@ -74,10 +72,10 @@ export function TubeSubscriptions() {
   const session = useSession()
 
   // Unlike the home page there is no public fallback, and that is honest
-  // rather than lazy: "the channels YOU follow" is not a question the server
-  // can answer for a browser it has never met. There is no anonymous version
-  // of this page to show.
-  const feed = useTubeFeed(undefined, session.signedIn, { followingOnly: true })
+  // rather than lazy: "the channels YOU subscribe to" is not a question the
+  // server can answer for a browser it has never met. There is no anonymous
+  // version of this page to show.
+  const feed = useTubeFeed(undefined, session.signedIn, { subscribedOnly: true })
   const items = feed.items
 
   return (
@@ -87,7 +85,7 @@ export function TubeSubscriptions() {
           Subscriptions
         </h1>
         <p className="mt-1 text-sm text-mo-body">
-          Long video from the channels you follow, newest first.
+          Long video from the channels you subscribe to, newest first.
         </p>
       </header>
 
@@ -98,7 +96,7 @@ export function TubeSubscriptions() {
             Sign in to see your subscriptions
           </h2>
           <p className="mx-auto mt-2 max-w-sm text-mo-body">
-            {BRAND.name} has to know who you are to know which channels you follow.
+            {BRAND.name} has to know who you are to know which channels you subscribe to.
           </p>
           <a href={TUBE_SIGN_IN_HREF} className={ACTION}>
             Sign in
@@ -114,14 +112,12 @@ export function TubeSubscriptions() {
           <h2 className="mt-4 font-mo-display text-xl font-semibold tracking-mo-display text-mo-ink">
             Nothing from your channels yet
           </h2>
-          {/* Two causes, one page, and they are not the same news: an account
-              that follows nobody, and an account whose channels have not
-              posted a long video. The server cannot tell them apart from here
-              — `following_only` returns an empty array for both — so the copy
+          {/* Two causes, one page, and they are not the same news. See the
+              header: the server cannot tell them apart from here, so the copy
               names both rather than guessing at one. */}
           <p className="mx-auto mt-2 max-w-sm text-mo-body">
-            Either you have not subscribed to a channel yet, or the ones you follow have not posted
-            a long video. Subscribing is following: open a channel and use Subscribe.
+            You have not subscribed to a channel yet, or your channels have not uploaded. Open a
+            channel and press Subscribe.
           </p>
           {/* `next/link` would be correct here too — /tube is this app — but
               this is the zone root and a plain anchor keeps the two "go to
