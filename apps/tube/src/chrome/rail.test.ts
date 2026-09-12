@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  SIGNED_OUT_REASON,
   EXIT_ITEM,
   EXPLORE_ITEM,
   HOME_ITEM,
@@ -295,5 +296,34 @@ describe("the channel page's tab", () => {
   it("gives a channel ONE canonical address, with no ?tab=videos twin", () => {
     expect(channelTabHref("/@ada", "videos")).toBe("/@ada")
     expect(channelTabHref("/@ada", "playlists")).toBe("/@ada?tab=playlists")
+  })
+})
+
+describe("the two creator rows in You", () => {
+  it("links Upload and Linked videos for anybody signed in, with or without a channel", () => {
+    for (const ownChannelRef of ["ada", null]) {
+      const items = youItems({ signedIn: true, ownChannelRef })
+      const upload = items.find((i) => i.id === "upload")
+      const links = items.find((i) => i.id === "linked-videos")
+      expect(upload?.href).toBe("/upload")
+      expect(upload?.unavailableReason).toBeNull()
+      expect(links?.href).toBe("/links")
+      expect(links?.unavailableReason).toBeNull()
+    }
+  })
+
+  it("keeps them dark, blaming the session, when signed out", () => {
+    const items = youItems({ signedIn: false, ownChannelRef: null })
+    for (const id of ["upload", "linked-videos"]) {
+      const row = items.find((i) => i.id === id)
+      expect(row?.href).toBeNull()
+      expect(row?.unavailableReason).toBe(SIGNED_OUT_REASON)
+    }
+  })
+
+  it("puts the creator rows before the viewer rows", () => {
+    const ids = youItems({ signedIn: true, ownChannelRef: "ada" }).map((i) => i.id)
+    expect(ids.indexOf("upload")).toBeLessThan(ids.indexOf("history"))
+    expect(ids.indexOf("linked-videos")).toBeLessThan(ids.indexOf("history"))
   })
 })

@@ -44,9 +44,11 @@ import {
   Compass,
   History,
   House,
+  Link2,
   ListVideo,
   Settings,
   Undo2,
+  Upload,
   Video,
   type LucideIcon,
 } from "lucide-react"
@@ -120,9 +122,12 @@ export const PRIMARY_ITEMS: readonly TubeRailItem[] = [HOME_ITEM, SUBSCRIPTIONS_
 
 /**
  * The viewer's own rows: two creator destinations, then four viewer ones,
+ * the latter depending on whether they have a channel.
  *
- * ── Two of these four are real links and two are honestly dark ────────────
- * "Your videos" and "Playlists" are the viewer's own channel page and its
+ * ── Four of these six can be real links and two never are ─────────────────
+ * "Upload" and "Linked videos" light up for anybody signed in, with or
+ * without a channel — see the note on the rows themselves.
+ *
  * "Your videos" and "Playlists" are the viewer's own channel page and its
  * playlists tab, which this app serves — so once `GET /v1/channels/me`
  * answers, they are ordinary links to `/@{handle}`. Before it answers, and
@@ -162,6 +167,46 @@ export function youItems({
   const own = signedIn ? ownChannelRef : null
 
   return [
+    {
+      // Upload and Linked videos are the two CREATOR destinations, and they
+      // sit above the four viewer rows because that is the order of the work:
+      // you publish a video, then you connect it to others, then you look at
+      // what you have.
+      //
+      // Both gate on the SESSION and not on the channel, which is the one
+      // place this group's rule needs stating twice. "Your videos" is dark
+      // without a channel because there is genuinely nothing behind it; the
+      // studio is the opposite — it is where a channel gets CREATED, so
+      // darkening it would hide the cure and show only the symptom. It
+      // carries its own gate and explains itself.
+      //
+      // Signed out they are dark like every other row here, because this
+      // group means "your things" and a signed-out visitor has none. The top
+      // bar's Upload control is unconditional and that is not a
+      // contradiction: the bar is an action always in reach, the rail is a
+      // map of what you have.
+      //
+      // Upload appearing in both is deliberate duplication. Below 1024px the
+      // rail is a drawer and the bar's control shrinks to a bare glyph, so
+      // the labelled row is the one that says what it does.
+      id: "upload",
+      label: "Upload",
+      icon: Upload,
+      href: signedIn ? "/upload" : null,
+      unavailableReason: signedIn ? null : SIGNED_OUT_REASON,
+    },
+    {
+      // Linked videos had NO entry point anywhere in this zone until this
+      // row — the authoring screens shipped and nothing in the product
+      // pointed at them, so the only way in was to type the URL. A feature
+      // reachable only by people who read the source is not shipped.
+      id: "linked-videos",
+      label: "Linked videos",
+      shortLabel: "Links",
+      icon: Link2,
+      href: signedIn ? "/links" : null,
+      unavailableReason: signedIn ? null : SIGNED_OUT_REASON,
+    },
     {
       id: "history",
       label: "History",
