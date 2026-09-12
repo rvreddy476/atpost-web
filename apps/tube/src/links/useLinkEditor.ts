@@ -52,8 +52,10 @@ import {
   fetchCreatorVideoSeries,
   fetchCreatorVideos,
   fetchEndScreens,
+  fetchPostSeries,
   fetchSeriesEpisodes,
   fetchVideoCards,
+  removeSeriesEpisode,
   saveEndScreens,
   saveVideoCards,
   videoDurationMs,
@@ -68,6 +70,7 @@ import {
 import { IncompleteLinkSet, buildCardsPayload, buildEndScreensPayload } from "./payload"
 import {
   MAX_EPISODES,
+  episodeRemoval,
   episodeWrites,
   slotProblems,
   slotsFromEpisodes,
@@ -157,7 +160,11 @@ export interface LinkEditorState {
   savedEpisodes: SeriesEpisode[]
   slots: EpisodeSlot[]
   slotProblems: Map<string, string>
-  /** Saved episode numbers this arrangement would abandon and cannot remove. */
+  /**
+   * Saved episode numbers with no position on screen. Empty in every flow
+   * this editor produces; non-empty means the draft and the server have come
+   * apart and the honest fix is a reload. See `strandedEpisodes`.
+   */
   stranded: number[]
 
   upNext: UpNextDraft
@@ -342,41 +349,41 @@ export function useLinkEditor(postId: string, creatorId: string | null) {
           return
         }
 
-        // 2. Everything already attached to it. Settled independently: a
-        //    series lookup that fails must not stop the cards loading.
-        const [cardsResult, screensResult, seriesResult] = await Promise.allSettled([
-          fetchVideoCards(postId),
-          fetchEndScreens(postId),
-          fetchCreatorVideoSeries(creatorId),
-        ])
+        // 2. Everything already attached to it, in one round of requests.
+        //    Settled independently: a series lookup that fails must not stop
+        //    the cards loading.
+        //
+        //    Which series this video is in is ONE question with one endpoint,
+        //    `GET /v1/posts/{id}/series` (`fetchPostSeries`, the same call the
+        //    watch page makes, its 404 already turned into null). An earlier
+        //    version walked the creator's series list and read each one's
+        //    episodes until it found this post — up to five extra requests
+        //    per open, and a video in the creator's sixth series was reported
+        //    as in no series at all. The creator's FULL list is still fetched,
+        //    but only for what it is for: the picker.
+        const [cardsResult, screensResult, seriesResult, membershipResult] =
+          await Promise.allSettled([
+            fetchVideoCards(postId),
+            fetchEndScreens(postId),
+            fetchCreatorVideoSeries(creatorId),
+            fetchPostSeries(postId),
+          ])
         if (!alive) return
 
         const cards = cardsResult.status === "fulfilled" ? cardsResult.value : []
         const screens = screensResult.status === "fulfilled" ? screensResult.value : []
         const allSeries = seriesResult.status === "fulfilled" ? seriesResult.value : []
+        const membership =
+          membershipResult.status === "fulfilled" ? membershipResult.value : null
 
-        // 3. Which series, if any, this video is already an episode of.
-        //    The watch page asks `GET /v1/posts/{id}/series` for this
-        //    (`fetchPostSeries` in ../watch/api.ts, since 2026-09-12). This
-        //    screen still walks the creator's series instead, because it needs
-        //    the FULL list anyway for the picker and the walk's first request
-        //    is therefore already paid for. Switching it to the one call would
-        //    save a few episode reads per open; it is not wrong as it stands.
-        let chosen: VideoSeries | null = null
-        let episodes: SeriesEpisode[] = []
-        for (const series of allSeries.slice(0, MAX_LIBRARY_PAGES)) {
-          try {
-            const rows = await fetchSeriesEpisodes(series.id)
-            if (rows.some((e) => e.post_id === postId)) {
-              chosen = series
-              episodes = rows
-              break
-            }
-          } catch {
-            continue
-          }
-        }
-        if (!alive) return
+        // 3. The series it is in, if any. `fetchPostSeries` carries the series
+        //    row itself, so a series the picker's list does not know (the
+        //    list failed, or is somebody else's — the endpoint answers for any
+        //    post the viewer may see) is still shown by its own title rather
+        //    than as a blank option.
+        const chosen: VideoSeries | null = membership?.series ?? null
+        const episodes: SeriesEpisode[] = membership?.episodes ?? []
+        if (chosen && !allSeries.some((s) => s.id === chosen.id)) allSeries.unshift(chosen)
 
         const titleOf = (id: string) =>
           videos.find((v) => v.id === id)?.title ?? "A video not in this list"
@@ -472,17 +479,104 @@ export function useLinkEditor(postId: string, creatorId: string | null) {
   }, [])
 
   /**
-   * Replace the whole slot list — a reorder, a removal, a field edit.
+   * Replace the whole slot list — a reorder or a field edit. Not a removal:
+   * that is `removeSlot`, because it talks to the server.
    *
    * Deliberately NOT capped at `MAX_EPISODES` here. The cap belongs on the
    * "add" control, and applying it to every write would TRUNCATE a series that
-   * already has more episodes than this screen would create — which is exactly
-   * the shrink the server cannot perform. A longer list loaded from the server
-   * stays as long as it is.
+   * already has more episodes than this screen would create — a removal the
+   * creator never confirmed. A longer list loaded from the server stays as
+   * long as it is.
    */
   const setSlots = useCallback((next: EpisodeSlot[]) => {
     setDraft((d) => ({ ...d, slots: next }))
   }, [])
+
+  /**
+   * Take one episode out of the series.
+   *
+   * ── This writes NOW, like `makeSeries`, and unlike everything else ────────
+   * A removal cannot wait for Save. The save path is a list of upserts, and
+   * an upsert cannot say "and nothing at episode 2 any more"; the only thing
+   * that can is `DELETE …/episodes/{ref}`, so it is sent the moment the
+   * creator confirms. ./sequence.ts's `episodeRemoval` chooses the ref (the
+   * post id when that video is saved here, the number when the position's
+   * saved video has been replaced on screen) and says why.
+   *
+   * ── Optimistic, with a rollback that restores BOTH lists ─────────────────
+   * The slot and its saved row leave together before the request goes, so
+   * the numbers on screen (which come from the saved rows) and the rows on
+   * screen agree at every render; a removal that dropped the slot and kept
+   * the row would show "episode 3" on a two-slot list. On failure both come
+   * back exactly as they were, including the slot's position and any unsaved
+   * title, and the failure is said in the section's outcome line.
+   *
+   * ── The remaining numbers do not move ────────────────────────────────────
+   * Saved 1, 2, 3, remove 2: the server has 1 and 3, the screen shows 1 and
+   * 3, and nothing is dirty, because `episodeNumbers` pairs the two remaining
+   * slots with the two remaining numbers. No renumber is queued. The watch
+   * page's "next episode" steps over the gap on its own.
+   *
+   * An unsaved slot (added this session) is dropped locally with no request.
+   */
+  const removeSlot = useCallback(
+    async (key: string) => {
+      const index = draft.slots.findIndex((s) => s.key === key)
+      const plan = episodeRemoval(savedEpisodes, draft.slots, index)
+      if (!plan) return
+
+      const previousSlots = draft.slots
+      const previousSaved = savedEpisodes
+      const previousBaseline = baseline.slots
+      setDraft((d) => ({ ...d, slots: d.slots.filter((s) => s.key !== key) }))
+
+      if (plan.ref === null || !plan.savedRow || !draft.seriesId) return
+      const seriesId = draft.seriesId
+      const row = plan.savedRow
+      const remainingSaved = savedEpisodes.filter((r) => r !== row)
+      setSavedEpisodes(remainingSaved)
+      // The baseline moves with the SAVED rows, not with the draft: it is the
+      // fingerprint of what the server now holds, so a series that was clean
+      // before the removal is clean after it, and an unsaved reorder that was
+      // dirty before it is still dirty. (The fingerprint reads only post ids
+      // and titles, so the key and title lookups are irrelevant here.)
+      setBaseline((b) => ({
+        ...b,
+        slots: slotsFingerprint(
+          seriesId,
+          slotsFromEpisodes(remainingSaved, () => "", () => "")
+        ),
+      }))
+
+      try {
+        const result = await removeSeriesEpisode(seriesId, plan.ref)
+        if (!live.current) return
+        setOutcomes([
+          {
+            section: "sequence",
+            ok: true,
+            message:
+              result === "already-gone"
+                ? `Episode ${plan.episodeNum} was already gone from this series.`
+                : `Episode ${plan.episodeNum} removed. The other episodes keep their numbers.`,
+          },
+        ])
+      } catch (error) {
+        if (!live.current) return
+        setDraft((d) => ({ ...d, slots: previousSlots }))
+        setSavedEpisodes(previousSaved)
+        setBaseline((b) => ({ ...b, slots: previousBaseline }))
+        setOutcomes([
+          {
+            section: "sequence",
+            ok: false,
+            message: `Episode ${plan.episodeNum} could not be removed: ${writeFailureMessage(error)}`,
+          },
+        ])
+      }
+    },
+    [draft.slots, draft.seriesId, savedEpisodes, baseline.slots]
+  )
 
   const addSlot = useCallback((postIdToAdd: string, title: string) => {
     setDraft((d) => {
@@ -538,11 +632,11 @@ export function useLinkEditor(postId: string, creatorId: string | null) {
    * This writes IMMEDIATELY, unlike everything else on the screen, and the
    * section says so. A series is a container: episodes are addressed by its id,
    * so there is nothing to put them in until it exists. Worth being blunt with
-   * the creator about the cost, because this editor cannot undo it: the
-   * server has had a delete route for a series since 2026-09-12, but nothing
+   * the creator about the cost, because this editor does not undo it: the
+   * server has `DELETE /v1/video-series/{id}` (since 2026-09-12) and nothing
    * in ./api.ts calls it, so from here an empty series made by mistake stays.
-   * It is invisible to viewers until it has episodes, which is the only
-   * mitigation there is until removal is wired in.
+   * Episodes can be removed one at a time now (`removeSlot`); the container
+   * cannot. It is invisible to viewers until it has episodes.
    */
   const makeSeries = useCallback(
     async (title: string, description: string) => {
@@ -647,13 +741,14 @@ export function useLinkEditor(postId: string, creatorId: string | null) {
           message: "Pick or create a series before saving the sequence.",
         })
       } else if (blocked) {
+        // Not a shape the editor produces on its own; see `strandedEpisodes`.
         results.push({
           section: "sequence",
           ok: false,
           message:
-            `Episode ${stranded.join(", ")} would be left behind, and this platform has no way ` +
-            `to remove an episode from a series. Put a video back in that slot, or replace it ` +
-            `with a different one.`,
+            `Episode ${stranded.join(", ")} is on the server but not in this list, so the ` +
+            `list could not be saved without leaving it behind. Discard to reload the series, ` +
+            `then remove the episode if you do not want it.`,
         })
       } else if (incomplete) {
         results.push({
@@ -746,6 +841,7 @@ export function useLinkEditor(postId: string, creatorId: string | null) {
     setUpNext,
     setSlots,
     addSlot,
+    removeSlot,
     chooseSeries,
     makeSeries,
     save,

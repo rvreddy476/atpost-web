@@ -7,39 +7,41 @@
  * and `SeriesNext` is the rail that offers episode 2 at the end of episode 1.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * THE ONE THING THAT SHAPES THIS WHOLE FILE: THIS EDITOR DOES NOT REMOVE
+ * THE ONE THING THAT SHAPES THIS WHOLE FILE: A NUMBER BELONGS TO A POSITION,
+ * AND A REMOVED NUMBER STAYS REMOVED
  *
- * When this file was written (2026-09-10) the server had no delete at all:
- * the `vseries` group in post-service's handler.go registered exactly four
- * routes (create, get, list episodes, add episode), and `DELETE` on a series
- * or on an episode answered gin's bare `404 page not found`, the signature of
- * an unrouted path. That is no longer true. As of 2026-09-12 the server has
- * delete routes for a series and for an episode. What is still true is that
- * THIS EDITOR DOES NOT CALL THEM: nothing in ./api.ts sends a DELETE, and
- * every refusal below was designed for a world without one. Wiring removal
- * in is its own change with its own questions (what happens to the numbers
- * after a removed episode, and to a viewer mid-series), and until it lands
- * the editor's behaviour is exactly what it was.
+ * When this file was written (2026-09-10) the server had no delete at all,
+ * and every refusal in the first version was designed for a world without
+ * one: a series could grow and be rearranged but never shrink. As of
+ * 2026-09-12 the server has `DELETE /v1/video-series/{id}/episodes/{ref}`
+ * (`ref` is an episode number or a post id, 204) and this editor calls it,
+ * from `removeSeriesEpisode` in ./api.ts. That changed the rule the numbers
+ * follow, and the rule is the server's:
  *
- * So the two consequences stand, and both are user-visible rather than
- * internal:
+ *   A DELETE LEAVES A GAP. IT DOES NOT RENUMBER.
  *
- *   1. FROM HERE, A SERIES CAN GROW AND BE REARRANGED BUT NOT SHRINK. Once
- *      episode 3 exists, some video is episode 3 until something removes it,
- *      and this editor is not yet that something; the only thing a creator
- *      can change here is WHICH video it is. So the editor refuses to shorten
- *      a saved series and says why, rather than appearing to shorten it and
- *      leaving a stranded row on the server. `strandedEpisodes` is what that
- *      refusal is computed from.
+ * Remove episode 2 of three and the series is episodes 1 and 3. Nothing
+ * becomes episode 2 until a creator puts something there. The watch page's
+ * `nextEpisode` already treats a gap as "keep going", so a viewer at the end
+ * of episode 1 is offered episode 3, which is the right thing to be offered.
  *
- *   2. THE SAME POST CAN OCCUPY TWO EPISODE NUMBERS, and that is not
- *      hypothetical — it was reproduced: upserting post C at episode 1 while
- *      it was already episode 3 answered 201 and left it at both. The damage
- *      is on the WATCH page, not here: `nextEpisode` finds the FIRST index of
- *      a post and offers the one after it, so a video that is both episode 1
- *      and episode 3 offers episode 2 at its end — and episode 2 offers
- *      episode 3, which is the same video again. A loop. `duplicateSlots`
- *      refuses it before it can be written.
+ * So the numbering here is NOT "index plus one" any more. It is the SAVED
+ * numbers, in order, one per position, and then the next unused number for
+ * every position past what is saved — `episodeNumbers`. Reordering still
+ * cannot leave a number behind (a slot carries no number of its own; the
+ * positions do), and a gap the server has is a gap this editor shows,
+ * because an editor that silently closed it would write episode 3 to episode
+ * 2 on the next save and disagree with the server about which video is
+ * which.
+ *
+ * The one refusal that survives is the loop: THE SAME POST CAN OCCUPY TWO
+ * EPISODE NUMBERS, and that is not hypothetical — it was reproduced:
+ * upserting post C at episode 1 while it was already episode 3 answered 201
+ * and left it at both. The damage is on the WATCH page, not here:
+ * `nextEpisode` finds the FIRST index of a post and offers the one after it,
+ * so a video that is both episode 1 and episode 3 offers episode 2 at its
+ * end — and episode 2 offers episode 3, which is the same video again. A
+ * loop. `duplicateSlots` refuses it before it can be written.
  *
  * Pure: no React, no network. ./sequence.test.ts.
  */
@@ -55,10 +57,11 @@ import { isUuid } from "./model"
  * 409 SERIES_FULL past that), so this one is ours to impose. It is imposed on
  * what this screen can ADD; a series that already has more episodes than
  * this (written by the phone, by the upload studio, or by a contract probe)
- * is loaded and shown in full rather than truncated, because truncating it
- * here is exactly the shrink this editor cannot perform. The upload studio's
- * "Series" card keeps to the same number so it cannot make a series this
- * screen then refuses to touch.
+ * is loaded and shown in full rather than truncated: a truncation would be a
+ * removal the creator did not ask for, and removal here is a deliberate,
+ * confirmed act on one episode at a time. The upload studio's "Series" card
+ * keeps to the same number so it cannot make a series this screen then
+ * refuses to touch.
  */
 export const MAX_EPISODES = 3
 
@@ -69,10 +72,10 @@ export const FIRST_EPISODE_NUM = 1
  * One position in the sequence, as the creator is editing it.
  *
  * There is no `episodeNum` on the slot. That is the whole design: a slot's
- * number is its INDEX + 1, computed at the moment it is needed, so reordering
- * cannot leave a number behind. A slot that carried its own number would need
- * every reorder to remember to renumber, and the one that forgets is the one
- * that writes episode 2 twice.
+ * number is the number of its POSITION (`episodeNumbers`), computed at the
+ * moment it is needed, so reordering cannot leave a number behind. A slot
+ * that carried its own number would need every reorder to remember to
+ * renumber, and the one that forgets is the one that writes episode 2 twice.
  *
  * `key` is local and stable across renders, like `AlternateDraft.key` and for
  * the same reason.
@@ -86,9 +89,56 @@ export interface EpisodeSlot {
   title: string
 }
 
-/** The slot's episode number: its place in the list, 1-based. */
+/**
+ * The episode number of a position in a series that has nothing saved.
+ *
+ * Its place in the list, 1-based. This is the FRESH case only; once a series
+ * has saved rows the numbers come from them — see `episodeNumbers`, which is
+ * what every caller with a saved list should ask.
+ */
 export function episodeNumAt(index: number): number {
   return index + FIRST_EPISODE_NUM
+}
+
+/** The saved episode numbers, ascending, with anything unreadable dropped. */
+export function savedEpisodeNums(saved: readonly SeriesEpisode[]): number[] {
+  return saved
+    .map((e) => e.episode_num)
+    .filter((num) => Number.isFinite(num))
+    .sort((a, b) => a - b)
+}
+
+/**
+ * The episode number of every position, for a list of `slotCount` slots.
+ *
+ * ── The saved numbers first, in order, gaps and all ───────────────────────
+ * A series saved as 1, 3, 4 has three positions numbered 1, 3, 4 — not 1, 2,
+ * 3. The server does not renumber on a delete and neither does this editor,
+ * so the number a position shows is the number the row on the server has,
+ * and a reorder writes the moved video to THAT number. Closing the gap here
+ * would mean the next save rewrote episode 3 as episode 2, which is a change
+ * nobody asked for and a disagreement with the server about which video is
+ * which until it lands.
+ *
+ * ── Then the next unused number for every position past the saved ones ───
+ * A slot the creator has added goes after the highest saved number, never
+ * into a gap. The list on screen reads top to bottom as playing order, and a
+ * video added at the bottom of the list is a video that plays last; filling
+ * the gap at 2 would make it play second while sitting third on screen.
+ *
+ * Fewer slots than saved rows is not a shape this editor produces (a removal
+ * drops the saved row and the slot together), but it is answered rather than
+ * thrown on: the first `slotCount` saved numbers. `strandedEpisodes` is what
+ * names the rest.
+ */
+export function episodeNumbers(saved: readonly SeriesEpisode[], slotCount: number): number[] {
+  const nums = savedEpisodeNums(saved).slice(0, Math.max(0, slotCount))
+  let next = nums.length > 0 ? nums[nums.length - 1]! + 1 : FIRST_EPISODE_NUM
+  while (nums.length < slotCount) {
+    nums.push(next)
+    next += 1
+  }
+  return nums
 }
 
 /**
@@ -160,17 +210,16 @@ export function slotProblems(slots: readonly EpisodeSlot[]): Map<string, string>
  * The saved episodes as slots, in playing order.
  *
  * Ordered by `episode_num` and NOT by the array the server sent — it does
- * order them, but this list is about to be renumbered by position and an
- * ordering assumption inherited from a response is the kind that holds until
- * the day it does not.
+ * order them, but the position of a slot is what `episodeNumbers` pairs with
+ * a saved number, and an ordering assumption inherited from a response is the
+ * kind that holds until the day it does not.
  *
- * A GAP in the saved numbering (1, 2, 4 — which happens because 3 can never be
- * deleted but CAN be overwritten, and because nothing stops the phone writing
- * 4 first) is CLOSED by this: the slots come back 1, 2, 3. That is a real
- * change to the data and it is the right one — `nextEpisode` on the watch page
- * already treats a gap as "keep going", so closing it changes nothing a viewer
- * sees, and leaving it would mean the editor's numbers and the server's
- * numbers disagree on screen.
+ * A GAP in the saved numbering (1, 2, 4 — from a removal, or because nothing
+ * stops the phone writing 4 first) is KEPT. The slots come back in that
+ * order and `episodeNumbers` labels them 1, 2, 4. An earlier version closed
+ * the gap to 1, 2, 3 and then could not save, because the renumber stranded
+ * episode 4 and there was no delete to un-strand it. Now that a delete
+ * exists the honest thing is to show the numbers the server has.
  */
 export function slotsFromEpisodes(
   episodes: readonly SeriesEpisode[],
@@ -216,6 +265,12 @@ export interface EpisodeWrite {
  * first episode. That is what `episodeNumAt` is for and why nothing here
  * writes an index straight to the wire.
  *
+ * ── A removed episode is not a write ──────────────────────────────────────
+ * Removal goes through `removeSeriesEpisode` the moment it is confirmed, not
+ * through here, and the numbers come from `episodeNumbers`, so a series saved
+ * as 1, 3 with two untouched slots produces NO writes: nothing is renumbered
+ * to fill the 2.
+ *
  * A slot with no post id produces no write. An incomplete row must never be
  * half-saved — the whole point of validating before building.
  */
@@ -226,10 +281,11 @@ export function episodeWrites(
   const byNum = new Map<number, SeriesEpisode>()
   for (const episode of saved) byNum.set(episode.episode_num, episode)
 
+  const numbers = episodeNumbers(saved, slots.length)
   const writes: EpisodeWrite[] = []
   slots.forEach((slot, index) => {
     if (!slot.postId) return
-    const episodeNum = episodeNumAt(index)
+    const episodeNum = numbers[index]!
     const title = slot.title.trim() || null
     const current = byNum.get(episodeNum)
     const unchanged =
@@ -242,45 +298,105 @@ export function episodeWrites(
 }
 
 /**
- * The saved episode numbers this arrangement would abandon — and cannot.
+ * The saved episode numbers this arrangement has no position for.
  *
- * Empty is the good case and is what the save path requires. A non-empty
- * answer means the creator has removed a slot from a series that already had
- * that many episodes, and there is no route that would delete the leftover.
- * Saving anyway would leave a series whose `episode_count` still says 3 and
- * whose third episode is whatever it was before, silently, while the editor
- * showed two.
- *
- * So this is a REFUSAL and not a warning-and-proceed. The section says what it
- * would take to make it possible — a delete route — rather than pretending the
- * limit is a design choice.
+ * Empty is the normal case and is what the save path requires. It used to be
+ * the everyday refusal — "a shorter list strands the tail and nothing can
+ * delete it" — and it is now a consistency guard: removal drops the saved row
+ * and the slot together (`episodeRemoval`, then `removeSeriesEpisode`), so a
+ * list shorter than what is saved means the two have come apart, which is a
+ * reason to reload rather than to write. A save that went ahead would leave
+ * episode 3 on the server while the editor showed two, silently.
  */
 export function strandedEpisodes(
   saved: readonly SeriesEpisode[],
   slots: readonly EpisodeSlot[]
 ): number[] {
-  const kept = new Set(slots.map((_, index) => episodeNumAt(index)))
-  return saved
-    .map((e) => e.episode_num)
-    .filter((num) => Number.isFinite(num) && !kept.has(num))
-    .sort((a, b) => a - b)
+  const kept = new Set(episodeNumbers(saved, slots.length))
+  return savedEpisodeNums(saved).filter((num) => !kept.has(num))
 }
 
 /**
  * Is the slot at this index one the creator may remove?
  *
- * Only the tail beyond what is already saved. Removing slot 2 of three saved
- * episodes is a shrink of the whole list — every later slot moves up and the
- * last saved number is stranded — so the answer for anything but the trailing
- * unsaved slots is no. See `strandedEpisodes`.
+ * Any slot that exists. This used to be "only the unsaved tail", because
+ * removing a saved episode had nowhere to go on the server; now it goes to
+ * `DELETE …/episodes/{ref}`, and removing from the middle is exactly the case
+ * the gap rule exists for. What is left is the bounds check, so a button that
+ * is pressed on an empty list does nothing rather than deleting `undefined`.
  */
-export function canRemoveSlot(
-  savedCount: number,
-  index: number,
-  slotCount: number
-): boolean {
-  if (slotCount <= 0) return false
-  // Only the last slot is ever removable, and only when dropping it still
-  // leaves room for every episode the server already has.
-  return index === slotCount - 1 && slotCount - 1 >= savedCount
+export function canRemoveSlot(index: number, slotCount: number): boolean {
+  return Number.isInteger(index) && index >= 0 && index < slotCount
+}
+
+/**
+ * The episode numbers between 1 and the highest saved one that nothing holds.
+ *
+ * For the panel to SAY, not to fix. A gap is what a removal leaves and the
+ * server's rule is that it stays; a creator looking at "Episode 1, Episode
+ * 3" deserves one sentence about why there is no 2 rather than a list that
+ * looks like a bug.
+ */
+export function episodeGaps(saved: readonly SeriesEpisode[]): number[] {
+  const nums = savedEpisodeNums(saved)
+  if (nums.length === 0) return []
+  const held = new Set(nums)
+  const gaps: number[] = []
+  for (let num = FIRST_EPISODE_NUM; num < nums[nums.length - 1]!; num += 1) {
+    if (!held.has(num)) gaps.push(num)
+  }
+  return gaps
+}
+
+/** What removing one slot means for the server. */
+export interface EpisodeRemoval {
+  /** The number the position shows, whether or not the server has it. */
+  episodeNum: number
+  /**
+   * What to send as `{ref}` — or null when nothing on the server needs
+   * deleting, because the slot was never saved.
+   */
+  ref: string | number | null
+  /** The saved row `ref` names, for the optimistic drop and the rollback. */
+  savedRow: SeriesEpisode | null
+}
+
+/**
+ * How to remove the slot at `index`, given what is saved.
+ *
+ * ── By post id when the video is saved in this series ─────────────────────
+ * The route takes either, and the choice matters when there is an UNSAVED
+ * reorder on screen. Saved 1:A, 2:B; the creator drags to B, A and then
+ * removes A, which now sits at position 2. Deleting "episode 2" would delete
+ * B — the video they kept — and a Discard right after would show them A, the
+ * one they removed. Deleting by A's post id removes A, whatever number it
+ * holds today, and the remaining slot B is then written to whichever number
+ * survives on the next save.
+ *
+ * ── By number when the video at that position is not saved ────────────────
+ * The creator replaced episode 2's video with D and has not saved, then
+ * removes it. D is on no row, so deleting by its id would 404 while B sat on
+ * the server at 2 with nothing on screen to remove it. What they are removing
+ * is "episode 2", so the number is the ref, and B's row is what goes.
+ *
+ * ── Null when the slot was never saved and its number is free ─────────────
+ * A slot added this session past the saved rows. Dropping it is a local edit
+ * and no request is owed.
+ */
+export function episodeRemoval(
+  saved: readonly SeriesEpisode[],
+  slots: readonly EpisodeSlot[],
+  index: number
+): EpisodeRemoval | null {
+  if (!canRemoveSlot(index, slots.length)) return null
+  const slot = slots[index]!
+  const episodeNum = episodeNumbers(saved, slots.length)[index]!
+
+  const byPost = slot.postId ? (saved.find((e) => e.post_id === slot.postId) ?? null) : null
+  if (byPost) return { episodeNum, ref: slot.postId, savedRow: byPost }
+
+  const byNum = saved.find((e) => e.episode_num === episodeNum) ?? null
+  if (byNum) return { episodeNum, ref: episodeNum, savedRow: byNum }
+
+  return { episodeNum, ref: null, savedRow: null }
 }

@@ -256,7 +256,7 @@ describe("the chip rail's wire arguments", () => {
   })
 
   it("sends exactly one narrowing, never both", () => {
-    expect(chipQuery({ kind: "following" })).toEqual({ followingOnly: true })
+    expect(chipQuery({ kind: "subscriptions" })).toEqual({ subscribedOnly: true })
     expect(chipQuery({ kind: "category", id: "comedy" })).toEqual({ category: "comedy" })
   })
 

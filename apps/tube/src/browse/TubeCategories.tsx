@@ -3,7 +3,7 @@
 /**
  * The chip rail across the top of the home grid.
  *
- *     [ All ] [ Following ] [ Comedy ] [ Music ] [ Dance ] [ Food ] …
+ *     [ All ] [ Subscriptions ] [ Comedy ] [ Music ] [ Dance ] [ Food ] …
  *
  * ── The vocabulary is the server's, and it is the phone's too ─────────────
  * `GET /v1/posts/categories` answers `[{id,label}]` and the ids are what
@@ -13,13 +13,16 @@
  * is called or which ones exist. Nothing here invents, hardcodes or
  * prettifies a label.
  *
- * ── All and Following are not categories ──────────────────────────────────
+ * ── All and Subscriptions are not categories ──────────────────────────────
  * They are the two NARROWINGS the feed endpoint understands that the taxonomy
  * does not describe, and they sit in the same rail because to a person they
  * are the same act. They are constructed rather than fetched, they are always
- * present, and "Following" is only offered to a signed-in viewer — for an
- * anonymous browser the page is reading the public shelf, which has no follow
- * graph to narrow by, so the chip would be a control that could not work.
+ * present, and "Subscriptions" is only offered to a signed-in viewer — for an
+ * anonymous browser the page is reading the public shelf, which has no
+ * subscription graph to narrow by, so the chip would be a control that could
+ * not work. It asks for the same list the Subscriptions page in the left rail
+ * shows (`subscribed_only=true`), under the same word; ./chips.ts has the
+ * note on why it stopped being "Following".
  *
  * ── The rail scrolls; it never wraps and it never shrinks ─────────────────
  * `overflow-x-auto` with `shrink-0` on every chip. A wrapping rail is two and
@@ -32,7 +35,7 @@
  *
  * ── A failed taxonomy is not a failed page ────────────────────────────────
  * An empty list and a failed list are treated identically: the rail renders
- * All (and Following) alone. A chip rail is a narrowing of something already
+ * All (and Subscriptions) alone. A chip rail is a narrowing of something already
  * on screen, so its absence costs a filter and not the videos.
  */
 
@@ -41,9 +44,9 @@ import { fetchCategories, type TubeCategory } from "@/tube/channelApi"
 // The chip vocabulary and its translation to wire parameters are in
 // ./chips.ts, which is pure and therefore testable without a DOM. This file is
 // the rail's rendering.
-import { ALL_CHIP, chipKey, chipLabel, type TubeChip } from "./chips"
+import { ALL_CHIP, SUBSCRIPTIONS_CHIP, chipKey, chipLabel, type TubeChip } from "./chips"
 
-export { ALL_CHIP, chipKey, chipLabel }
+export { ALL_CHIP, SUBSCRIPTIONS_CHIP, chipKey, chipLabel }
 export type { TubeChip }
 
 export function useCategories(): TubeCategory[] {
@@ -80,7 +83,7 @@ export function TubeCategories({
 }) {
   const chips: TubeChip[] = [
     ALL_CHIP,
-    ...(signedIn ? [{ kind: "following" } as TubeChip] : []),
+    ...(signedIn ? [SUBSCRIPTIONS_CHIP] : []),
     ...categories.map((category) => ({ kind: "category", id: category.id }) as TubeChip),
   ]
   const currentKey = chipKey(selected)

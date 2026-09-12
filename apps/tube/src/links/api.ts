@@ -4,10 +4,10 @@
  * ═══════════════════════════════════════════════════════════════════════════
  * THE READS ARE NOT REDEFINED HERE, ON PURPOSE
  *
- * `fetchVideoCards`, `fetchEndScreens`, `fetchSeriesEpisodes` and
- * `fetchCreatorVideoSeries` already exist in `src/watch/api.ts`, with the wire
- * shapes and the two-services-worth of notes behind them. They are imported
- * and re-exported rather than restated.
+ * `fetchVideoCards`, `fetchEndScreens`, `fetchSeriesEpisodes`,
+ * `fetchCreatorVideoSeries` and `fetchPostSeries` already exist in
+ * `src/watch/api.ts`, with the wire shapes and the two-services-worth of
+ * notes behind them. They are imported and re-exported rather than restated.
  *
  * That is the single most important decision in this directory. The whole
  * hazard of an authoring flow built beside a rendering flow is that the two
@@ -30,6 +30,14 @@
  *   POST /v1/video-series            {title,…}     -> 201 {VideoSeries}
  *   POST /v1/video-series/{id}/episodes            -> 201 {SeriesEpisode}
  *
+ * And one that arrived on 2026-09-12, which is why the sequence can shrink:
+ *
+ *   DELETE /v1/video-series/{id}/episodes/{ref}    -> 204, no body
+ *     `ref` is an episode number OR a post id. It leaves a gap and does not
+ *     renumber — ./sequence.ts is built around that. (`DELETE
+ *     /v1/video-series/{id}` exists too, 204; this editor does not call it,
+ *     so a series made by mistake still stays. See `makeSeries`.)
+ *
  * And the four failures worth naming, each reproduced rather than assumed:
  *
  *   · `{}` with no `cards` key at all is `400 INVALID_REQUEST … 'Cards' …
@@ -51,9 +59,12 @@ import { fetchAuthorVideos } from "@/tube/channelApi"
 import {
   fetchCreatorVideoSeries,
   fetchEndScreens,
+  fetchPostSeries,
   fetchSeriesEpisodes,
   fetchVideoCards,
+  isNotFound,
   type EndScreen,
+  type PostSeries,
   type SeriesEpisode,
   type VideoCard,
   type VideoSeries,
@@ -65,10 +76,11 @@ import type { EpisodeWrite } from "./sequence"
 export {
   fetchCreatorVideoSeries,
   fetchEndScreens,
+  fetchPostSeries,
   fetchSeriesEpisodes,
   fetchVideoCards,
 }
-export type { EndScreen, SeriesEpisode, VideoCard, VideoSeries }
+export type { EndScreen, PostSeries, SeriesEpisode, VideoCard, VideoSeries }
 
 interface Envelope<T> {
   data?: T
@@ -247,6 +259,57 @@ export async function addSeriesEpisode(
   const episode = res.data?.data
   if (!episode) throw new Error("The episode was saved but the server did not describe it.")
   return episode
+}
+
+/** What a removal found on the server. Both mean the row is not there now. */
+export type EpisodeRemovalResult = "removed" | "already-gone"
+
+/**
+ * Take one episode out of a series.
+ *
+ * `DELETE /v1/video-series/{id}/episodes/{ref}`, where `ref` is an episode
+ * number or a post id — the route accepts either, and ./sequence.ts's
+ * `episodeRemoval` decides which to send and why. A 204 is the whole answer;
+ * there is no body to parse, so the only things this function can get wrong
+ * are the ref it sends and the status it swallows.
+ *
+ * ── A 404 is "already gone", not a failure ────────────────────────────────
+ * The creator asked for the row to not be there, and it is not there. A
+ * second click on a slow connection, or a phone that removed the same episode
+ * a minute ago, both arrive as a 404, and turning either into a red "that
+ * video no longer exists" would be telling the creator the thing they wanted
+ * has failed to happen. It is returned as its own word rather than folded
+ * into "removed" so the caller can say something quieter if it wants to.
+ *
+ * ── The ref is checked before it goes, because the error would not say ────
+ * A number below 1 is not an episode number, and a string that is not a UUID
+ * is not a post id. Either would come back as a 404 from the route, which
+ * this function would then read as "already gone" and report as success.
+ * That is the one way a bug here could look like a working feature, so the
+ * shape is refused up front with a sentence that names it.
+ *
+ * Everything else is rethrown; `writeFailureMessage` has the sentences.
+ */
+export async function removeSeriesEpisode(
+  seriesId: string,
+  ref: string | number
+): Promise<EpisodeRemovalResult> {
+  if (typeof ref === "number") {
+    if (!Number.isInteger(ref) || ref < 1) {
+      throw new Error(`Episode numbers start at 1; got ${String(ref)}.`)
+    }
+  } else if (!isUuid(ref)) {
+    throw new Error("That episode's video id is not a valid id, so nothing was sent.")
+  }
+  try {
+    await api.delete(
+      `/v1/video-series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(String(ref))}`
+    )
+    return "removed"
+  } catch (error) {
+    if (isNotFound(error)) return "already-gone"
+    throw error
+  }
 }
 
 /**

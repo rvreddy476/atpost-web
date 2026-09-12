@@ -8,28 +8,29 @@
  * that has an order at all.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * TWO THINGS ON THIS PANEL ARE NOT DESIGN CHOICES, THEY ARE WHAT THIS EDITOR
- * CAN WRITE
+ * TWO THINGS ON THIS PANEL WRITE STRAIGHT AWAY, AND THE PANEL SAYS SO
  *
- * 1. CREATING A SERIES WRITES IMMEDIATELY. Everything else on this screen is
- *    held until Save. A series cannot be, because episodes are addressed by
- *    its id and there is nothing to put them in until it exists. And this
- *    editor cannot delete one afterwards: the server grew a delete route on
- *    2026-09-12, but nothing in ./api.ts calls it yet, so from here an empty
- *    series made by mistake stays. The panel says both, before the button.
+ * Everything else on this screen is held until Save. These two are not:
  *
- * 2. FROM HERE, AN EPISODE IS REPLACED, NOT REMOVED. Same reason. So the
- *    remove control appears only on a trailing slot the server has not seen
- *    yet (`canRemoveSlot`), and an arrangement that would abandon a saved
- *    episode number is refused with the number named rather than warned
- *    about and saved anyway. ./sequence.ts has the whole argument, including
- *    what changed on the server and what did not change here.
+ * 1. CREATING A SERIES. Episodes are addressed by the series' id and there is
+ *    nothing to put them in until it exists. This editor does not delete a
+ *    series afterwards (the server has the route; nothing in ./api.ts calls
+ *    it), so an empty one made by mistake stays. Said before the button.
  *
- * Reordering, on the other hand, is completely safe and is the thing this
- * panel is for: `episodeWrites` recomputes every slot's number from its
- * POSITION, and episode numbers start at 1 — `episode_num: 0` is rejected by
- * the handler as a MISSING field, which is the least helpful error on the
- * endpoint and the reason no index is ever written straight to the wire.
+ * 2. REMOVING AN EPISODE. The save path is a list of upserts and an upsert
+ *    cannot say "nothing here any more"; `DELETE …/episodes/{ref}` can, and
+ *    it is sent when the creator confirms. Every slot has a Remove control,
+ *    saved or not; a saved one asks first, inline, because the click is the
+ *    write. What the panel then shows follows the server's rule: THE OTHER
+ *    EPISODES KEEP THEIR NUMBERS. Remove episode 2 of three and the list
+ *    reads "Episode 1, Episode 3", with one sentence saying why there is no
+ *    2. ./sequence.ts has the whole argument.
+ *
+ * Reordering is the thing this panel is for and is safe: `episodeWrites`
+ * recomputes every slot's number from its POSITION (`episodeNumbers`), and
+ * episode numbers start at 1 — `episode_num: 0` is rejected by the handler as
+ * a MISSING field, which is the least helpful error on the endpoint and the
+ * reason no index is ever written straight to the wire.
  */
 
 import { useState } from "react"
@@ -37,8 +38,9 @@ import { ArrowDown, ArrowUp, ListVideo, Plus, Trash2 } from "lucide-react"
 import type { SeriesEpisode, VideoSeries } from "@/watch/api"
 import {
   MAX_EPISODES,
-  canRemoveSlot,
-  episodeNumAt,
+  episodeGaps,
+  episodeNumbers,
+  episodeRemoval,
   moveSlot,
   type EpisodeSlot,
 } from "./sequence"
@@ -61,6 +63,8 @@ export interface SequenceSectionProps {
   onCreateSeries: (title: string, description: string) => void
   onSetSlots: (next: EpisodeSlot[]) => void
   onAddSlot: (postId: string, title: string) => void
+  /** Writes immediately for a saved episode. See the header. */
+  onRemoveSlot: (key: string) => void
 }
 
 export function SequenceSection({
@@ -78,12 +82,18 @@ export function SequenceSection({
   onCreateSeries,
   onSetSlots,
   onAddSlot,
+  onRemoveSlot,
 }: SequenceSectionProps) {
   const [making, setMaking] = useState(false)
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
+  // The one slot whose Remove is awaiting a yes. Local to the panel: it is
+  // not draft state, and a re-render from elsewhere should not lose it.
+  const [confirmingKey, setConfirmingKey] = useState<string | null>(null)
 
   const subjectInSequence = slots.some((s) => s.postId === subjectId)
+  const numbers = episodeNumbers(savedEpisodes, slots.length)
+  const gaps = episodeGaps(savedEpisodes)
 
   return (
     <Section
@@ -140,10 +150,11 @@ export function SequenceSection({
           </div>
           <div className="mt-3">
             <Notice tone="warn">
-              This one button saves straight away, unlike everything else here —
-              episodes have to belong to a series that already exists. This
-              editor cannot delete a series afterwards, so an empty one made by
-              mistake stays. It is invisible to viewers until it has episodes.
+              This button saves straight away, like Remove on an episode and
+              unlike everything else here: episodes have to belong to a series
+              that already exists. This editor does not delete a series
+              afterwards, so an empty one made by mistake stays. It is invisible
+              to viewers until it has episodes.
             </Notice>
           </div>
           <div className="mt-3">
@@ -173,12 +184,16 @@ export function SequenceSection({
         <>
           <ol className="mt-4 space-y-3">
             {slots.map((slot, index) => {
-              const removable = canRemoveSlot(savedEpisodes.length, index, slots.length)
+              const num = numbers[index]!
+              // A slot the server holds a row for asks before it goes; one
+              // added this session is a local edit and just goes.
+              const onServer = episodeRemoval(savedEpisodes, slots, index)?.ref !== null
+              const confirming = confirmingKey === slot.key
               return (
                 <li key={slot.key} className="rounded-mo border border-mo bg-mo-sunken p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-[12px] font-semibold uppercase tracking-mo-eyebrow text-mo-body">
-                      Episode {episodeNumAt(index)}
+                      Episode {num}
                       {slot.postId === subjectId && (
                         <span className="ml-2 rounded-mo-pill bg-mo-cyan/15 px-2 py-0.5 text-[10px] normal-case tracking-normal text-mo-cyan">
                           this video
@@ -190,41 +205,48 @@ export function SequenceSection({
                         direction="up"
                         disabled={index === 0}
                         onClick={() => onSetSlots(moveSlot(slots, index, index - 1))}
-                        label={`Move episode ${episodeNumAt(index)} earlier`}
+                        label={`Move episode ${num} earlier`}
                       />
                       <MoveButton
                         direction="down"
                         disabled={index === slots.length - 1}
                         onClick={() => onSetSlots(moveSlot(slots, index, index + 1))}
-                        label={`Move episode ${episodeNumAt(index)} later`}
+                        label={`Move episode ${num} later`}
                       />
                       <button
                         type="button"
-                        disabled={!removable}
-                        onClick={() => onSetSlots(slots.filter((s) => s.key !== slot.key))}
-                        aria-label={
-                          removable
-                            ? `Remove episode ${episodeNumAt(index)}`
-                            : `Episode ${episodeNumAt(index)} cannot be removed`
-                        }
-                        title={
-                          removable
-                            ? undefined
-                            : "This editor cannot remove an episode once it is saved. You can put a different video in its place."
-                        }
-                        className="rounded-mo p-1 text-mo-body transition-colors duration-150 ease-mo hover:text-mo-bad focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-mo-body"
+                        aria-label={`Remove episode ${num}`}
+                        aria-expanded={onServer ? confirming : undefined}
+                        aria-controls={onServer ? `ep-${slot.key}-confirm` : undefined}
+                        onClick={() => {
+                          if (onServer) setConfirmingKey(confirming ? null : slot.key)
+                          else onRemoveSlot(slot.key)
+                        }}
+                        className="rounded-mo p-1 text-mo-body transition-colors duration-150 ease-mo hover:text-mo-bad focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
                       >
                         <Trash2 aria-hidden className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
 
+                  {confirming && onServer && (
+                    <RemoveConfirm
+                      id={`ep-${slot.key}-confirm`}
+                      episodeNum={num}
+                      onConfirm={() => {
+                        setConfirmingKey(null)
+                        onRemoveSlot(slot.key)
+                      }}
+                      onCancel={() => setConfirmingKey(null)}
+                    />
+                  )}
+
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div>
                       <span className="block text-[12px] font-semibold text-mo-body">Video</span>
                       <div className="mt-1">
                         <VideoPicker
-                          label={`Video for episode ${episodeNumAt(index)}`}
+                          label={`Video for episode ${num}`}
                           videos={library}
                           value={slot.postId}
                           truncated={libraryTruncated}
@@ -281,12 +303,22 @@ export function SequenceSection({
             </span>
           </div>
 
+          {gaps.length > 0 && (
+            <div className="mt-3">
+              <Notice>
+                There is no episode {gaps.join(", ")}. A removed episode leaves its
+                number empty rather than moving the others down, and a viewer at the end of
+                one episode is offered the next one that exists.
+              </Notice>
+            </div>
+          )}
+
           {stranded.length > 0 && (
             <div className="mt-3">
               <Notice tone="bad">
-                Saving would leave episode {stranded.join(", ")} behind, and this
-                editor cannot remove an episode from a series yet. Put a video back in that
-                slot, or replace it with a different one.
+                Episode {stranded.join(", ")} is on the server but not in this list, so it
+                cannot be saved as it stands. Discard to reload the series, then remove the
+                episode if you do not want it.
               </Notice>
             </div>
           )}
@@ -339,12 +371,59 @@ function MoveButton({
 }
 
 /**
+ * The inline yes-or-no under a saved episode's Remove.
+ *
+ * Inline and not a modal, because the row it is about is right there and the
+ * sentence is short. `role="alertdialog"` so a screen reader lands on the
+ * question rather than on the first button; the buttons say what they do in
+ * full ("Remove it", "Keep it") because "OK" under a destructive question is
+ * the wording that gets pressed by reflex. The destructive one is drawn in
+ * `mo-bad` and not in the ember primary, which this screen reserves for
+ * Save.
+ */
+function RemoveConfirm({
+  id,
+  episodeNum,
+  onConfirm,
+  onCancel,
+}: {
+  id: string
+  episodeNum: number
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div
+      id={id}
+      role="alertdialog"
+      aria-labelledby={`${id}-question`}
+      className="mt-3 rounded-mo border border-mo-bad/60 bg-mo-surface p-3"
+    >
+      <p id={`${id}-question`} className="text-[13px] text-mo-ink">
+        Remove episode {episodeNum} from this series? This happens straight away, not on
+        Save. The other episodes keep their numbers, so there will be no episode{" "}
+        {episodeNum} until you add one.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="rounded-mo-pill border border-mo-bad px-4 py-2 text-[13px] font-semibold text-mo-bad transition-colors duration-150 ease-mo hover:bg-mo-bad/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
+        >
+          Remove it
+        </button>
+        <Action onClick={onCancel}>Keep it</Action>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Adding an episode is a pick, not an empty row.
  *
- * An empty slot would immediately be an invalid one, and — because the tail
- * slot is the only removable one — a creator who opened it by accident would
- * be able to close it again but only from the end. Choosing the video first
- * means every slot that exists is a complete one.
+ * An empty slot would immediately be an invalid one, and a creator who opened
+ * it by accident would then have to remove it. Choosing the video first means
+ * every slot that exists is a complete one.
  */
 function AddEpisode({
   disabled,

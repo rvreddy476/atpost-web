@@ -173,6 +173,7 @@ export function LinkEditor({ postId }: { postId: string }) {
             onCreateSeries={(title, description) => void editor.makeSeries(title, description)}
             onSetSlots={editor.setSlots}
             onAddSlot={editor.addSlot}
+            onRemoveSlot={(key) => void editor.removeSlot(key)}
           />
 
           <UpNextSection

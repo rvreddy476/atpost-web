@@ -139,7 +139,11 @@ export interface TubeFeedQuery {
    * the request is then byte-identical to what it was before the chip rail.
    */
   category?: string | null
-  /** The home rail's "Following" chip: authors the viewer follows, and nobody else. */
+  /**
+   * Authors the viewer follows, and nobody else. Kept on the wire for the
+   * social and reels zones; since 2026-09-12 nothing in this zone sends it,
+   * because the home rail's chip became "Subscriptions" (see below).
+   */
   followingOnly?: boolean
   /**
    * The Subscriptions page: channels the viewer SUBSCRIBES to, newest first.
@@ -149,8 +153,8 @@ export interface TubeFeedQuery {
    * too, so every subscribed channel is also followed, but not every followed
    * account has a channel or is subscribed to, and the founder's decision is
    * that the Subscriptions tab shows exactly the channels somebody pressed
-   * Subscribe on. The "Following" chip stays on the follow graph, which is
-   * what its word says.
+   * Subscribe on. The home rail's chip is "Subscriptions" too, so the two
+   * surfaces say the same thing about the same list.
    */
   subscribedOnly?: boolean
   /** No session: the public shelf above instead of the ranked feed. */
