@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { SELLER_PAGE_SIZE, shipRequestBody } from './useSeller'
+import { SELLER_PAGE_SIZE, cancelRequestBody, shipRequestBody } from './useSeller'
+
+// The cancel body is one field the server refuses when empty (400
+// REASON_REQUIRED); the form trims before validating, and so does the body,
+// so the two cannot disagree about what "empty" means.
+describe('cancelRequestBody', () => {
+  it('sends the trimmed reason and nothing else', () => {
+    expect(cancelRequestBody('  out of stock  ')).toEqual({ reason: 'out of stock' })
+    expect(Object.keys(cancelRequestBody('x'))).toEqual(['reason'])
+  })
+})
 
 // The hooks themselves need a QueryClient and a browser; what can be pinned
 // without either is the exact JSON the ship action sends, because a field

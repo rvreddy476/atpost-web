@@ -11,9 +11,12 @@ import api from '@atpost/api-client'
 import type { FulfillmentStage, Order, OrderItem, SellerEarning, SellerReturnCard } from '@/hooks/useCommerce'
 import {
   nextOffset,
+  normaliseHistoryRow,
   normaliseShipment,
   normaliseShipmentEvent,
   normaliseTracking,
+  sellerActionPath,
+  type OrderHistoryRow,
   type SellerShipment,
   type SellerShipmentEvent,
   type ShipFormValues,
@@ -72,11 +75,15 @@ interface OrderPage {
 /**
  * The seller's orders, newest first, one stage at a time, in offset pages.
  *
- * Built on /seller/fulfillment rather than /seller/orders because only the
- * former carries the seller's lines and subtotal per order, and only the
- * former has a filter parameter. The route orders by created_at DESC
- * (store.GetOrdersBySeller) and takes limit/offset, not a cursor; the paging
- * rule is in `nextOffset` and its comment explains the odd stop condition.
+ * Built on /seller/fulfillment rather than /seller/orders. The latter now
+ * sends enriched rows (item_count, seller_subtotal_minor, total_minor,
+ * payment_method) and could carry the "All" chip alone, but it has no stage
+ * parameter and its row lacks the seller's lines and the address snapshot
+ * the list row renders; the fulfilment route carries all of that for every
+ * chip, so one route and one row shape serve the whole list. The route
+ * orders by created_at DESC (store.GetOrdersBySeller) and takes
+ * limit/offset, not a cursor; the paging rule is in `nextOffset` and its
+ * comment explains the odd stop condition.
  */
 export function useSellerOrderPages(stage: FulfillmentStage, limit = SELLER_PAGE_SIZE) {
   return useInfiniteQuery<OrderPage>({
@@ -142,35 +149,116 @@ export function useOrderShipments(orderId: string | undefined) {
   })
 }
 
+/**
+ * The order's status audit trail: GET /seller/orders/{id}/history, oldest
+ * first, normalised. A server that predates the route answers 404; the page
+ * reads that as "no history here" and falls back to the derived timeline,
+ * which is why this does not retry.
+ */
+export function useSellerOrderHistory(orderId: string | undefined) {
+  return useQuery<OrderHistoryRow[]>({
+    queryKey: ['commerce', 'seller', 'order', orderId, 'history'],
+    queryFn: async () => {
+      const raw = (await api.get(`/v1/commerce/seller/orders/${orderId}/history`)).data.data?.history
+      const list = Array.isArray(raw) ? raw : []
+      return list.map(normaliseHistoryRow).filter((r): r is OrderHistoryRow => !!r)
+    },
+    enabled: !!orderId,
+    retry: false,
+  })
+}
+
 /** The JSON body the ship action sends. Exported so the spelling is tested. */
 export function shipRequestBody(values: ShipFormValues): { courier: string; tracking_number: string } {
   return { courier: values.courier.trim(), tracking_number: normaliseTracking(values.tracking_number) }
 }
 
+/** The JSON body the cancel action sends. Exported so the spelling is tested. */
+export function cancelRequestBody(reason: string): { reason: string } {
+  return { reason: reason.trim() }
+}
+
 /**
- * Book the shipment: POST /orders/{id}/shipment.
+ * The body of every seller status write (service.SellerFulfilmentResult).
+ * `applied` is false on an idempotent repeat: the order was already in
+ * `status`. The page treats both answers as done, because they are.
+ */
+export interface SellerFulfilmentResult {
+  order_id: string
+  status: string
+  applied: boolean
+}
+
+/**
+ * After any fulfilment write, every query that shows this order's state is
+ * stale: the detail card, both list spellings, the shipments and the buyer's
+ * single-shipment view, and the history the timeline reads. `useSellerOrder`
+ * shares its key prefix with the history query, so one invalidation reaches
+ * both, but the shipments live under their own prefix.
+ */
+function useInvalidateOrder() {
+  const qc = useQueryClient()
+  return (orderId: string) => {
+    qc.invalidateQueries({ queryKey: ['commerce', 'seller', 'order', orderId] })
+    qc.invalidateQueries({ queryKey: ['commerce', 'seller', 'fulfillment'] })
+    qc.invalidateQueries({ queryKey: ['commerce', 'seller', 'orders'] })
+    qc.invalidateQueries({ queryKey: ['commerce', 'shipments', orderId] })
+    qc.invalidateQueries({ queryKey: ['commerce', 'shipment', orderId] })
+  }
+}
+
+/**
+ * Book the shipment: POST /seller/orders/{id}/ship, the seller-prefixed
+ * spelling of POST /orders/{id}/shipment (same handler, same paid-or-COD
+ * gate, 201 with `{shipments: [...]}`).
  *
- * What the server does with the body, as of 2026-09-12: nothing.
- * CreateShipment (internal/http/shipments.go) binds no request body and
- * books through the configured courier adapter, which assigns the courier
- * and tracking number itself. The courier and number the seller types are
- * sent anyway, in the field names a future binding would most plausibly use,
- * so the form is not thrown away the day the server reads them. Until then
- * the page shows the courier's own assignment after the refetch, which is the
- * truth, and says so next to the form.
+ * The body is read since 2026-09-12, with a rule: under the stub courier the
+ * seller's courier and tracking number ARE the shipment, because nothing
+ * else ever assigned one; under a carrier-backed provider the body is
+ * ignored, not merged, because the AWB the carrier returned is the one its
+ * webhooks will name. Either way the page shows what the refetch brings
+ * back, which is the truth, and says so next to the form. A number already
+ * on another shipment with the same courier is refused (409
+ * TRACKING_NUMBER_IN_USE), and a status the matrix will not let a seller
+ * ship from is a 409 TRANSITION_NOT_PERMITTED.
  */
 export function useShipOrder() {
-  const qc = useQueryClient()
+  const invalidate = useInvalidateOrder()
   return useMutation({
     mutationFn: async ({ orderId, values }: { orderId: string; values: ShipFormValues }) =>
-      (await api.post(`/v1/commerce/orders/${orderId}/shipment`, shipRequestBody(values))).data.data,
-    onSuccess: (_data, { orderId }) => {
-      qc.invalidateQueries({ queryKey: ['commerce', 'seller', 'order', orderId] })
-      qc.invalidateQueries({ queryKey: ['commerce', 'seller', 'fulfillment'] })
-      qc.invalidateQueries({ queryKey: ['commerce', 'seller', 'orders'] })
-      qc.invalidateQueries({ queryKey: ['commerce', 'shipments', orderId] })
-      qc.invalidateQueries({ queryKey: ['commerce', 'shipment', orderId] })
-    },
+      (await api.post(sellerActionPath('ship', orderId), shipRequestBody(values))).data.data,
+    onSuccess: (_data, { orderId }) => invalidate(orderId),
+  })
+}
+
+/**
+ * Mark the order packed: POST /seller/orders/{id}/pack, confirmed → packed
+ * as the seller. 409 TRANSITION_NOT_PERMITTED when the matrix refuses;
+ * a repeat is 200 with applied=false.
+ */
+export function usePackOrder() {
+  const invalidate = useInvalidateOrder()
+  return useMutation({
+    mutationFn: async ({ orderId }: { orderId: string }) =>
+      (await api.post(sellerActionPath('pack', orderId))).data.data as SellerFulfilmentResult,
+    onSuccess: (_data, { orderId }) => invalidate(orderId),
+  })
+}
+
+/**
+ * Cancel the order from the seller's side: POST /seller/orders/{id}/cancel
+ * with `{reason}`, confirmed|packed → cancelled. The server runs the same
+ * store path as a buyer's cancel (reservation release, restock, refund
+ * command), so nothing about the money is decided here. 400 REASON_REQUIRED
+ * for an empty reason, 409 CANCEL_NOT_PERMITTED once the parcel has moved
+ * on; a repeat is 200 with applied=false.
+ */
+export function useCancelSellerOrder() {
+  const invalidate = useInvalidateOrder()
+  return useMutation({
+    mutationFn: async ({ orderId, reason }: { orderId: string; reason: string }) =>
+      (await api.post(sellerActionPath('cancel', orderId), cancelRequestBody(reason))).data.data as SellerFulfilmentResult,
+    onSuccess: (_data, { orderId }) => invalidate(orderId),
   })
 }
 

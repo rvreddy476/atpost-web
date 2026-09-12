@@ -1,14 +1,18 @@
 "use client"
 
-import { use } from "react"
+import { use, useState } from "react"
 import Link from "next/link"
+import { CancelForm } from "@/components/sell/CancelForm"
 import { SellerShell } from "@/components/sell/SellerShell"
 import { ShipForm } from "@/components/sell/ShipForm"
 import { OrderStatusPill } from "@/components/sell/StatusPill"
 import {
+  useCancelSellerOrder,
   useOrderShipments,
+  usePackOrder,
   usePayoutPreview,
   useSellerOrder,
+  useSellerOrderHistory,
   useShipOrder,
   type SellerOrderCardWire,
   type SellerOrderItem,
@@ -21,13 +25,16 @@ import {
   canBookShipment,
   decodeAddressSnapshot,
   isFenced,
+  isNotFound,
   lineTotalMinor,
   normaliseShipment,
   orderStatusUI,
   orderTotalMinor,
+  sellerActionError,
   sellerActionsFor,
   sellerSubtotalMinor,
   shortId,
+  timelineFromHistory,
   variantSummary,
   type SellerShipment,
 } from "@/lib/seller"
@@ -44,7 +51,10 @@ export default function SellerOrderPage({ params }: { params: Promise<{ id: stri
 function OrderDetail({ id }: { id: string }) {
   const q = useSellerOrder(id)
   const shipmentsQ = useOrderShipments(id)
+  const historyQ = useSellerOrderHistory(id)
   const ship = useShipOrder()
+  const pack = usePackOrder()
+  const cancel = useCancelSellerOrder()
   const card = q.data
   const subtotalMinor = card ? sellerSubtotalMinor(card) : 0
   // Asked in rupees because the preview route speaks rupees; derived from the
@@ -71,7 +81,12 @@ function OrderDetail({ id }: { id: string }) {
   const { order, items } = card
   const shipment = normaliseShipment(card.shipment)
   const events = shipmentsQ.data?.find((s) => s.shipment.id === shipment?.id)?.events ?? []
-  const timeline = buildTimeline(order, shipment, events)
+  // The audit trail when the server has it; the reconstruction when it does
+  // not (a 404 is a server without the route, not an empty history). Any
+  // other failure also falls back, and says so under the list.
+  const history = historyQ.data
+  const timeline = history ? timelineFromHistory(history, events) : buildTimeline(order, shipment, events)
+  const historyUnavailable = historyQ.isError && !isNotFound(historyQ.error)
   const address = decodeAddressSnapshot(card.delivery_address ?? null)
   const shipLive = canBookShipment(order, shipment)
   const actions = sellerActionsFor(order.status)
@@ -122,9 +137,23 @@ function OrderDetail({ id }: { id: string }) {
           shipment={shipment}
           shipLive={shipLive}
           actions={actions}
-          pending={ship.isPending}
-          serverError={ship.isError ? apiMessage(ship.error, "Could not book the shipment.") : null}
-          onShip={(values) => ship.mutate({ orderId: id, values })}
+          ship={{
+            pending: ship.isPending,
+            error: ship.isError ? sellerActionError("ship", ship.error, "Could not book the shipment.") : null,
+            run: (values) => ship.mutate({ orderId: id, values }),
+          }}
+          pack={{
+            pending: pack.isPending,
+            error: pack.isError ? sellerActionError("pack", pack.error, "Could not mark the order as packed.") : null,
+            done: pack.data ? (pack.data.applied ? "Marked as packed." : "This order was already packed.") : null,
+            run: () => pack.mutate({ orderId: id }),
+          }}
+          cancel={{
+            pending: cancel.isPending,
+            error: cancel.isError ? sellerActionError("cancel", cancel.error, "Could not cancel the order.") : null,
+            done: cancel.data ? (cancel.data.applied ? "Order cancelled." : "This order was already cancelled.") : null,
+            run: (reason) => cancel.mutate({ orderId: id, reason }),
+          }}
         />
       </section>
 
@@ -147,6 +176,12 @@ function OrderDetail({ id }: { id: string }) {
             ))}
           </ol>
         )}
+        {historyUnavailable ? (
+          <p className="mt-3 text-xs text-shop-faint">
+            The full history could not be loaded ({apiMessage(historyQ.error, "no reason given")}); this is what the
+            order itself records.
+          </p>
+        ) : null}
       </section>
     </div>
   )
@@ -247,26 +282,38 @@ function Row({ label, value, strong, gold }: { label: string; value: string; str
   )
 }
 
+interface ActionState<Run> {
+  pending: boolean
+  /** The refusal to show inline, already translated; null when there is none. */
+  error: string | null
+  /** The one-line result of a finished write; null until it has finished. */
+  done?: string | null
+  run: Run
+}
+
 function Actions({
   orderStatus,
   paymentStatus,
   shipment,
   shipLive,
   actions,
-  pending,
-  serverError,
-  onShip,
+  ship,
+  pack,
+  cancel,
 }: {
   orderStatus: string
   paymentStatus: string
   shipment: SellerShipment | null
   shipLive: boolean
   actions: ReturnType<typeof sellerActionsFor>
-  pending: boolean
-  serverError: string | null
-  onShip: (values: { courier: string; tracking_number: string }) => void
+  ship: ActionState<(values: { courier: string; tracking_number: string }) => void>
+  pack: ActionState<() => void>
+  cancel: ActionState<(reason: string) => void>
 }) {
-  const unwired = actions.filter((a) => a.route === null)
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const canPack = actions.some((a) => a.kind === "pack")
+  const canCancel = actions.some((a) => a.kind === "cancel")
+  const busy = ship.pending || pack.pending || cancel.pending
 
   return (
     <div className="space-y-5">
@@ -290,10 +337,10 @@ function Actions({
       ) : shipLive ? (
         <div>
           <p className="mb-3 text-sm text-shop-muted">
-            Enter the courier and tracking number from the label. The platform books the pickup with its courier
-            partner and shows the confirmed details here once it has.
+            Enter the courier and tracking number from the label. Where the platform books through its own courier
+            partner, the partner&apos;s booking replaces what you type; the confirmed details show here once it has.
           </p>
-          <ShipForm pending={pending} serverError={serverError} onSubmit={onShip} />
+          <ShipForm pending={busy} serverError={ship.error} onSubmit={ship.run} />
         </div>
       ) : orderStatus === "confirmed" || orderStatus === "packed" ? (
         <p className="text-sm text-shop-muted">
@@ -303,32 +350,51 @@ function Actions({
         <p className="text-sm text-shop-muted">Nothing for you to do on this order right now.</p>
       )}
 
-      {/* The transition table also lets a seller mark packed and cancel from
-          here, and the seller should see those steps exist. The platform has
-          no route for either yet, so the buttons are present and disabled
-          rather than absent: a missing button reads as "you may not", and
-          that is not the fact. */}
-      {unwired.length > 0 ? (
+      {/* The other two seller rows of the transition table: mark packed from
+          confirmed, cancel from confirmed or packed. Pack is an outline
+          because shipping is the step that matters and the panel keeps one
+          gold; cancel is the danger style and opens a reason form rather than
+          firing, because the buyer reads the reason. */}
+      {canPack || canCancel ? (
         <div className="border-t border-white/10 pt-4">
-          <div className="flex flex-wrap gap-2">
-            {unwired.map((a) => (
-              <button
-                key={a.kind}
-                type="button"
-                disabled
-                aria-disabled="true"
-                title="Not available in MSeller yet"
-                className={a.kind === "cancel" ? "btn btn-danger btn-sm" : "btn btn-outline btn-sm"}
-              >
-                {a.kind === "pack" ? "Mark as packed" : "Cancel order"}
-              </button>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-shop-faint">
-            {unwired.map((a) => (a.kind === "pack" ? "Mark as packed" : "Cancel")).join(" and ")} are not available in
-            MSeller yet. A buyer can still cancel from their side until the parcel ships.
-          </p>
+          {cancelOpen && canCancel && !cancel.done ? (
+            <CancelForm
+              pending={busy}
+              serverError={cancel.error}
+              onSubmit={cancel.run}
+              onDismiss={() => setCancelOpen(false)}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              {canPack ? (
+                <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={pack.run}>
+                  {pack.pending ? "Marking…" : "Mark as packed"}
+                </button>
+              ) : null}
+              {canCancel ? (
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  disabled={busy}
+                  aria-expanded={cancelOpen}
+                  onClick={() => setCancelOpen(true)}
+                >
+                  Cancel order
+                </button>
+              ) : null}
+              {pack.error ? <p className="text-sm text-shop-bad" role="alert">{pack.error}</p> : null}
+            </div>
+          )}
+          {canPack ? (
+            <p className="mt-2 text-xs text-shop-faint">
+              Marking the order packed tells the buyer it is ready to go. Booking a shipment marks it packed on the way.
+            </p>
+          ) : null}
         </div>
+      ) : null}
+
+      {pack.done || cancel.done ? (
+        <p className="text-sm text-shop-good" role="status">{cancel.done ?? pack.done}</p>
       ) : null}
     </div>
   )

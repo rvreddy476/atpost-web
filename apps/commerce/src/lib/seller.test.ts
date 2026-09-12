@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CANCEL_REASON_MAX,
   SELLER_TRANSITIONS,
   addressIsRoutingOnly,
   buildTimeline,
@@ -7,20 +8,27 @@ import {
   decodeAddressSnapshot,
   earningsCsvHref,
   isFenced,
+  isNotFound,
   lineTotalMinor,
   nextOffset,
+  normaliseHistoryRow,
   normaliseShipment,
   normaliseShipmentEvent,
   normaliseTracking,
   orderStatusUI,
   orderTotalMinor,
   returnStatusUI,
+  sellerActionError,
+  sellerActionPath,
   sellerActionsFor,
   sellerSubtotalMinor,
   shortId,
   summariseEarnings,
+  timelineFromHistory,
+  validateCancelReason,
   validateShipForm,
   variantSummary,
+  type OrderHistoryRow,
 } from './seller'
 
 // The rules a seller's order page decides locally. Each block names the server
@@ -50,11 +58,64 @@ describe('sellerActionsFor mirrors migration 010 actor_type = seller', () => {
     }
   })
 
-  it('knows which actions have a route behind them today', () => {
+  it('has a seller route behind every action the table permits', () => {
     const packed = sellerActionsFor('packed')
-    expect(packed.find((a) => a.kind === 'ship')?.route).toBe('/v1/commerce/orders/{id}/shipment')
-    expect(packed.find((a) => a.kind === 'cancel')?.route).toBeNull()
-    expect(sellerActionsFor('confirmed').find((a) => a.kind === 'pack')?.route).toBeNull()
+    expect(packed.find((a) => a.kind === 'ship')?.route).toBe('/v1/commerce/seller/orders/{id}/ship')
+    expect(packed.find((a) => a.kind === 'cancel')?.route).toBe('/v1/commerce/seller/orders/{id}/cancel')
+    expect(sellerActionsFor('confirmed').find((a) => a.kind === 'pack')?.route).toBe('/v1/commerce/seller/orders/{id}/pack')
+    for (const a of [...sellerActionsFor('confirmed'), ...sellerActionsFor('packed')]) {
+      expect(a.route).toMatch(/^\/v1\/commerce\/seller\/orders\/\{id\}\//)
+    }
+  })
+})
+
+describe('sellerActionPath', () => {
+  it('fills the order id into the seller route for each action', () => {
+    expect(sellerActionPath('pack', 'o-1')).toBe('/v1/commerce/seller/orders/o-1/pack')
+    expect(sellerActionPath('ship', 'o-1')).toBe('/v1/commerce/seller/orders/o-1/ship')
+    expect(sellerActionPath('cancel', 'o-1')).toBe('/v1/commerce/seller/orders/o-1/cancel')
+  })
+  it('escapes an id that is not a plain uuid', () => {
+    expect(sellerActionPath('pack', 'a/b')).toBe('/v1/commerce/seller/orders/a%2Fb/pack')
+  })
+})
+
+describe('sellerActionError translates the 409s the seller routes answer', () => {
+  const refusal = (status: number, code: string, message = 'server words') => ({
+    response: { status, data: { error: { code, message } } },
+  })
+
+  it('explains TRANSITION_NOT_PERMITTED for pack and for ship', () => {
+    expect(sellerActionError('pack', refusal(409, 'TRANSITION_NOT_PERMITTED'), 'x')).toMatch(/marked as packed/)
+    expect(sellerActionError('ship', refusal(409, 'TRANSITION_NOT_PERMITTED'), 'x')).toMatch(/shipped/)
+  })
+
+  it('explains CANCEL_NOT_PERMITTED, TRACKING_NUMBER_IN_USE, ORDER_SHARED and REASON_REQUIRED', () => {
+    expect(sellerActionError('cancel', refusal(409, 'CANCEL_NOT_PERMITTED'), 'x')).toMatch(/no longer be cancelled/)
+    expect(sellerActionError('ship', refusal(409, 'TRACKING_NUMBER_IN_USE'), 'x')).toMatch(/already on another shipment/)
+    expect(sellerActionError('pack', refusal(409, 'ORDER_SHARED'), 'x')).toMatch(/other sellers/)
+    expect(sellerActionError('cancel', refusal(400, 'REASON_REQUIRED'), 'x')).toMatch(/reason/)
+  })
+
+  it('falls back to the server message, then to the default', () => {
+    expect(sellerActionError('pack', refusal(500, 'INTERNAL', 'db down'), 'fallback')).toBe('db down')
+    expect(sellerActionError('pack', { response: { status: 500 } }, 'fallback')).toBe('fallback')
+    expect(sellerActionError('pack', undefined, 'fallback')).toBe('fallback')
+  })
+})
+
+describe('validateCancelReason', () => {
+  it('accepts a few words', () => {
+    expect(validateCancelReason('Out of stock')).toBeNull()
+  })
+  it('refuses nothing, whitespace, and a bare couple of characters', () => {
+    expect(validateCancelReason('')).toBeTruthy()
+    expect(validateCancelReason('   ')).toBeTruthy()
+    expect(validateCancelReason('no')).toBeTruthy()
+  })
+  it('caps the length', () => {
+    expect(validateCancelReason('x'.repeat(CANCEL_REASON_MAX))).toBeNull()
+    expect(validateCancelReason('x'.repeat(CANCEL_REASON_MAX + 1))).toBeTruthy()
   })
 })
 
@@ -218,8 +279,23 @@ describe('decodeAddressSnapshot', () => {
   })
 })
 
-describe('normaliseShipment reads the untagged Go struct', () => {
-  it('maps PascalCase keys', () => {
+describe('normaliseShipment reads the tagged wire shape first', () => {
+  it('maps the snake_case keys the json tags emit, all of them', () => {
+    const sh = normaliseShipment({
+      id: 'sh-1', order_id: 'o-1', seller_id: 's-1', courier: 'delhivery', tracking_number: 'AWB123456',
+      courier_order_id: 'co-9', label_url: 'https://x/label.pdf', tracking_url: null, status: 'in_transit', eta: null,
+      shipped_at: '2026-09-10T10:00:00Z', delivered_at: null, last_event_at: '2026-09-10T11:00:00Z',
+      created_at: '2026-09-10T09:00:00Z', updated_at: '2026-09-10T11:00:00Z',
+    })
+    expect(sh).toEqual({
+      id: 'sh-1', order_id: 'o-1', seller_id: 's-1', courier: 'delhivery', tracking_number: 'AWB123456',
+      courier_order_id: 'co-9', tracking_url: null, label_url: 'https://x/label.pdf', status: 'in_transit', eta: null,
+      shipped_at: '2026-09-10T10:00:00Z', delivered_at: null, last_event_at: '2026-09-10T11:00:00Z',
+      created_at: '2026-09-10T09:00:00Z', updated_at: '2026-09-10T11:00:00Z',
+    })
+  })
+
+  it('still reads the PascalCase spelling an untagged answer used', () => {
     const sh = normaliseShipment({
       ID: 'sh-1', OrderID: 'o-1', SellerID: 's-1', Courier: 'delhivery', TrackingNumber: 'AWB123456',
       TrackingURL: null, LabelURL: 'https://x/label.pdf', Status: 'in_transit', ETA: null,
@@ -228,12 +304,13 @@ describe('normaliseShipment reads the untagged Go struct', () => {
     expect(sh).toMatchObject({
       id: 'sh-1', courier: 'delhivery', tracking_number: 'AWB123456', label_url: 'https://x/label.pdf',
       status: 'in_transit', shipped_at: '2026-09-10T10:00:00Z', created_at: '2026-09-10T09:00:00Z',
+      courier_order_id: null, last_event_at: null, updated_at: null,
     })
   })
 
-  it('maps snake_case keys the same way, for the day the tags land', () => {
-    const sh = normaliseShipment({ id: 'sh-2', courier: 'dhl', tracking_number: 'X', status: 'booked' })
-    expect(sh).toMatchObject({ id: 'sh-2', courier: 'dhl', tracking_number: 'X', status: 'booked' })
+  it('prefers snake_case when both spellings are present', () => {
+    const sh = normaliseShipment({ id: 'new', ID: 'old', courier: 'dhl', Courier: 'stale', status: 'booked' })
+    expect(sh).toMatchObject({ id: 'new', courier: 'dhl', status: 'booked' })
   })
 
   it('answers null for no shipment', () => {
@@ -242,9 +319,82 @@ describe('normaliseShipment reads the untagged Go struct', () => {
   })
 
   it('normalises events with either spelling', () => {
+    expect(normaliseShipmentEvent({
+      id: 'e1', shipment_id: 'sh-1', status: 'delivered', location: 'Pune', remark: null,
+      occurred_at: '2026-09-11T00:00:00Z', created_at: '2026-09-11T00:00:01Z',
+    })).toEqual({ id: 'e1', shipment_id: 'sh-1', status: 'delivered', location: 'Pune', remark: null, occurred_at: '2026-09-11T00:00:00Z' })
     expect(normaliseShipmentEvent({ ID: 'e1', Status: 'delivered', Location: 'Pune', OccurredAt: '2026-09-11T00:00:00Z' }))
-      .toEqual({ id: 'e1', status: 'delivered', location: 'Pune', remark: null, occurred_at: '2026-09-11T00:00:00Z' })
+      .toEqual({ id: 'e1', shipment_id: null, status: 'delivered', location: 'Pune', remark: null, occurred_at: '2026-09-11T00:00:00Z' })
     expect(normaliseShipmentEvent({ status: 'x' })).toBeNull()
+  })
+})
+
+describe('normaliseHistoryRow reads order_status_history as the route sends it', () => {
+  it('keeps every field and nulls the omitempty ones', () => {
+    expect(normaliseHistoryRow({
+      id: 'h1', order_id: 'o-1', to_status: 'created', actor_type: 'system', created_at: '2026-09-01T09:00:00Z',
+    })).toEqual({
+      id: 'h1', order_id: 'o-1', from_status: null, to_status: 'created', changed_by: null,
+      actor_type: 'system', notes: null, created_at: '2026-09-01T09:00:00Z',
+    })
+  })
+  it('refuses a row with no status or no time', () => {
+    expect(normaliseHistoryRow({ id: 'h', created_at: '2026-09-01T09:00:00Z' })).toBeNull()
+    expect(normaliseHistoryRow({ id: 'h', to_status: 'paid' })).toBeNull()
+    expect(normaliseHistoryRow(null)).toBeNull()
+  })
+})
+
+describe('timelineFromHistory', () => {
+  const row = (id: string, to: string, at: string, extra: Partial<OrderHistoryRow> = {}) =>
+    normaliseHistoryRow({ id, to_status: to, created_at: at, ...extra })!
+
+  const history = [
+    row('h1', 'created', '2026-09-01T09:00:00Z', { actor_type: 'system' }),
+    row('h2', 'paid', '2026-09-01T09:05:00Z', { actor_type: 'system' }),
+    row('h3', 'confirmed', '2026-09-01T09:05:01Z', { actor_type: 'system' }),
+    row('h4', 'packed', '2026-09-02T09:00:00Z', { actor_type: 'seller', notes: 'packed by seller' }),
+    row('h5', 'shipped', '2026-09-02T12:00:00Z', { actor_type: 'seller' }),
+  ]
+
+  it('walks the history in time order with the seller-facing labels', () => {
+    const t = timelineFromHistory(history)
+    expect(t.map((e) => e.key)).toEqual(['history-h1', 'history-h2', 'history-h3', 'history-h4', 'history-h5'])
+    expect(t.map((e) => e.label)).toEqual(['Order placed', 'Payment received', 'Order confirmed', 'Packed', 'Handed to courier'])
+    expect(t[3].detail).toBe('by you: packed by seller')
+    expect(t[0].detail).toBe('by the platform')
+  })
+
+  it('merges courier events the order status never recorded, in time order', () => {
+    const events = [
+      normaliseShipmentEvent({ id: 'a', status: 'in_transit', location: 'Hub', occurred_at: '2026-09-03T08:00:00Z' })!,
+    ]
+    const keys = timelineFromHistory(history, events).map((e) => e.key)
+    expect(keys).toEqual(['history-h1', 'history-h2', 'history-h3', 'history-h4', 'history-h5', 'event-a'])
+  })
+
+  it('drops a courier event whose status the history already records', () => {
+    const delivered = [...history, row('h6', 'delivered', '2026-09-05T10:00:00Z', { actor_type: 'system' })]
+    const events = [
+      normaliseShipmentEvent({ id: 'd', status: 'delivered', occurred_at: '2026-09-05T10:00:00Z' })!,
+      normaliseShipmentEvent({ id: 'x', status: 'in_transit', occurred_at: '2026-09-03T08:00:00Z' })!,
+    ]
+    const keys = timelineFromHistory(delivered, events).map((e) => e.key)
+    expect(keys).toContain('event-x')
+    expect(keys).not.toContain('event-d')
+    expect(keys).toContain('history-h6')
+  })
+
+  it('shows a cancellation with who and why', () => {
+    const t = timelineFromHistory([
+      row('h1', 'confirmed', '2026-09-01T09:00:00Z'),
+      row('h2', 'cancelled', '2026-09-01T10:00:00Z', { actor_type: 'seller', notes: 'out of stock' }),
+    ])
+    expect(t[1]).toMatchObject({ label: 'Cancelled', detail: 'by you: out of stock', at: '2026-09-01T10:00:00Z' })
+  })
+
+  it('is empty for an empty history', () => {
+    expect(timelineFromHistory([])).toEqual([])
   })
 })
 
@@ -314,6 +464,18 @@ describe('isFenced', () => {
     expect(isFenced({ response: { status: 403 } })).toBe(false)
     expect(isFenced({ response: { status: 404, data: { error: { code: 'ORDER_NOT_FOUND' } } } })).toBe(false)
     expect(isFenced(undefined)).toBe(false)
+  })
+})
+
+describe('isNotFound', () => {
+  it('is any 404, whatever the code, so a missing history route falls back', () => {
+    expect(isNotFound({ response: { status: 404 } })).toBe(true)
+    expect(isNotFound({ response: { status: 404, data: { error: { code: 'ORDER_NOT_FOUND' } } } })).toBe(true)
+  })
+  it('is not a 403 or a network failure', () => {
+    expect(isNotFound({ response: { status: 403 } })).toBe(false)
+    expect(isNotFound(new Error('offline'))).toBe(false)
+    expect(isNotFound(undefined)).toBe(false)
   })
 })
 

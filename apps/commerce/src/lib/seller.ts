@@ -32,26 +32,24 @@ export interface SellerAction {
   /** The status this action moves the order to. */
   to: string
   /**
-   * The HTTP route that performs it, or null when the matrix permits the
-   * transition but commerce-service exposes no seller route for it. A page
-   * renders a null-route action disabled rather than hiding it: the seller
-   * should see that the step exists and that the platform, not they, is what
-   * is missing.
-   *
-   * As of 2026-09-12 (internal/http/handler.go, internal/http/shipments.go):
-   *   ship   → POST /v1/commerce/orders/{id}/shipment
-   *   pack   → no route
-   *   cancel → no seller route. POST /orders/{id}/cancel hard-codes the actor
-   *            as "customer" and checks customer ownership, so a seller
-   *            calling it gets CANCEL_FAILED.
+   * The HTTP route that performs it, with `{id}` standing for the order id;
+   * `sellerActionPath` fills it in. Every seller row of the matrix has a
+   * route since commerce-service internal/http/handler_seller_fulfilment.go
+   * (2026-09-12):
+   *   pack   → POST /v1/commerce/seller/orders/{id}/pack
+   *   ship   → POST /v1/commerce/seller/orders/{id}/ship    (the seller-prefixed
+   *            spelling of POST /orders/{id}/shipment; same handler, same gate)
+   *   cancel → POST /v1/commerce/seller/orders/{id}/cancel  body {reason}
+   * Pack and cancel are idempotent: a repeat answers 200 with applied=false
+   * and the state the order is already in, which the page treats as done.
    */
-  route: string | null
+  route: string
 }
 
-const ACTION_FOR_TARGET: Record<string, { kind: SellerActionKind; route: string | null }> = {
-  packed: { kind: 'pack', route: null },
-  shipped: { kind: 'ship', route: '/v1/commerce/orders/{id}/shipment' },
-  cancelled: { kind: 'cancel', route: null },
+const ACTION_FOR_TARGET: Record<string, { kind: SellerActionKind; route: string }> = {
+  packed: { kind: 'pack', route: '/v1/commerce/seller/orders/{id}/pack' },
+  shipped: { kind: 'ship', route: '/v1/commerce/seller/orders/{id}/ship' },
+  cancelled: { kind: 'cancel', route: '/v1/commerce/seller/orders/{id}/cancel' },
 }
 
 /** The actions the transition table allows a seller from this status, in table order. */
@@ -66,6 +64,50 @@ export function sellerActionsFor(status: string): SellerAction[] {
   return out
 }
 
+const ROUTE_FOR_KIND: Record<SellerActionKind, string> = {
+  pack: ACTION_FOR_TARGET.packed.route,
+  ship: ACTION_FOR_TARGET.shipped.route,
+  cancel: ACTION_FOR_TARGET.cancelled.route,
+}
+
+/** The concrete path for one action on one order, so the hooks spell no route of their own. */
+export function sellerActionPath(kind: SellerActionKind, orderId: string): string {
+  return ROUTE_FOR_KIND[kind].replace('{id}', encodeURIComponent(orderId))
+}
+
+/**
+ * What the seller reads when a fulfilment write is refused.
+ *
+ * The seller routes answer with a code the page can explain better than the
+ * server's one-liner. 409 TRANSITION_NOT_PERMITTED: the matrix has no seller
+ * row from the order's current status (pack after the courier has it). 409
+ * CANCEL_NOT_PERMITTED: past the point a seller may cancel. 409
+ * TRACKING_NUMBER_IN_USE: shipments are unique on courier + number because a
+ * webhook is matched by that pair. 409 ORDER_SHARED: a legacy multi-seller
+ * order no single seller may move. 400 REASON_REQUIRED: the cancel form was
+ * bypassed. Anything else falls back to the server's own message, then to
+ * the caller's default.
+ */
+export function sellerActionError(kind: SellerActionKind, error: unknown, fallback: string): string {
+  const { code, message } = apiEnvelope(error)
+  switch (code) {
+    case 'TRANSITION_NOT_PERMITTED':
+      return kind === 'pack'
+        ? 'This order cannot be marked as packed from where it is now. Reload to see its current state.'
+        : 'This order cannot be shipped from where it is now. Reload to see its current state.'
+    case 'CANCEL_NOT_PERMITTED':
+      return 'This order can no longer be cancelled from your side; it has already moved on.'
+    case 'TRACKING_NUMBER_IN_USE':
+      return 'That tracking number is already on another shipment with this courier. Check the label.'
+    case 'ORDER_SHARED':
+      return 'This order has lines from other sellers, so no single seller can move it.'
+    case 'REASON_REQUIRED':
+      return 'Give the buyer a reason for the cancellation.'
+    default:
+      return message || fallback
+  }
+}
+
 /**
  * Whether the Ship button should be live.
  *
@@ -74,10 +116,11 @@ export function sellerActionsFor(status: string): SellerAction[] {
  * captured (`payment_status = paid`) or the order is COD, and it is idempotent
  * per seller, so a second booking returns the first. From the seller's chair
  * that means: the order is confirmed or packed, it is paid or cash on
- * delivery, and no shipment exists for them yet. The route itself does not
- * read `status` at all, which is why `confirmed` is accepted here even though
- * the matrix only lists packed → shipped for a seller: with no route to reach
- * `packed`, insisting on it would mean nobody could ever ship.
+ * delivery, and no shipment exists for them yet. `confirmed` is accepted as
+ * well as `packed` even though the matrix only lists packed → shipped for a
+ * seller: the store (order_fulfilment.go MarkOrderShipped) walks confirmed →
+ * packed → shipped as two audited steps when a seller books from `confirmed`.
+ * Booking is packing.
  */
 export function canBookShipment(
   order: { status: string; payment_status?: string; payment_method?: string | null },
@@ -167,9 +210,14 @@ export function returnStatusUI(status: string | undefined | null): { label: stri
  * The chips on /sell/orders. These are the `stage` values
  * ListSellerFulfillment filters on server-side (service/service.go
  * fulfillmentMatchesStage), so a chip is a query, not a client-side sieve
- * over whichever pages happen to be loaded. The plain /seller/orders route
- * has no filter parameter at all, which is why the list is built on the
- * fulfillment route instead.
+ * over whichever pages happen to be loaded.
+ *
+ * /seller/orders now returns enriched rows (the header plus item_count,
+ * seller_subtotal_minor, total_minor, payment_method), but it still has no
+ * stage parameter, and its row carries neither the seller's lines nor the
+ * address snapshot the list row reads. Serving "All" from it and the other
+ * four chips from /seller/fulfillment would mean two row shapes behind one
+ * list, so the list stays on the fulfilment route for every chip.
  */
 export const FULFILLMENT_STAGES: ReadonlyArray<{ id: FulfillmentStage; label: string }> = [
   { id: 'all', label: 'All' },
@@ -229,6 +277,24 @@ export function validateShipForm(values: ShipFormValues): ShipFormErrors {
   else if (!TRACKING_RE.test(tracking))
     errors.tracking_number = 'Tracking numbers are 6 to 40 letters, digits or dashes.'
   return errors
+}
+
+// ── Cancel form ─────────────────────────────────────────────────────────
+
+export const CANCEL_REASON_MAX = 500
+
+/**
+ * The reason a seller gives for cancelling. The server refuses an empty one
+ * (400 REASON_REQUIRED) because the buyer reads it on their order page; the
+ * form refuses it first, and refuses a bare couple of characters that would
+ * satisfy the server and tell the buyer nothing. Returns the message, or
+ * null when the reason is fine.
+ */
+export function validateCancelReason(raw: string): string | null {
+  const reason = raw.trim()
+  if (reason.length < 3) return 'Tell the buyer why, in a few words.'
+  if (reason.length > CANCEL_REASON_MAX) return `Keep the reason under ${CANCEL_REASON_MAX} characters.`
+  return null
 }
 
 // ── Money ───────────────────────────────────────────────────────────────
@@ -360,17 +426,21 @@ export interface SellerShipment {
   seller_id: string
   courier: string
   tracking_number: string | null
+  courier_order_id: string | null
   tracking_url: string | null
   label_url: string | null
   status: string
   eta: string | null
   shipped_at: string | null
   delivered_at: string | null
+  last_event_at: string | null
   created_at: string | null
+  updated_at: string | null
 }
 
 export interface SellerShipmentEvent {
   id: string
+  shipment_id: string | null
   status: string
   location: string | null
   remark: string | null
@@ -379,7 +449,11 @@ export interface SellerShipmentEvent {
 
 type Raw = Record<string, unknown>
 
-/** Read a key in either spelling. Go structs with no json tags serialise as their field names. */
+/**
+ * Read a key in the snake_case spelling first, then the PascalCase one.
+ * snake_case wins when both are present because it is the tagged, current
+ * wire shape; the PascalCase fallback is for a cached or older answer.
+ */
 function pick(o: Raw, snake: string, pascal: string): unknown {
   return o[snake] !== undefined ? o[snake] : o[pascal]
 }
@@ -387,11 +461,13 @@ const asStr = (v: unknown): string | null => (typeof v === 'string' && v ? v : n
 
 /**
  * `postgres.Shipment` and `postgres.ShipmentEvent` (store/postgres/
- * shipments.go) carry `db` tags but no `json` tags, so the wire shape is
- * PascalCase: `ID`, `TrackingNumber`, `ShippedAt`. The hook types in
- * useCommerce.ts spell them snake_case, which is what a future json tag would
- * produce. Reading both means the page keeps working the day someone adds
- * the tags, and works today.
+ * shipments.go) carry json tags since 2026-09-12, so the wire shape is
+ * snake_case: `id`, `tracking_number`, `shipped_at`, plus the three keys the
+ * untagged struct never surfaced by that name (`courier_order_id`,
+ * `last_event_at`, `updated_at`). Before the tags the same fields arrived
+ * PascalCase (`ID`, `TrackingNumber`, `ShippedAt`); that spelling is still
+ * read, second, so a stale server or a cached response does not blank the
+ * page. Missing keys read as null, never as the string "undefined".
  */
 export function normaliseShipment(raw: unknown): SellerShipment | null {
   if (!raw || typeof raw !== 'object') return null
@@ -404,13 +480,16 @@ export function normaliseShipment(raw: unknown): SellerShipment | null {
     seller_id: asStr(pick(o, 'seller_id', 'SellerID')) ?? '',
     courier: asStr(pick(o, 'courier', 'Courier')) ?? '',
     tracking_number: asStr(pick(o, 'tracking_number', 'TrackingNumber')),
+    courier_order_id: asStr(pick(o, 'courier_order_id', 'CourierOrderID')),
     tracking_url: asStr(pick(o, 'tracking_url', 'TrackingURL')),
     label_url: asStr(pick(o, 'label_url', 'LabelURL')),
     status: asStr(pick(o, 'status', 'Status')) ?? 'pending',
     eta: asStr(pick(o, 'eta', 'ETA')),
     shipped_at: asStr(pick(o, 'shipped_at', 'ShippedAt')),
     delivered_at: asStr(pick(o, 'delivered_at', 'DeliveredAt')),
+    last_event_at: asStr(pick(o, 'last_event_at', 'LastEventAt')),
     created_at: asStr(pick(o, 'created_at', 'CreatedAt')),
+    updated_at: asStr(pick(o, 'updated_at', 'UpdatedAt')),
   }
 }
 
@@ -421,10 +500,50 @@ export function normaliseShipmentEvent(raw: unknown): SellerShipmentEvent | null
   if (!occurred) return null
   return {
     id: asStr(pick(o, 'id', 'ID')) ?? occurred,
+    shipment_id: asStr(pick(o, 'shipment_id', 'ShipmentID')),
     status: asStr(pick(o, 'status', 'Status')) ?? '',
     location: asStr(pick(o, 'location', 'Location')),
     remark: asStr(pick(o, 'remark', 'Remark')),
     occurred_at: occurred,
+  }
+}
+
+// ── Order history ───────────────────────────────────────────────────────
+
+/**
+ * One row of `order_status_history`, as GET /seller/orders/{id}/history
+ * sends it (postgres.OrderStatusHistory, json-tagged, omitempty). The
+ * trigger from migration 010 writes one per status change; `from_status` is
+ * null on the first row, `changed_by` is null for the system, and `notes` is
+ * whatever the writer said: "packed by seller", "packed at shipment
+ * booking", a cancellation reason.
+ */
+export interface OrderHistoryRow {
+  id: string
+  order_id: string | null
+  from_status: string | null
+  to_status: string
+  changed_by: string | null
+  actor_type: string | null
+  notes: string | null
+  created_at: string
+}
+
+export function normaliseHistoryRow(raw: unknown): OrderHistoryRow | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Raw
+  const to = asStr(o.to_status)
+  const at = asStr(o.created_at)
+  if (!to || !at) return null
+  return {
+    id: asStr(o.id) ?? `${to}@${at}`,
+    order_id: asStr(o.order_id),
+    from_status: asStr(o.from_status),
+    to_status: to,
+    changed_by: asStr(o.changed_by),
+    actor_type: asStr(o.actor_type),
+    notes: asStr(o.notes),
+    created_at: at,
   }
 }
 
@@ -460,17 +579,72 @@ export interface TimelineEntry {
   detail?: string
 }
 
+const HISTORY_LABEL: Record<string, string> = {
+  created: 'Order placed',
+  paid: 'Payment received',
+  confirmed: 'Order confirmed',
+  packed: 'Packed',
+  shipped: 'Handed to courier',
+  cancelled: 'Cancelled',
+}
+
+const ACTOR_LABEL: Record<string, string> = {
+  seller: 'by you',
+  customer: 'by the buyer',
+  system: 'by the platform',
+  admin: 'by support',
+}
+
 /**
- * What happened to this order, in order.
+ * What happened to this order, from the audit trail.
  *
- * commerce-service writes every status change to `order_status_history`
- * (migration 010's trigger) but no seller route reads it back, so the
- * timeline is reconstructed from the timestamps the detail card does carry:
- * the order's created_at, the shipment's booking / shipped / delivered
- * stamps, the courier's events, and the order's cancellation. A fact the
- * server records without a timestamp (payment captured) is listed with
- * `at: null` and rendered without a time, rather than borrowing `updated_at`
- * and inventing one.
+ * The status history is the spine: every row is a status change with the
+ * moment it happened, who made it, and the writer's note (a cancellation
+ * reason, "packed at shipment booking"). The courier's events are merged in
+ * for the steps the order's own status does not record (a hub scan, an
+ * attempted delivery), but an event whose status the history already has as
+ * a row (out_for_delivery, delivered, both written by the webhook) is
+ * dropped rather than listed twice. Sorted by time, oldest first, which is
+ * how the route already sends the rows.
+ */
+export function timelineFromHistory(
+  history: ReadonlyArray<OrderHistoryRow>,
+  events: ReadonlyArray<SellerShipmentEvent> = [],
+): TimelineEntry[] {
+  const out: TimelineEntry[] = []
+  const seen = new Set<string>()
+  for (const row of history) {
+    seen.add(row.to_status)
+    const who = row.actor_type ? ACTOR_LABEL[row.actor_type] ?? `by ${row.actor_type}` : ''
+    out.push({
+      key: `history-${row.id}`,
+      label: HISTORY_LABEL[row.to_status] ?? orderStatusUI(row.to_status).label,
+      at: row.created_at,
+      detail: [who, row.notes].filter(Boolean).join(': ') || undefined,
+    })
+  }
+  for (const e of events) {
+    if (seen.has(e.status)) continue
+    out.push({
+      key: `event-${e.id}`,
+      label: orderStatusUI(e.status).label,
+      at: e.occurred_at,
+      detail: [e.location, e.remark].filter(Boolean).join(' · ') || undefined,
+    })
+  }
+  return out.sort((a, b) => Date.parse(a.at ?? '') - Date.parse(b.at ?? ''))
+}
+
+/**
+ * What happened to this order, reconstructed.
+ *
+ * The fallback for when GET /seller/orders/{id}/history is not there (a
+ * server that predates it answers 404): the timeline is rebuilt from the
+ * timestamps the detail card does carry, which are the order's created_at,
+ * the shipment's booking / shipped / delivered stamps, the courier's events,
+ * and the order's cancellation. A fact the card records without a timestamp
+ * (payment captured) is listed with `at: null` and rendered without a time,
+ * rather than borrowing `updated_at` and inventing one.
  */
 export function buildTimeline(
   order: {
@@ -525,6 +699,22 @@ export function buildTimeline(
 }
 
 // ── Errors ──────────────────────────────────────────────────────────────
+
+/** The gateway's error envelope, read without trusting any field to exist. */
+function apiEnvelope(error: unknown): { status: number; code: string; message: string } {
+  const e = error as { response?: { status?: number; data?: { error?: { code?: string; message?: string } } } } | undefined
+  const err = e?.response?.data?.error
+  return {
+    status: e?.response?.status ?? 0,
+    code: typeof err?.code === 'string' ? err.code : '',
+    message: typeof err?.message === 'string' ? err.message : '',
+  }
+}
+
+/** True for a plain 404: the route is not on this server, whatever the code says. */
+export function isNotFound(error: unknown): boolean {
+  return apiEnvelope(error).status === 404
+}
 
 /**
  * The P0 fence (internal/http/handler_p0.go FencedPrefixes) answers 404
