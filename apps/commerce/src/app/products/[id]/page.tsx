@@ -7,8 +7,10 @@ import { ShieldCheck, RotateCcw, Truck, BadgeCheck, ShoppingBag, ArrowRight } fr
 import { StoreHeader } from "@/components/StoreHeader"
 import { StoreFooter } from "@/components/StoreFooter"
 import { ProductPhoto } from "@/components/commerce/ProductPhoto"
+import { FavouriteButton } from "@/components/commerce/FavouriteButton"
 import { inr } from "@/components/commerce/ProductGrid"
 import { productImage, mediaUrl } from "@/lib/media"
+import { discountLabel } from "@/lib/product"
 import {
   useProduct, useAddToCart, useProductReviews, useCategories,
   type ProductAttribute,
@@ -104,9 +106,12 @@ export default function ProductDetailPage() {
     ? mediaUrl(selected.image_media_id, { width: 1000 })
     : gallery[0] ?? null
 
-  const off = selected && selected.mrp > selected.selling_price
-    ? Math.round((1 - selected.selling_price / selected.mrp) * 100)
-    : 0
+  // The deal badge is the SERVER's `discount_pct`, the same number the grid
+  // shows for this product. This page used to work it out again from the
+  // selected variant and round differently, so the two disagreed. The
+  // server derives it from the product's lowest price, which is what the
+  // grid advertised and what the shopper clicked on.
+  const off = discountLabel(product)
 
   async function add() {
     if (!selected) return
@@ -151,7 +156,7 @@ export default function ProductDetailPage() {
                   src={selectedImage}
                   alt={product.title}
                   priority
-                  badge={off > 0 ? <span className="plate-badge">{off}% OFF</span> : null}
+                  badge={off ? <span className="plate-badge">{off}</span> : null}
                 />
                 {gallery.length > 1 ? (
                   <div className="pdp-thumbs">
@@ -165,8 +170,13 @@ export default function ProductDetailPage() {
               </div>
 
               <div className="min-w-0">
-                {product.retailer_name ? <span className="shop-eyebrow">{product.retailer_name}</span> : null}
-                <h1 className="pdp-title">{product.title}</h1>
+                {product.retailer_name ?? product.seller_name
+                  ? <span className="shop-eyebrow">{product.retailer_name ?? product.seller_name}</span>
+                  : null}
+                <div className="pdp-title-row">
+                  <h1 className="pdp-title">{product.title}</h1>
+                  <FavouriteButton product={product} size={20} />
+                </div>
 
                 <div className="pdp-meta">
                   {product.avg_rating ? (
@@ -189,7 +199,7 @@ export default function ProductDetailPage() {
                       ? inr(selected.selling_price)
                       : `${selected.currency_code} ${selected.selling_price}`}</b>
                     {selected.mrp > selected.selling_price ? <s>{inr(selected.mrp)}</s> : null}
-                    {off > 0 ? <span className="pdp-save">Save {off}%</span> : null}
+                    {off ? <span className="pdp-save">Save {product.discount_pct}%</span> : null}
                     <span className="pdp-tax">Inclusive of all taxes · Delivery calculated at checkout</span>
                   </div>
                 ) : null}
@@ -220,7 +230,7 @@ export default function ProductDetailPage() {
                     {addToCart.isPending ? "Adding…" : added ? "Added to bag" : "Add to bag"}
                   </button>
                   {added ? (
-                    <Link href="/cart" className="btn btn-outline btn-lg">
+                    <Link href="/bag" className="btn btn-outline btn-lg">
                       Go to bag <ArrowRight size={17} aria-hidden="true" />
                     </Link>
                   ) : null}

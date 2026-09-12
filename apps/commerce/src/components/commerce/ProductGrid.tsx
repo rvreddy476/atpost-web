@@ -6,8 +6,10 @@ import { Minus, Plus, Store } from 'lucide-react'
 import { BRAND } from '@momentum/brand'
 import { useAddToCart, useCart, useRemoveFromCart, useUpdateCartItem } from '@/hooks/useCommerce'
 import { ProductPhoto } from './ProductPhoto'
+import { FavouriteButton } from './FavouriteButton'
 import { productImage } from '@/lib/media'
 import { inr } from '@/lib/money'
+import { discountLabel, displayPrice } from '@/lib/product'
 
 export type ProductCardData = {
   id: string
@@ -22,13 +24,23 @@ export type ProductCardData = {
   thumbnail_url?: string | null
   source_image_url?: string | null
   retailer_name?: string | null
+  seller_name?: string | null
   category_name?: string | null
+  // Money in PAISE, the storefront's own shape. The rupee floats after them
+  // are the deprecated pair, read only when the paise are absent.
+  min_price_minor?: number | null
+  mrp_minor?: number | null
   min_selling_price?: number | null
   min_mrp?: number | null
+  // Derived by the server. The card never does this sum itself.
+  discount_pct?: number | null
   avg_rating?: number
   review_count?: number
   total_stock?: number | null
+  in_stock?: boolean | null
   default_variant_id?: string | null
+  // The heart, for the calling user. Absent when nobody is signed in.
+  is_favourite?: boolean | null
 }
 
 type Props = {
@@ -37,6 +49,12 @@ type Props = {
   emptyLabel?: string
   /** Rendered after the last card — the seller invite on a sparse landing. */
   tail?: React.ReactNode
+  /**
+   * `grid` wraps; `rail` is one horizontal, snap-scrolling row, which is what
+   * the landing's merchandised sections are. Same card either way, so a deal
+   * looks the same on the rail as it does in the grid it links to.
+   */
+  layout?: 'grid' | 'rail'
 }
 
 // Re-exported so the four screens that already say `import { inr } from
@@ -45,13 +63,14 @@ type Props = {
 // one place and paise in another eventually formats one of them wrong.
 export { inr }
 
-export function ProductGrid({ products, isLoading, emptyLabel = 'No products', tail }: Props) {
+export function ProductGrid({ products, isLoading, emptyLabel = 'No products', tail, layout = 'grid' }: Props) {
   const addToCart = useAddToCart()
   const updateCart = useUpdateCartItem()
   const removeFromCart = useRemoveFromCart()
   const { data: cart } = useCart()
   const [addingId, setAddingId] = useState<string | null>(null)
   const [addedId, setAddedId] = useState<string | null>(null)
+  const wrapper = layout === 'rail' ? 'product-rail' : 'product-grid'
 
   async function add(product: ProductCardData) {
     if (!product.default_variant_id) return
@@ -79,8 +98,8 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
 
   if (isLoading) {
     return (
-      <div className="product-grid">
-        {Array.from({ length: 8 }).map((_, i) => (
+      <div className={wrapper}>
+        {Array.from({ length: layout === 'rail' ? 5 : 8 }).map((_, i) => (
           <div key={i} className="product-skeleton" aria-hidden="true">
             <div className="skeleton-block aspect-square" />
             <div className="skeleton-block mt-4 h-3 w-1/3" />
@@ -100,7 +119,7 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
     )
   }
   return (
-    <div className="product-grid">
+    <div className={wrapper}>
       {products.map((p) => {
         // The line, read off the flat shape the service actually sends. The
         // `?.` covers only the cart being absent while it loads or while the
@@ -114,11 +133,11 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
         // stock figure is the best ceiling there is — the previous behaviour.
         const maxQuantity = line ? line.available_qty : (p.total_stock ?? 99)
         const isPending = addingId === p.id
-        const outOfStock = p.total_stock === 0
+        const outOfStock = p.in_stock === false || p.total_stock === 0
         const lowStock = !outOfStock && p.total_stock != null && p.total_stock <= 5
-        const off = p.min_mrp && p.min_selling_price && p.min_mrp > p.min_selling_price
-          ? Math.round((1 - p.min_selling_price / p.min_mrp) * 100)
-          : 0
+        const off = discountLabel(p)
+        const price = displayPrice(p)
+        const seller = p.retailer_name ?? p.seller_name
         return (
           <article key={p.id} className="product-card">
             <Link href={`/products/${p.id}`} className="flex min-w-0 flex-1 flex-col">
@@ -128,25 +147,26 @@ export function ProductGrid({ products, isLoading, emptyLabel = 'No products', t
                 badge={
                   outOfStock
                     ? <span className="plate-badge plate-badge--out">SOLD OUT</span>
-                    : off > 0 ? <span className="plate-badge">{off}% OFF</span> : null
+                    : off ? <span className="plate-badge">{off}</span> : null
                 }
               />
               <div className="product-card-body">
-                {p.retailer_name ? <div className="product-card-seller">{p.retailer_name}</div> : null}
+                {seller ? <div className="product-card-seller">{seller}</div> : null}
                 <h3 className="product-card-title">{p.title}</h3>
                 {p.avg_rating ? (
                   <div className="product-card-rating">
                     ★ {p.avg_rating.toFixed(1)} <span>({p.review_count ?? 0})</span>
                   </div>
                 ) : null}
-                {p.min_selling_price != null ? (
+                {price ? (
                   <div className="product-card-price">
-                    <b>{inr(p.min_selling_price)}</b>
-                    {p.min_mrp && p.min_mrp > p.min_selling_price ? <s>{inr(p.min_mrp)}</s> : null}
+                    <b>{price.price}</b>
+                    {price.was ? <s>{price.was}</s> : null}
                   </div>
                 ) : null}
               </div>
             </Link>
+            <FavouriteButton product={p} className="product-card-fav" />
             <div className="product-card-foot">
               <span className={`product-card-stock${lowStock ? ' is-low' : ''}`}>
                 {outOfStock ? 'Unavailable' : lowStock ? `Only ${p.total_stock} left` : 'In stock'}
@@ -197,7 +217,7 @@ export function SellerInvite() {
   return (
     <Link href="/sell" className="seller-invite">
       <Store size={26} className="text-mo-primary" aria-hidden="true" />
-      <strong>Sell on {BRAND.name}</strong>
+      <strong>Sell on {BRAND.store}</strong>
       <p>List your first product in minutes. Your catalogue, your prices, our buyers.</p>
       <span className="shop-link mt-5">Open your shop →</span>
     </Link>

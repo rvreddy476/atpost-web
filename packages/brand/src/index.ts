@@ -79,6 +79,20 @@ export const BRAND = {
   shopSuffix: "SHOP",
 
   /**
+   * The two commerce APPS, as the phone names them and as the web now must.
+   *
+   * These are not derived from NAME on purpose. The founder's decision
+   * (2026-09-12) is that the buyer surface is "MStore" and the seller surface
+   * is "MSeller" everywhere: a stylised capital M in ember, then the word.
+   * The M is the product's initial today, but the app names are a brand of
+   * their own and would survive a rename of the platform, so they are
+   * literals here and the wordmark component splits them rather than
+   * rebuilding them from `initial`.
+   */
+  store: "MStore",
+  sellerApp: "MSeller",
+
+  /**
    * What an unnamed seller is called on a listing or a cart line. A fallback,
    * shown only when the catalogue did not send a seller name.
    */

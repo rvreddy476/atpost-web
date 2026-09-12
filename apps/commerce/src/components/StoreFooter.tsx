@@ -11,13 +11,14 @@ export function StoreFooter() {
     <footer className="shop-footer">
       <div className="shop-footer-inner">
         <small>
-          © {new Date().getFullYear()} {BRAND.shop} · Prices include applicable taxes
+          © {new Date().getFullYear()} {BRAND.store} · Prices include applicable taxes
         </small>
         <nav aria-label="Store links">
           <Link href="/">All products</Link>
           <Link href="/orders">Your orders</Link>
-          <Link href="/cart">Your bag</Link>
-          <Link href="/sell">Sell on {BRAND.name}</Link>
+          <Link href="/favourites">Favourites</Link>
+          <Link href="/bag">Your bag</Link>
+          <Link href="/sell">Sell on {BRAND.store}</Link>
         </nav>
       </div>
     </footer>

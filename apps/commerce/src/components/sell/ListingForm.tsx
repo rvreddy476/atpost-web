@@ -49,6 +49,7 @@ import {
   type ListingOfferDetails,
 } from "./ListingBuiltIns"
 import { useListingDraft, type ListingDraft } from "./useListingDraft"
+import { ListingImages } from "./ListingImages"
 
 /** The sentence that makes the item/offer split mean something to a seller. */
 const OFFER_LINE = "These are yours. The details above are shared with other sellers."
@@ -528,6 +529,11 @@ function SaveBar({
 }) {
   return (
     <div className="flex flex-col gap-3">
+      {/* The photographs, above the save line, on both forms. They upload
+          on pick and attach to the draft once it has an id; see
+          ./ListingImages for the whole trip. */}
+      <ListingImages productId={draft.productId} />
+
       {missing.length > 0 && (
         <p className="text-sm text-shop-bad">
           Still needed: {missing.map((m) => m.label).join(", ")}.

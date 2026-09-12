@@ -1,7 +1,10 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import api from '@atpost/api-client'
-import { useSession as usePlatformSession } from '@atpost/api-client/session'
+import { useSession as usePlatformSession, type SessionUser } from '@atpost/api-client/session'
 import type { CartView } from '@atpost/types/commerce'
+import type { HomePage } from '@/lib/home'
+import type { ProductCardData } from '@/components/commerce/ProductGrid'
+import { favouritesAfterToggle, markFavouriteIn, withFavourite, type FavouritesPage } from '@/lib/favourites'
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -137,6 +140,18 @@ export type Product = {
   min_selling_price?: number | null
   min_mrp?: number | null
   total_stock?: number | null
+  // The storefront summary's own fields. Money in PAISE; the rupee floats
+  // above are the deprecated shape and are read only when these are absent.
+  min_price_minor?: number | null
+  mrp_minor?: number | null
+  in_stock?: boolean | null
+  // Derived by the server and never recomputed here. See lib/product.ts.
+  discount_pct?: number | null
+  // `seller_name` is the wire name; `retailer_name` above is the alias kept
+  // for this caller. Both come from one field on the server.
+  seller_name?: string | null
+  // The heart, for the calling user. Absent when nobody is signed in.
+  is_favourite?: boolean | null
 }
 
 export type Review = {
@@ -165,6 +180,10 @@ export type Category = {
   is_active?: boolean
   is_featured?: boolean
   image_media_id?: string | null
+  // Resolved by the server in one media batch; the strip draws these and
+  // falls back to the media id only when they are absent.
+  image_url?: string | null
+  thumbnail_url?: string | null
   product_count?: number
 }
 
@@ -336,6 +355,160 @@ export function useProduct(productId: string | undefined) {
   })
 }
 
+// ── The landing page ──────────────────────────────────────────────────
+
+/**
+ * `GET /v1/commerce/home`: the banner rail and the merchandised sections,
+ * with every image resolved and, for a signed-in shopper, every heart set.
+ * One request for the whole first screen, which is the reason it exists.
+ */
+export function useHome() {
+  return useQuery<HomePage>({
+    queryKey: ['commerce', 'home'],
+    queryFn: async () => {
+      const res = (await api.get('/v1/commerce/home')).data.data
+      return { banners: res?.banners ?? [], sections: res?.sections ?? [] }
+    },
+    staleTime: 60 * 1000,
+  })
+}
+
+// ── Favourites ────────────────────────────────────────────────────────
+
+export function useFavourites() {
+  const { signedIn, known } = useSession()
+  return useQuery<FavouritesPage>({
+    queryKey: ['commerce', 'favourites'],
+    queryFn: async () => {
+      const res = (await api.get('/v1/commerce/favourites', { params: { limit: 100 } })).data.data
+      return { items: res?.items ?? [], next_cursor: res?.next_cursor }
+    },
+    // A signed-out shopper has no hearts to fetch; see useCart for why an
+    // errored query is worse than an idle one.
+    enabled: known && signedIn,
+  })
+}
+
+/**
+ * The heart, optimistic.
+ *
+ * Every cached copy of the product flips at once: the favourites list, the
+ * home rails, every product-list page, and the detail page. The snapshot of
+ * all of them is the rollback, and a 401 sends the shopper to sign in with a
+ * way back, exactly as adding to the bag does.
+ */
+export function useToggleFavourite() {
+  const qc = useQueryClient()
+  // The card shape, not the full Product: a heart is pressed on a card far
+  // more often than on a detail page, and a Product is a card with more.
+  type Vars = { product: ProductCardData; isFavourite: boolean }
+  type Snapshot = Array<[readonly unknown[], unknown]>
+
+  // Every cache that holds a copy of the product by id. The favourites LIST
+  // is not in here: it needs the whole product to put at its front, and
+  // onMutate seeds it before calling this.
+  const apply = (id: string, on: boolean) => {
+    qc.setQueryData<HomePage>(['commerce', 'home'], (home) =>
+      home ? { ...home, sections: home.sections.map((s) => ({ ...s, products: markFavouriteIn(s.products, id, on) })) } : home)
+    qc.setQueriesData<unknown>({ queryKey: ['commerce', 'products'] }, (data: unknown) => {
+      if (!data || typeof data !== 'object') return data
+      if ('items' in data && Array.isArray((data as ProductListPage).items)) {
+        return { ...data, items: markFavouriteIn((data as ProductListPage).items, id, on) }
+      }
+      if ('pages' in data && Array.isArray((data as InfiniteData<ProductListCursorPage>).pages)) {
+        const infinite = data as InfiniteData<ProductListCursorPage>
+        return { ...infinite, pages: infinite.pages.map((p) => ({ ...p, items: markFavouriteIn(p.items, id, on) })) }
+      }
+      return data
+    })
+    qc.setQueryData<{ product: Product }>(['commerce', 'product', id], (detail) =>
+      detail ? { ...detail, product: withFavourite(detail.product, on) } : detail)
+  }
+
+  return useMutation<unknown, unknown, Vars, { snapshot: Snapshot }>({
+    mutationFn: async ({ product, isFavourite }) =>
+      isFavourite
+        ? (await api.post('/v1/commerce/favourites', { product_id: product.id })).data
+        : (await api.delete(`/v1/commerce/favourites/${product.id}`)).data,
+    onMutate: async ({ product, isFavourite }) => {
+      await qc.cancelQueries({ queryKey: ['commerce', 'favourites'] })
+      const snapshot: Snapshot = [
+        ...qc.getQueriesData({ queryKey: ['commerce', 'favourites'] }),
+        ...qc.getQueriesData({ queryKey: ['commerce', 'home'] }),
+        ...qc.getQueriesData({ queryKey: ['commerce', 'products'] }),
+        ...qc.getQueriesData({ queryKey: ['commerce', 'product', product.id] }),
+      ]
+      qc.setQueryData<FavouritesPage>(['commerce', 'favourites'], (page) => favouritesAfterToggle(page, product, isFavourite))
+      apply(product.id, isFavourite)
+      return { snapshot }
+    },
+    onError: (error, _vars, context) => {
+      for (const [key, data] of context?.snapshot ?? []) qc.setQueryData(key, data)
+      if (typeof window !== 'undefined' && isSignedOut(error)) {
+        const back = window.location.pathname + window.location.search
+        window.location.assign(`/login?redirect=${encodeURIComponent(back)}`)
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['commerce', 'favourites'] })
+    },
+  })
+}
+
+// ── Product gallery (seller) ──────────────────────────────────────────
+
+/** One gallery entry as `GET /v1/commerce/products/{id}/media` returns it. */
+export interface ProductMediaItem {
+  media_id: string
+  media_type: string
+  sort_order: number
+  image_url?: string
+  thumbnail_url?: string
+  is_cover: boolean
+}
+
+export function useProductMedia(productId: string | null | undefined) {
+  return useQuery<ProductMediaItem[]>({
+    queryKey: ['commerce', 'product-media', productId],
+    queryFn: async () => (await api.get(`/v1/commerce/products/${productId}/media`)).data.data?.items ?? [],
+    enabled: !!productId,
+  })
+}
+
+/**
+ * `POST /v1/commerce/products/{id}/media {"media_ids"}`: the WHOLE gallery,
+ * in this order, first is the cover, at most eight. A replace and not an
+ * append, so a photograph the seller removed in the editor is gone when they
+ * save. The route is seller-only by product ownership on the server.
+ */
+/** `DELETE …/media/{mediaId}`: one image off the gallery. The replace route
+ *  refuses an empty list, so emptying a gallery goes through here. */
+export function useRemoveProductMedia(productId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (mediaId: string) =>
+      (await api.delete(`/v1/commerce/products/${productId}/media/${mediaId}`)).data.data?.items as ProductMediaItem[] | undefined,
+    onSuccess: (items) => {
+      if (items) qc.setQueryData(['commerce', 'product-media', productId], items)
+      else qc.invalidateQueries({ queryKey: ['commerce', 'product-media', productId] })
+      qc.invalidateQueries({ queryKey: ['commerce', 'product', productId] })
+    },
+  })
+}
+
+export function useSetProductMedia(productId: string | null | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (mediaIds: string[]) =>
+      (await api.post(`/v1/commerce/products/${productId}/media`, { media_ids: mediaIds })).data.data?.items as ProductMediaItem[],
+    onSuccess: (items) => {
+      qc.setQueryData(['commerce', 'product-media', productId], items ?? [])
+      qc.invalidateQueries({ queryKey: ['commerce', 'product', productId] })
+      qc.invalidateQueries({ queryKey: ['seller', 'products'] })
+    },
+  })
+}
+
 export function useProductReviews(productId: string | undefined) {
   return useQuery<{ reviews: Review[]; total: number }>({
     queryKey: ['commerce', 'product-reviews', productId],
@@ -457,9 +630,11 @@ export function isSignedOut(error: unknown): boolean {
  * cookies — so the landing page no longer renders a signed-out shell for a
  * frame before correcting itself.
  */
-export function useSession(): { signedIn: boolean; known: boolean } {
-  const { signedIn, known } = usePlatformSession()
-  return { signedIn, known }
+export function useSession(): { signedIn: boolean; known: boolean; user: SessionUser | null } {
+  const { signedIn, known, user } = usePlatformSession()
+  // `user` is additive: the header's avatar wants an initial, and the dozen
+  // callers that destructure the first two fields are unaffected.
+  return { signedIn, known, user }
 }
 
 export function useCart() {

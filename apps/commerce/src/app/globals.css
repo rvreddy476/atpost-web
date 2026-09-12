@@ -376,16 +376,10 @@ body {
 .market-note { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 30px; border-bottom: 1px solid var(--shop-gold-line); background: rgb(var(--shop-sunken)); color: rgb(var(--shop-gold)); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .header-main { display: flex; max-width: 1400px; min-height: 74px; align-items: center; gap: 24px; margin: auto; padding: 12px 24px; }
 
-/* The wordmark, and the whole re-skin in one lockup: an EMBER tile carrying
-   the product's initial, the product name in Outfit, and a gold SHOP suffix
-   under it. Ember says which product this is, gold says which part of it.
-
-   The tile is the one place ember appears as a fill in the chrome, and its
-   glyph is 21px/700 — above the 19px/700 floor the 4.03 red end requires. */
-.shop-brand { position: relative; display: grid; flex: none; grid-template-columns: auto auto; align-items: center; color: rgb(var(--shop-ink)); }
-.shop-brand span { display: grid; width: 40px; height: 40px; margin-right: 11px; grid-row: 1 / 3; place-items: center; border-radius: 12px; background-color: rgb(var(--shop-ember-flat)); background-image: var(--shop-ember); color: rgb(var(--shop-on-ember)); font-family: var(--shop-display); font-size: 21px; font-weight: 700; box-shadow: var(--mo-ember-glow); }
-.shop-brand strong { font-family: var(--shop-display); font-size: 21px; font-weight: 600; line-height: 1; letter-spacing: var(--mo-tracking-display); }
-.shop-brand small { margin-top: 5px; color: rgb(var(--shop-gold)); font-size: 8px; font-weight: 800; letter-spacing: .26em; }
+/* The wordmark is the MStore lockup (an ember M, then the word), declared
+   with the rest of the parity work at the end of this file under
+   `.store-brand` / `.app-wordmark`. The old ember-tile-plus-SHOP-suffix
+   lockup that lived here is gone with the component that drew it. */
 
 /* Search is navigation, so its focus and its submit button are cyan. */
 .market-search { display: flex; height: 46px; min-width: 180px; max-width: 640px; flex: 1; align-items: center; margin-inline: auto; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 12px; background: rgb(var(--shop-sunken)); padding-left: 16px; color: rgb(var(--shop-muted)); transition: border-color .2s, box-shadow .2s; }
@@ -397,14 +391,14 @@ body {
 .market-search button svg { width: 18px; }
 
 .header-actions { display: flex; flex: none; align-items: center; gap: 4px; }
-.header-action, .cart-action { display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 11px; padding: 0 12px; color: rgb(var(--shop-muted)); font-size: 12px; font-weight: 700; transition: background .15s, color .15s, border-color .15s; }
-.header-action:hover, .cart-action:hover { background: rgb(var(--shop-ink) / .07); color: rgb(var(--shop-ink)); }
-.cart-action { margin-left: 6px; border-color: var(--shop-line-strong); color: rgb(var(--shop-ink)); }
-.cart-action:hover { border-color: rgb(var(--shop-interactive)); }
-.cart-action > span { position: relative; }
+.header-action, .bag-action { display: flex; min-height: 44px; align-items: center; gap: 8px; border: 1px solid transparent; border-radius: 11px; padding: 0 12px; color: rgb(var(--shop-muted)); font-size: 12px; font-weight: 700; transition: background .15s, color .15s, border-color .15s; }
+.header-action:hover, .bag-action:hover { background: rgb(var(--shop-ink) / .07); color: rgb(var(--shop-ink)); }
+.bag-action { margin-left: 6px; border-color: var(--shop-line-strong); color: rgb(var(--shop-ink)); }
+.bag-action:hover { border-color: rgb(var(--shop-interactive)); }
+.bag-action > span { position: relative; }
 /* The bag badge is gold and is the only gold fill in the header. It counts
    what you are about to pay for, which is the buy path. */
-.cart-action b { position: absolute; top: -9px; right: -10px; display: grid; min-width: 19px; height: 19px; place-items: center; border-radius: var(--mo-radius-pill); background: rgb(var(--shop-gold)); color: rgb(var(--shop-on-gold)); font-size: 10px; font-weight: 800; }
+.bag-action b { position: absolute; top: -9px; right: -10px; display: grid; min-width: 19px; height: 19px; place-items: center; border-radius: var(--mo-radius-pill); background: rgb(var(--shop-gold)); color: rgb(var(--shop-on-gold)); font-size: 10px; font-weight: 800; }
 
 /* Category chips are navigation. Cyan throughout, including the selected one:
    choosing a department is not a purchase. */
@@ -774,3 +768,104 @@ select.field option { background: rgb(var(--shop-surface)); color: rgb(var(--sho
   .vbag-summary { padding: 22px; }
   .shop-footer-inner { flex-direction: column; align-items: flex-start; }
 }
+
+/* ══════════════════════════════════════════════════════════ MSTORE PARITY
+   The buyer surfaces the phone already has, brought to the web 2026-09-12:
+   the app wordmark, the profile menu, the heart, the landing strip, the
+   offers rail and the product rails, and the seller gallery editor.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* The lockup: an ember M, then the word in ink. The mark is 1.35em/800 on the
+   gradient, a non-text mark by size and weight, so ember at 4.03 is enough
+   for it; the word beside it stays ink because ember at 22px/700 would not. */
+.store-brand { display: flex; flex: none; align-items: center; min-height: 44px; }
+.app-wordmark { display: inline-flex; align-items: baseline; gap: 1px; color: rgb(var(--shop-ink)); font-family: var(--shop-display); font-size: 22px; font-weight: 700; line-height: 1; letter-spacing: -.01em; }
+.app-wordmark b { background-image: var(--shop-ember); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 1.35em; font-style: italic; font-weight: 800; filter: drop-shadow(0 2px 8px rgb(var(--shop-ember-flat) / .35)); }
+
+/* An icon action in the bar: the heart. Its count is ink on the ground, not
+   gold: how many things you want is not money. */
+.header-icon { position: relative; display: grid; width: 44px; height: 44px; flex: none; place-items: center; border: 1px solid transparent; border-radius: 11px; color: rgb(var(--shop-muted)); transition: background .15s, color .15s; }
+.header-icon:hover { background: rgb(var(--shop-ink) / .07); color: rgb(var(--shop-ink)); }
+.header-icon b { position: absolute; top: 3px; right: 3px; display: grid; min-width: 17px; height: 17px; place-items: center; border-radius: var(--mo-radius-pill); background: rgb(var(--shop-ink)); padding: 0 4px; color: rgb(var(--shop-bg)); font-size: 10px; font-weight: 800; }
+
+/* The profile menu. Kept mounted and closed with `hidden`, like the role
+   switcher, so it is in the markup and can be tested without a browser. */
+.account-menu { position: relative; margin-left: 4px; }
+.account-trigger { display: flex; min-height: 44px; align-items: center; gap: 4px; border: 1px solid transparent; border-radius: 11px; padding: 0 6px 0 4px; color: rgb(var(--shop-muted)); transition: background .15s, color .15s; }
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgb(var(--shop-ink) / .07); color: rgb(var(--shop-ink)); }
+.account-avatar { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid var(--shop-line-strong); border-radius: 50%; background: rgb(var(--shop-raised)); color: rgb(var(--shop-ink)); font-size: 13px; font-weight: 800; }
+.account-panel { position: absolute; z-index: 50; top: calc(100% + 8px); right: 0; min-width: 250px; border: 1px solid var(--shop-line-strong); border-radius: 16px; background: rgb(var(--shop-surface)); padding: 8px; box-shadow: var(--shop-shadow-lift); }
+.account-panel a, .account-panel .is-app-only { display: flex; min-height: 40px; align-items: center; gap: 10px; border-radius: 10px; padding: 0 10px; color: rgb(var(--shop-ink)); font-size: 13px; font-weight: 600; }
+.account-panel a svg { flex: none; color: rgb(var(--shop-muted)); }
+.account-panel a:hover { background: rgb(var(--shop-interactive) / .12); color: rgb(var(--shop-interactive)); }
+.account-panel a:hover svg { color: rgb(var(--shop-interactive)); }
+/* A row for a surface the web does not have. Honest, and not a link. */
+.account-panel .is-app-only { color: rgb(var(--shop-faint)); cursor: default; }
+.account-panel .is-app-only small { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.account-panel hr { margin: 6px 4px; border: 0; border-top: 1px solid var(--shop-line); }
+/* The bridge to MSeller. The glyph is ember, a non-text mark; the words are
+   ink and body, because ember at 13px is 4.03 and fails. */
+.account-panel .sell-row svg { color: rgb(var(--shop-ember-flat)); }
+.account-panel .sell-row > span { display: flex; flex-direction: column; gap: 2px; }
+.account-panel .sell-row small { color: rgb(var(--shop-faint)); font-size: 11px; font-weight: 500; }
+
+/* The heart. Filled is ember: wanting is not yet paying, so it is not gold. */
+.fav-btn { display: grid; width: 38px; height: 38px; flex: none; place-items: center; border: 1px solid var(--shop-line-strong); border-radius: 50%; background: rgb(var(--shop-bg) / .85); color: rgb(var(--shop-muted)); transition: color .15s, border-color .15s, transform .15s; }
+.fav-btn:hover { border-color: rgb(var(--shop-ember-flat) / .6); color: rgb(var(--shop-ember-flat)); transform: scale(1.06); }
+.fav-btn.is-on { border-color: rgb(var(--shop-ember-flat) / .6); color: rgb(var(--shop-ember-flat)); }
+.product-card-fav { position: absolute; z-index: 3; top: 20px; right: 20px; }
+.pdp-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.pdp-title-row .fav-btn { margin-top: 14px; }
+
+/* The category strip under the search: round art, name, live count. Empty
+   categories are dimmed, not dropped; the strip is the table of contents. */
+.category-strip { display: flex; gap: 18px; overflow-x: auto; padding: 4px 2px 12px; scrollbar-width: none; }
+.category-strip::-webkit-scrollbar { display: none; }
+.category-chip { display: flex; width: 96px; flex: none; flex-direction: column; align-items: center; gap: 8px; text-align: center; transition: transform .2s; }
+.category-chip:hover { transform: translateY(-2px); }
+.category-chip.is-empty { opacity: .45; }
+.category-chip-art { display: grid; width: 72px; height: 72px; place-items: center; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 50%; background: rgb(var(--shop-raised)); color: rgb(var(--shop-interactive)); transition: border-color .2s; }
+.category-chip:hover .category-chip-art { border-color: rgb(var(--shop-interactive)); }
+.category-chip-art img { width: 100%; height: 100%; object-fit: cover; }
+.category-chip strong { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12px; font-weight: 700; line-height: 1.2; }
+.category-chip small { color: rgb(var(--shop-faint)); font-size: 10px; font-weight: 600; letter-spacing: .04em; }
+
+/* The offers rail: one wide card at a time, snap-scrolled, nothing moving on
+   its own. */
+.banner-carousel { position: relative; }
+.banner-track { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.banner-track::-webkit-scrollbar { display: none; }
+.banner-card { position: relative; display: block; flex: 0 0 min(100%, 760px); aspect-ratio: 21 / 9; overflow: hidden; border: 1px solid var(--shop-line); border-radius: 20px; background: rgb(var(--shop-surface)); scroll-snap-align: start; }
+.banner-card img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s var(--mo-ease); }
+.banner-card:hover img { transform: scale(1.03); }
+.banner-copy { position: absolute; inset: auto 0 0 0; display: flex; flex-direction: column; gap: 4px; background: linear-gradient(transparent, rgb(var(--shop-bg) / .9)); padding: 36px 22px 18px; }
+.banner-copy strong { font-family: var(--shop-display); font-size: 22px; font-weight: 600; line-height: 1.2; }
+.banner-copy span { color: rgb(var(--shop-muted)); font-size: 13px; }
+.banner-nav { position: absolute; top: 50%; display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--shop-line-strong); border-radius: 50%; background: rgb(var(--shop-bg) / .85); color: rgb(var(--shop-ink)); transform: translateY(-50%); transition: border-color .15s, color .15s; }
+.banner-nav:hover { border-color: rgb(var(--shop-interactive)); color: rgb(var(--shop-interactive)); }
+.banner-nav--prev { left: 10px; }
+.banner-nav--next { right: 10px; }
+
+/* A product rail: the grid card, in one snap-scrolling row. */
+.product-rail { display: flex; gap: 16px; overflow-x: auto; padding: 4px 2px 14px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.product-rail > .product-card, .product-rail > .product-skeleton { flex: 0 0 248px; scroll-snap-align: start; }
+
+/* The seller gallery editor. */
+.gallery-editor { border: 1px solid var(--shop-line); border-radius: var(--mo-radius); background: rgb(var(--shop-sunken)); padding: 20px; }
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+.gallery-tile { position: relative; aspect-ratio: 1; overflow: hidden; border: 1px solid var(--shop-line-strong); border-radius: 14px; background: rgb(var(--shop-surface)); cursor: grab; transition: border-color .15s, opacity .15s; }
+.gallery-tile img { width: 100%; height: 100%; object-fit: cover; }
+.gallery-tile.is-dragging { opacity: .4; }
+.gallery-tile.is-over { border-color: rgb(var(--shop-interactive)); box-shadow: 0 0 0 3px rgb(var(--shop-interactive) / .2); }
+.gallery-tile.is-failed { border-color: rgb(var(--shop-bad)); }
+.gallery-tile-cover { position: absolute; z-index: 3; top: 8px; left: 8px; border-radius: var(--mo-radius-pill); background: rgb(var(--shop-bg)); padding: 4px 8px; color: rgb(var(--shop-gold)); font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.gallery-tile-progress { position: absolute; z-index: 3; top: 0; left: 0; height: 3px; background: rgb(var(--shop-interactive)); transition: width .2s; }
+.gallery-tile-state { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; gap: 6px; background: rgb(var(--shop-bg) / .6); padding: 8px; color: rgb(var(--shop-ink)); font-size: 11px; font-weight: 700; text-align: center; }
+.gallery-tile-state.is-error { color: rgb(var(--shop-bad)); }
+.gallery-tile-state button { display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgb(var(--shop-bad) / .5); border-radius: 8px; padding: 4px 8px; color: rgb(var(--shop-ink)); font-size: 11px; }
+.gallery-tile-actions { position: absolute; z-index: 4; inset: auto 0 0 0; display: flex; justify-content: space-between; background: linear-gradient(transparent, rgb(var(--shop-bg) / .85)); padding: 18px 6px 6px; }
+.gallery-tile-actions button { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: rgb(var(--shop-bg) / .8); color: rgb(var(--shop-ink)); transition: background .15s, color .15s; }
+.gallery-tile-actions button:hover:not(:disabled) { background: rgb(var(--shop-interactive)); color: rgb(var(--shop-bg)); }
+.gallery-tile-actions button:disabled { opacity: .3; }
+.gallery-drop { display: flex; aspect-ratio: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px dashed var(--shop-line-strong); border-radius: 14px; color: rgb(var(--shop-muted)); font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color .15s, color .15s; }
+.gallery-drop:hover, .gallery-drop:focus-within { border-color: rgb(var(--shop-interactive)); color: rgb(var(--shop-interactive)); }

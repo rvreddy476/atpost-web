@@ -1,7 +1,9 @@
 'use client'
 
+import { Suspense } from 'react'
 import Link from 'next/link'
-import { ArrowRight, Package } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { ArrowRight, History, Package } from 'lucide-react'
 import { useOrders } from '@/hooks/useCommerce'
 import { StoreHeader } from '@/components/StoreHeader'
 import { StoreFooter } from '@/components/StoreFooter'
@@ -31,8 +33,20 @@ const statusColor: Record<string, string> = {
   return_requested: 'text-shop-warn',
 }
 
-export default function OrdersPage() {
+/** The states "purchase history" means: the order is over, one way or the other. */
+const HISTORY_STATES = new Set(['delivered', 'cancelled', 'returned', 'refunded'])
+
+/**
+ * One list, two names. `?history=true` is the profile menu's "Purchase
+ * history": the same orders, narrowed to the ones that are finished, under
+ * the heading the phone uses. Reading the flag from the URL is the only
+ * reason this is split from the page below and wrapped in Suspense.
+ */
+function OrdersContent() {
+  const params = useSearchParams()
+  const history = params.get('history') === 'true'
   const { data: orders, isLoading } = useOrders()
+  const shown = history ? (orders ?? []).filter((o) => HISTORY_STATES.has(o.status)) : orders ?? []
 
   if (isLoading) return <><StoreHeader /><div className="cart-state"><span className="cart-loader" />Loading your orders…</div></>
 
@@ -41,17 +55,24 @@ export default function OrdersPage() {
       <StoreHeader />
       <main className="shop-page-narrow flex-1">
         <span className="shop-eyebrow">Your account</span>
-        <h1 className="shop-display mt-3 text-3xl sm:text-[40px]">Your orders</h1>
+        <h1 className="shop-display mt-3 text-3xl sm:text-[40px]">{history ? 'Purchase history' : 'Your orders'}</h1>
+        {history ? (
+          <p className="mt-2 text-sm text-shop-muted">
+            Orders that have been delivered, cancelled or returned. <Link href="/orders" className="shop-link">All orders</Link>
+          </p>
+        ) : null}
 
-        {!orders || orders.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="panel panel-pad mt-8 flex flex-col items-center py-16 text-center">
-            <div className="empty-vbag-mark"><Package size={30} aria-hidden="true" /></div>
-            <p className="text-shop-muted">Nothing ordered yet. Your purchases will appear here.</p>
+            <div className="empty-vbag-mark">{history ? <History size={30} aria-hidden="true" /> : <Package size={30} aria-hidden="true" />}</div>
+            <p className="text-shop-muted">
+              {history ? 'Nothing finished yet. Delivered orders will appear here.' : 'Nothing ordered yet. Your purchases will appear here.'}
+            </p>
             <Link href="/" className="btn btn-gold mt-7">Start shopping <ArrowRight size={16} aria-hidden="true" /></Link>
           </div>
         ) : (
           <div className="mt-8 flex flex-col gap-3">
-            {orders.map((o) => (
+            {shown.map((o) => (
               <Link
                 key={o.id}
                 href={`/orders/${o.id}`}
@@ -81,5 +102,13 @@ export default function OrdersPage() {
       </main>
       <StoreFooter />
     </div>
+  )
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={<><StoreHeader /><div className="cart-state"><span className="cart-loader" />Loading your orders…</div></>}>
+      <OrdersContent />
+    </Suspense>
   )
 }

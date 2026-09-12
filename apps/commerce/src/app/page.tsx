@@ -2,17 +2,16 @@
 
 import { Suspense, useState } from "react"
 import Link from "next/link"
-import { BRAND } from "@momentum/brand"
 import { useSearchParams } from "next/navigation"
-import {
-  ArrowRight, ShieldCheck, Truck, RotateCcw, BadgePercent, Tag, Sparkles, Star, Package,
-} from "lucide-react"
+import { ArrowRight, Tag } from "lucide-react"
 import { StoreHeader } from "@/components/StoreHeader"
 import { StoreFooter } from "@/components/StoreFooter"
-import { ProductGrid, SellerInvite, inr, type ProductCardData } from "@/components/commerce/ProductGrid"
-import { ProductPhoto } from "@/components/commerce/ProductPhoto"
-import { productImage, mediaUrl } from "@/lib/media"
-import { useProducts, useCategories, type Category } from "@/hooks/useCommerce"
+import { ProductGrid, SellerInvite, type ProductCardData } from "@/components/commerce/ProductGrid"
+import { BannerCarousel } from "@/components/commerce/BannerCarousel"
+import { CategoryStrip } from "@/components/commerce/CategoryStrip"
+import { mediaUrl } from "@/lib/media"
+import { liveBanners, orderHomeSections } from "@/lib/home"
+import { useProducts, useCategories, useHome, type Category } from "@/hooks/useCommerce"
 
 /**
  * A filter chip. Cyan, not gold: narrowing a list is navigation, and gold in
@@ -28,87 +27,21 @@ function chip(active: boolean) {
   ].join(" ")
 }
 
-/**
- * The hero. Deliberately not a stock-photo wall: an editorial panel with the
- * shop's real numbers, and one real product on its plate beside it. With
- * eight products in the catalogue that reads as a considered storefront,
- * where a five-slot carousel would read as a half-finished one.
- */
-function Hero({ categories, featured, isLoading }: {
-  categories: Category[]
-  featured?: ProductCardData
-  isLoading: boolean
-}) {
-  const stocked = categories.filter((c) => (c.product_count ?? 0) > 0).length
-  return (
-    <section className="hero" aria-labelledby="hero-title">
-      <div className="hero-copy">
-        <span className="shop-eyebrow">The {BRAND.name} Marketplace</span>
-        <h1 id="hero-title">Things worth <em>owning</em>, from sellers worth trusting.</h1>
-        <p>
-          A curated marketplace of independent Indian sellers. Every listing is reviewed before it
-          goes live, every payment is protected, and every order is yours to return.
-        </p>
-        <div className="hero-cta">
-          <Link href="/?stock=true" className="btn btn-gold btn-lg">
-            Shop everything <ArrowRight size={17} aria-hidden="true" />
-          </Link>
-          <Link href="/sell" className="btn btn-outline btn-lg">Sell on {BRAND.name}</Link>
-        </div>
-        <div className="hero-stats">
-          <div><strong>{categories.length || 12}</strong><span>Categories</span></div>
-          <div><strong>{stocked || "—"}</strong><span>Stocked now</span></div>
-          <div><strong>100%</strong><span>Reviewed listings</span></div>
-        </div>
-      </div>
-      {/* Hold the second column while the catalogue loads: without it the hero
-          renders one column and then snaps to two, which is a full-width jump
-          on the first thing a visitor sees. */}
-      {isLoading && !featured ? (
-        <div className="hero-feature" aria-hidden="true">
-          <div className="skeleton-block aspect-square" />
-          <div className="hero-feature-body">
-            <div className="skeleton-block h-3 w-1/3" />
-            <div className="skeleton-block mt-4 h-5" />
-            <div className="skeleton-block mt-4 h-7 w-1/2" />
-          </div>
-        </div>
-      ) : null}
-      {featured ? (
-        <Link href={`/products/${featured.id}`} className="hero-feature">
-          <ProductPhoto src={productImage(featured, { width: 720 })} alt={featured.title} priority tight
-            badge={<span className="plate-badge">Featured</span>} />
-          <div className="hero-feature-body">
-            <span>{featured.retailer_name ?? BRAND.sellerFallback}</span>
-            <strong>{featured.title}</strong>
-            {featured.min_selling_price != null ? (
-              <div className="hero-feature-price">
-                <b>{inr(featured.min_selling_price)}</b>
-                {featured.min_mrp && featured.min_mrp > featured.min_selling_price
-                  ? <s>{inr(featured.min_mrp)}</s> : null}
-              </div>
-            ) : null}
-            <span className="shop-link mt-4">View product <ArrowRight size={15} aria-hidden="true" /></span>
-          </div>
-        </Link>
-      ) : null}
-    </section>
-  )
-}
-
 function CategoryTile({ category }: { category: Category }) {
   const count = category.product_count ?? 0
   // Several seeded categories point at media ids the media service never
   // received, so the artwork 404s. Falling back to the tag glyph on error
   // keeps the row of tiles even instead of leaving broken-image squares.
   const [artFailed, setArtFailed] = useState(false)
-  const showArt = !!category.image_media_id && !artFailed
+  const src = category.thumbnail_url || category.image_url
+    || (category.image_media_id ? mediaUrl(category.image_media_id, { width: 120 }) : null)
+  const showArt = !!src && !artFailed
   return (
     <Link href={`/?category=${encodeURIComponent(category.id)}`} className="category-tile">
       <span className="category-tile-mark">
         {showArt
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={mediaUrl(category.image_media_id!, { width: 120 })} alt="" onError={() => setArtFailed(true)} />
+          ? <img src={src} alt="" onError={() => setArtFailed(true)} />
           : <Tag size={20} aria-hidden="true" />}
       </span>
       <span className="category-tile-copy">
@@ -122,6 +55,14 @@ function CategoryTile({ category }: { category: Category }) {
   )
 }
 
+/**
+ * The landing, in the founder's order and the phone's: search (in the
+ * header), the category strip, the offers carousel, then the merchandised
+ * rails (deals, best sellers, new arrivals), then the category grid, then
+ * everything else. Every section that has nothing in it is absent rather
+ * than empty, so a fresh catalogue shows a shorter page and not a page of
+ * headings over blank strips.
+ */
 function MarketplaceLanding({
   categories,
   products,
@@ -133,53 +74,67 @@ function MarketplaceLanding({
   isLoading: boolean
   isError: boolean
 }) {
+  const home = useHome()
+  const banners = liveBanners(home.data?.banners)
+  const sections = orderHomeSections(home.data?.sections)
   // Categories that actually have stock lead the browse grid; the rest keep
   // their place below so the full twelve stay reachable and legible.
   const ordered = [...categories].sort(
     (a, b) => (b.product_count ?? 0) - (a.product_count ?? 0) || (a.display_order ?? 0) - (b.display_order ?? 0),
   )
-  // The hero leads with a photograph, so it leads with a product that has
-  // one — a "no image" plate is honest in a grid but a poor first impression.
-  const featured = products.find((p) => !!productImage(p)) ?? products[0]
 
   return (
     <>
-      <Hero categories={categories} featured={featured} isLoading={isLoading} />
-
       <div className="landing-section landing-section--tight">
-        <section className="trust-strip" aria-label={`Why shop with ${BRAND.name}`}>
-          <div><Truck size={22} aria-hidden="true" /><span><strong>Delivered across India</strong><small>Tracked on every order</small></span></div>
-          <div><ShieldCheck size={22} aria-hidden="true" /><span><strong>Protected payments</strong><small>UPI, cards and net banking</small></span></div>
-          <div><RotateCcw size={22} aria-hidden="true" /><span><strong>Easy returns</strong><small>Return window on every item</small></span></div>
-          <div><BadgePercent size={22} aria-hidden="true" /><span><strong>Seller-direct prices</strong><small>No middleman markup</small></span></div>
-        </section>
+        <CategoryStrip categories={ordered} />
       </div>
 
-      <section className="landing-section" aria-labelledby="browse-title">
-        <div className="section-heading">
-          <div>
-            <span className="shop-eyebrow">Browse</span>
-            <h2 id="browse-title">Shop by category</h2>
-            <p>Every department in the catalogue, with what is actually stocked in each.</p>
-          </div>
-          <Link href="/?stock=true" className="shop-link">See everything <ArrowRight size={16} aria-hidden="true" /></Link>
+      {banners.length > 0 ? (
+        <div className="landing-section landing-section--tight">
+          <BannerCarousel banners={banners} />
         </div>
-        {ordered.length ? (
+      ) : null}
+
+      {home.isLoading && sections.length === 0 ? (
+        <section className="landing-section" aria-busy="true" aria-label="Loading offers">
+          <div className="section-heading"><div><div className="skeleton-block h-3 w-24" /><div className="skeleton-block mt-3 h-7 w-56" /></div></div>
+          <ProductGrid products={[]} isLoading layout="rail" />
+        </section>
+      ) : null}
+
+      {sections.map((section) => (
+        <section key={section.key} className="landing-section" aria-labelledby={`rail-${section.key}`}>
+          <div className="section-heading">
+            <div>
+              <h2 id={`rail-${section.key}`}>{section.title}</h2>
+            </div>
+            <Link href="/?stock=true" className="shop-link">See all <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+          <ProductGrid products={section.products} layout="rail" />
+        </section>
+      ))}
+
+      {ordered.length > 0 ? (
+        <section className="landing-section" aria-labelledby="browse-title">
+          <div className="section-heading">
+            <div>
+              <span className="shop-eyebrow">Browse</span>
+              <h2 id="browse-title">Shop by category</h2>
+              <p>Every department in the catalogue, with what is actually stocked in each.</p>
+            </div>
+            <Link href="/?stock=true" className="shop-link">See everything <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
           <div className="category-grid">
             {ordered.map((category) => <CategoryTile key={category.id} category={category} />)}
           </div>
-        ) : (
-          <div className="category-grid" aria-hidden="true">
-            {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton-block h-[108px]" />)}
-          </div>
-        )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="landing-section" aria-labelledby="featured-title">
+      <section className="landing-section landing-section--last" aria-labelledby="featured-title">
         <div className="section-heading">
           <div>
             <span className="shop-eyebrow">In stock now</span>
-            <h2 id="featured-title">Fresh on the shelf</h2>
+            <h2 id="featured-title">Everything in the shop</h2>
             <p>Everything currently listed and ready to ship.</p>
           </div>
           <Link href="/?stock=true" className="shop-link">Shop all <ArrowRight size={16} aria-hidden="true" /></Link>
@@ -194,24 +149,6 @@ function MarketplaceLanding({
           // A short catalogue leaves a ragged tail row; the invite fills it.
           tail={!isLoading && products.length > 0 && products.length % 4 !== 0 ? <SellerInvite /> : null}
         />
-      </section>
-
-      <section className="landing-section landing-section--last" aria-labelledby="promise-title">
-        <div className="panel flex flex-wrap items-center justify-between gap-6 p-8">
-          <div className="min-w-[260px] flex-1">
-            <span className="shop-eyebrow">The {BRAND.name} promise</span>
-            <h2 id="promise-title" className="shop-display mt-3 text-2xl">Bought here, backed here.</h2>
-            <p className="mt-3 max-w-[54ch] text-sm leading-relaxed text-shop-muted">
-              Listings are reviewed before publication, payments settle through a protected gateway,
-              and returns are handled in the same place you ordered.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-8">
-            <div className="flex items-center gap-3 text-sm text-shop-muted"><Sparkles size={19} className="text-shop-gold" aria-hidden="true" /> Reviewed listings</div>
-            <div className="flex items-center gap-3 text-sm text-shop-muted"><Star size={19} className="text-shop-gold" aria-hidden="true" /> Verified reviews</div>
-            <div className="flex items-center gap-3 text-sm text-shop-muted"><Package size={19} className="text-shop-gold" aria-hidden="true" /> Tracked delivery</div>
-          </div>
-        </div>
       </section>
     </>
   )
