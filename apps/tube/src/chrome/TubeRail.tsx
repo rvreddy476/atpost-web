@@ -48,8 +48,8 @@ import {
   EXIT_ITEM,
   EXPLORE_ITEM,
   PRIMARY_ITEMS,
-  SETTINGS_ITEM,
   currentRailId,
+  settingsItem,
   youItems,
   type TubeRailItem,
 } from "./rail"
@@ -113,7 +113,7 @@ export function TubeRailContent({
   onNavigate,
 }: TubeRailProps) {
   const you = youItems({ signedIn, ownChannelRef })
-  const tail: TubeRailItem[] = [SETTINGS_ITEM, EXPLORE_ITEM, EXIT_ITEM]
+  const tail: TubeRailItem[] = [settingsItem({ signedIn }), EXPLORE_ITEM, EXIT_ITEM]
   const all: TubeRailItem[] = [...PRIMARY_ITEMS, ...you, ...tail]
   const currentId = currentRailId(pathname, all)
 

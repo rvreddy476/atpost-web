@@ -119,9 +119,10 @@ export const PRIMARY_ITEMS: readonly TubeRailItem[] = [HOME_ITEM, SUBSCRIPTIONS_
 /* ── "You" ────────────────────────────────────────────────────────────────── */
 
 /**
- * The viewer's own rows, which depend on whether they have a channel.
+ * The viewer's own rows: two creator destinations, then four viewer ones,
  *
  * ── Two of these four are real links and two are honestly dark ────────────
+ * "Your videos" and "Playlists" are the viewer's own channel page and its
  * "Your videos" and "Playlists" are the viewer's own channel page and its
  * playlists tab, which this app serves — so once `GET /v1/channels/me`
  * answers, they are ordinary links to `/@{handle}`. Before it answers, and
@@ -130,10 +131,14 @@ export const PRIMARY_ITEMS: readonly TubeRailItem[] = [HOME_ITEM, SUBSCRIPTIONS_
  * a long video from an account with no channel, so "you have no videos here"
  * and "you have no channel" really are the same fact.
  *
- * "History" and "Saved videos" have no page in this zone and are dark. Both
- * have live endpoints — `GET /v1/videos/continue-watching` and
- * `GET /v1/posts/bookmarks` — and an endpoint is not a page. They become
- * links on the day something serves them, and not before.
+ * "History" and "Saved videos" were dark until 2026-09-12, and the rule that
+ * kept them dark is worth keeping: an endpoint is not a page. Both had live
+ * endpoints for months (`GET /v1/videos/continue-watching`,
+ * `GET /v1/posts/bookmarks`) and no page in this zone to serve them, so a
+ * link would have been a link to a 404. The pages exist now, `/history`
+ * (src/history) and `/saved` (src/saved), so the rows are links, gated on
+ * the SESSION and not on the channel: a viewer with no channel still has a
+ * history and a saved list.
  *
  * ── "Saved videos", where the brief said "Watch later" ────────────────────
  * Recorded rather than silently changed. YouTube's word is Watch later; this
@@ -161,8 +166,8 @@ export function youItems({
       id: "history",
       label: "History",
       icon: History,
-      href: null,
-      unavailableReason: signedIn ? TUBE_APP_ONLY_REASON : SIGNED_OUT_REASON,
+      href: signedIn ? "/history" : null,
+      unavailableReason: signedIn ? null : SIGNED_OUT_REASON,
     },
     {
       id: "your-videos",
@@ -184,23 +189,36 @@ export function youItems({
       label: "Saved videos",
       shortLabel: "Saved",
       icon: Clock,
-      href: null,
-      unavailableReason: signedIn ? TUBE_APP_ONLY_REASON : SIGNED_OUT_REASON,
+      href: signedIn ? "/saved" : null,
+      unavailableReason: signedIn ? null : SIGNED_OUT_REASON,
     },
   ]
 }
 
 /* ── Settings, and the way out ────────────────────────────────────────────── */
 
+/**
+ * Settings, as the signed-in viewer sees it.
+ *
+ * This was dark until 2026-09-12 because the shell's rewrite table had no
+ * /settings zone and Tube had no page, the same "an endpoint is not a page"
+ * rule the You group records. `/settings` is Tube's own route now
+ * (src/settings), and it gates on the session for the reason the page
+ * itself gives: every section of it is a claim about one account's state.
+ * `settingsItem` is what the rail draws; this constant is the live shape,
+ * kept exported so the current-row arithmetic can be tested against it.
+ */
 export const SETTINGS_ITEM: TubeRailItem = {
   id: "settings",
   label: "Settings",
   icon: Settings,
-  href: null,
-  // The shell's rewrite table has six zones and /settings is not among them.
-  // Same treatment as every other web-less destination: present, named,
-  // focusable, and honest about why.
-  unavailableReason: TUBE_APP_ONLY_REASON,
+  href: "/settings",
+  unavailableReason: null,
+}
+
+export function settingsItem({ signedIn }: { signedIn: boolean }): TubeRailItem {
+  if (signedIn) return SETTINGS_ITEM
+  return { ...SETTINGS_ITEM, href: null, unavailableReason: SIGNED_OUT_REASON }
 }
 
 /**

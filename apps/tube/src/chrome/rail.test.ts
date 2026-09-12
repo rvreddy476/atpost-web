@@ -8,6 +8,7 @@ import {
   SUBSCRIPTIONS_ITEM,
   currentRailId,
   isActionable,
+  settingsItem,
   youItems,
   type TubeRailItem,
 } from "./rail"
@@ -43,7 +44,7 @@ describe("a row without an href is never a link", () => {
    */
   it("is the only definition of 'available'", () => {
     expect(isActionable(HOME_ITEM)).toBe(true)
-    expect(isActionable(SETTINGS_ITEM)).toBe(false)
+    expect(isActionable(settingsItem({ signedIn: false }))).toBe(false)
     expect(isActionable({ ...HOME_ITEM, href: "" })).toBe(false)
     expect(isActionable({ ...HOME_ITEM, href: null })).toBe(false)
   })
@@ -149,14 +150,50 @@ describe("the You rows depend on the viewer, honestly", () => {
     expect(rows.every((row) => /sign in/i.test(row.unavailableReason ?? ""))).toBe(true)
   })
 
-  it("keeps History and Saved dark, because an endpoint is not a page", () => {
-    // GET /v1/videos/continue-watching and GET /v1/posts/bookmarks are both
-    // live. Neither has a page in this zone yet, and a row becomes a link on
-    // the day something serves it and not before.
-    const rows = youItems({ signedIn: true, ownChannelRef: "ada" })
+  it("links History and Saved for anybody signed in, channel or not", () => {
+    // Both were dark while nothing served them; /history and /saved are
+    // pages of this zone now. They gate on the session and NOT on the
+    // channel: a viewer who has never published still has a history.
+    for (const ownChannelRef of ["ada", null]) {
+      const rows = youItems({ signedIn: true, ownChannelRef })
+      const byId = Object.fromEntries(rows.map((row) => [row.id, row]))
+      expect(byId.history.href).toBe("/history")
+      expect(byId.saved.href).toBe("/saved")
+      expect(byId.history.unavailableReason).toBeNull()
+      expect(byId.saved.unavailableReason).toBeNull()
+    }
+  })
+
+  it("keeps History and Saved dark, blaming the session, when signed out", () => {
+    const rows = youItems({ signedIn: false, ownChannelRef: null })
     const byId = Object.fromEntries(rows.map((row) => [row.id, row]))
     expect(byId.history.href).toBeNull()
     expect(byId.saved.href).toBeNull()
+    expect(byId.history.unavailableReason).toMatch(/sign in/i)
+  })
+
+  it("marks the two new rows current on their own pages, and on nothing else", () => {
+    expect(currentRailId("/history", ALL_ROWS)).toBe("history")
+    expect(currentRailId("/saved", ALL_ROWS)).toBe("saved")
+    expect(currentRailId("/settings", ALL_ROWS)).toBe("settings")
+    expect(currentRailId("/historyish", ALL_ROWS)).toBeNull()
+  })
+})
+
+describe("Settings depends on the session", () => {
+  it("is a zone-relative link when signed in", () => {
+    const row = settingsItem({ signedIn: true })
+    expect(row.href).toBe("/settings")
+    expect(row.href).not.toContain("/tube")
+    expect(row.external).toBeFalsy()
+    expect(row).toBe(SETTINGS_ITEM)
+  })
+
+  it("is dark, with the session as the reason, when signed out", () => {
+    const row = settingsItem({ signedIn: false })
+    expect(isActionable(row)).toBe(false)
+    expect(row.unavailableReason).toMatch(/sign in/i)
+    expect(row.id).toBe("settings")
   })
 })
 

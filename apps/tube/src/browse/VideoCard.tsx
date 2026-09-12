@@ -83,6 +83,7 @@ export function VideoCard({
   position,
   total,
   hideCreator = false,
+  footer,
 }: {
   item: FeedItem
   /** 1-based rank, for the accessible name only. */
@@ -98,6 +99,18 @@ export function VideoCard({
    * heading is the creator's name. Saying nothing is better than saying that.
    */
   hideCreator?: boolean
+  /**
+   * A row's own line under the counts: the history page's resume line and
+   * Remove, the saved page's Remove from saved.
+   *
+   * A slot rather than a second card component, and a slot INSIDE the `<li>`
+   * rather than a sibling of it: this card IS the list item, so a page that
+   * wanted to draw something under it had two bad choices, a nested list per
+   * row or a copy of this file. The slot sits outside both anchors with the
+   * counts, so a button in it is never a control inside a control, which is
+   * the rule the header is about.
+   */
+  footer?: React.ReactNode
 }) {
   const media = videoMedia(item)
   const blurhash = videoBlurhash(media)
@@ -236,6 +249,7 @@ export function VideoCard({
             </span>
           )}
         </p>
+        {footer}
       </div>
     </li>
   )
