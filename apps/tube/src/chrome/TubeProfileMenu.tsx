@@ -43,7 +43,7 @@ import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
 import { Avatar } from "@momentum/content"
 import { channelHref } from "@/tube/channels"
-import { HOME_PATH, TUBE_APP_ONLY_REASON } from "./links"
+import { HOME_PATH } from "./links"
 
 export function TubeProfileMenu({
   displayName,
@@ -59,7 +59,6 @@ export function TubeProfileMenu({
   const baseId = useId()
   const menuId = `${baseId}-menu`
   const triggerId = `${baseId}-trigger`
-  const settingsReasonId = `${baseId}-settings-why`
   const channelReasonId = `${baseId}-channel-why`
 
   const [open, setOpen] = useState(false)
@@ -184,21 +183,18 @@ export function TubeProfileMenu({
             </div>
           )}
 
-          <div
+          {/* Settings became a page of this zone on 2026-09-12 (src/settings), so
+              this row is a link like Your channel; the menu itself only renders
+              for a signed-in viewer, which is the page's own gate. */}
+          <Link
             role="menuitem"
-            aria-disabled="true"
-            tabIndex={0}
-            aria-describedby={settingsReasonId}
-            className={`${row} cursor-default focus-visible:bg-mo-raised focus-visible:outline-none`}
+            href="/settings"
+            onClick={() => close(false)}
+            className={` font-semibold text-mo-ink hover:bg-mo-raised focus-visible:bg-mo-raised focus-visible:outline-none`}
           >
             <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-mo-body" />
-            <span className="min-w-0">
-              <span className="block font-semibold text-mo-body">Settings</span>
-              <span id={settingsReasonId} className="block text-xs leading-snug text-mo-body">
-                {TUBE_APP_ONLY_REASON}
-              </span>
-            </span>
-          </div>
+            Settings
+          </Link>
 
           {/* A plain <a> and an absolute path: /social is a different Next app
               behind the shell's rewrite table, and next/link would prefix this
