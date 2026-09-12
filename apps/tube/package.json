@@ -19,6 +19,7 @@
     "@momentum/chrome": "workspace:*",
     "@momentum/content": "workspace:*",
     "@momentum/interactions": "workspace:*",
+    "@momentum/notifications": "workspace:*",
     "@momentum/player": "workspace:*",
     "@momentum/tokens": "workspace:*",
     "axios": "^1.7.0",

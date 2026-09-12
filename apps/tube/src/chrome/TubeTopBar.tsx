@@ -45,6 +45,7 @@ import Link from "next/link"
 import { Menu, Upload } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
+import { NotificationBell } from "@momentum/notifications"
 import { TubeProfileMenu } from "./TubeProfileMenu"
 import { TubeSearch } from "./TubeSearch"
 
@@ -166,6 +167,16 @@ export function TubeTopBar({
         </div>
 
         <UploadControl />
+
+        {/* Between Upload and the account menu, where YouTube keeps its own
+            bell, and only while signed in. The same @momentum/notifications
+            control the chrome header mounts, deliberately: this zone is
+            isolated from the feed's chrome, but the inbox is the viewer's
+            and is the same inbox in every zone. Its rows are plain anchors
+            to absolute site paths, so a "followed you" here leaves Tube for
+            /u/{id} through the shell's rewrite table, which is what a
+            notification about the rest of Momentum should do. */}
+        {signedIn && <NotificationBell signedIn={signedIn} />}
 
         <div className="flex shrink-0 items-center">
           {signedIn ? (

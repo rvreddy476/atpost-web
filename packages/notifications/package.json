@@ -1,9 +1,9 @@
 {
-  "name": "@momentum/chrome",
+  "name": "@momentum/notifications",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The frame every social surface wears — header, search, the destination strip, the identity rail and the suggestions rail. The one package allowed to touch @atpost/api-client, because the chrome is what draws the viewer.",
+  "description": "The bell and the inbox behind it. Unread count, the first page, the next page, mark read and mark all read, against /v1/notifications on the gateway. The second package allowed to touch @atpost/api-client, and for the same reason as the chrome: the inbox is the viewer's, identical in every zone.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
@@ -17,13 +17,10 @@
   },
   "dependencies": {
     "@atpost/api-client": "workspace:*",
-    "@momentum/brand": "workspace:*",
-    "@momentum/content": "workspace:*",
-    "@momentum/notifications": "workspace:*"
+    "@momentum/content": "workspace:*"
   },
   "peerDependencies": {
     "lucide-react": ">=0.400.0",
-    "next": ">=14",
     "react": ">=18",
     "react-dom": ">=18"
   },
@@ -32,7 +29,6 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "lucide-react": "^0.460.0",
-    "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^5.8.2",

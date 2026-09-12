@@ -35,6 +35,7 @@
 
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
+import { NotificationBell } from "@momentum/notifications"
 import { DESTINATIONS, HOME_PATH } from "./destinations"
 import { HeaderNavIcon } from "./NavItem"
 import { ProfileMenu } from "./ProfileMenu"
@@ -127,8 +128,15 @@ export function AppHeader({
           ))}
         </nav>
 
-        {/* ── Right: you ────────────────────────────────────────────────── */}
-        <div className="ml-auto flex shrink-0 items-center">
+        {/* ── Right: what is new, then you ──────────────────────────────── */}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {/* The bell sits before the account menu rather than among the
+              destinations: it is not a place, it is a count, and a count
+              that changes belongs next to the one control that is about the
+              viewer. It draws nothing while signed out, and it says so
+              itself; `signedIn` is passed rather than read inside the
+              package so the inbox couples to no zone's session plumbing. */}
+          <NotificationBell signedIn={signedIn} />
           {signedIn ? (
             <ProfileMenu basePath={basePath} displayName={displayName} />
           ) : (

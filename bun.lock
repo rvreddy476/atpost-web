@@ -196,6 +196,7 @@
         "@momentum/chrome": "workspace:*",
         "@momentum/content": "workspace:*",
         "@momentum/interactions": "workspace:*",
+        "@momentum/notifications": "workspace:*",
         "@momentum/player": "workspace:*",
         "@momentum/tokens": "workspace:*",
         "axios": "^1.7.0",
@@ -270,6 +271,7 @@
         "@atpost/api-client": "workspace:*",
         "@momentum/brand": "workspace:*",
         "@momentum/content": "workspace:*",
+        "@momentum/notifications": "workspace:*",
       },
       "devDependencies": {
         "@atpost/config": "workspace:*",
@@ -345,6 +347,29 @@
         "react-dom": "^19.0.0",
         "typescript": "^5.8.2",
         "vitest": "^2.1.0",
+      },
+      "peerDependencies": {
+        "lucide-react": ">=0.400.0",
+        "react": ">=18",
+        "react-dom": ">=18",
+      },
+    },
+    "packages/notifications": {
+      "name": "@momentum/notifications",
+      "version": "0.1.0",
+      "dependencies": {
+        "@atpost/api-client": "workspace:*",
+        "@momentum/content": "workspace:*",
+      },
+      "devDependencies": {
+        "@atpost/config": "workspace:*",
+        "@types/react": "^19.2.2",
+        "@types/react-dom": "^19.2.2",
+        "lucide-react": "^0.460.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "typescript": "^5.8.2",
+        "vitest": "2.1.9",
       },
       "peerDependencies": {
         "lucide-react": ">=0.400.0",
@@ -614,6 +639,8 @@
     "@momentum/content": ["@momentum/content@workspace:packages/content"],
 
     "@momentum/interactions": ["@momentum/interactions@workspace:packages/interactions"],
+
+    "@momentum/notifications": ["@momentum/notifications@workspace:packages/notifications"],
 
     "@momentum/player": ["@momentum/player@workspace:packages/player"],
 
