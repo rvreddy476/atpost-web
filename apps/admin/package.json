@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start -p 3002",
     "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -15,8 +16,9 @@
     "@atpost/form": "workspace:*",
     "@atpost/types": "workspace:*",
     "@atpost/ui": "workspace:*",
-    "@momentum/brand": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
+    "@momentum/brand": "workspace:*",
+    "@momentum/tokens": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.7.0",
     "lucide-react": "^0.460.0",
@@ -24,6 +26,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.87.0",
+    "uplot": "1.6.32",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -34,6 +37,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "2.1.9"
   }
 }

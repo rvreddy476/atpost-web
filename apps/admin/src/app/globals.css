@@ -1,30 +1,39 @@
+/* @momentum/tokens FIRST, before Tailwind's layers — the same order as the shop.
+
+   It declares every --mo-* property and points the --brand-* contract that
+   @atpost/ui reads at those values, so shared tables, inputs and toasts render
+   in the console exactly as they do in the feed. The light --brand-* block
+   that used to live here is gone; the legacy grey classes the catalogue editor
+   uses are re-pointed at Momentum roles in tailwind.config.js. */
+@import "@momentum/tokens/tokens.css";
+
+/* uPlot's own layout rules (legend, cursor, selection box). A stylesheet
+   file, so the strict style-src policy admits it. */
+@import "uplot/dist/uPlot.min.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* The console palette — the LIGHT set of --brand-* values, declared per zone.
-
-   The shared Tailwind preset maps brand-* classes onto these variables, and
-   @momentum/tokens points the same variables at the dark theme. Whichever of
-   the two a zone loads is the theme it wears; that seam is how the shop moved
-   onto the dark theme without this file changing at all. Add a `.dark` block
-   with the dark values when the theme switcher is ported.
-
-   These values name no brand deliberately. Renaming the product does not
-   repaint an admin console, and a comment claiming they are "the <product>
-   tokens" would send the next rename looking for colours to change here. The
-   product's name lives in @momentum/brand and nowhere else. */
+/* next/font exposes each family as a variable (layout.tsx); hand them to the
+   token sheet, with the full system fallback behind them. */
 :root {
-  --brand-bg: 255 255 255;
-  --brand-text: 15 20 25;
-  --brand-accent: 15 20 25;
-  --brand-secondary: 247 249 249;
-  --brand-highlight: 15 20 25;
-  --brand-divider: rgba(15, 20, 25, 0.1);
-  --brand-card: 255 255 255;
+  --mo-font-display: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
-body {
-  background-color: rgb(var(--brand-bg));
-  color: rgb(var(--brand-text));
+/* A native <dialog>'s backdrop cannot take a Tailwind class. */
+dialog.admin-dialog::backdrop {
+  background: rgb(var(--mo-sunken) / 0.72);
+  backdrop-filter: blur(2px);
+}
+
+/* uPlot draws its legend and axes in currentColor-less defaults; give them ink. */
+.admin-chart .u-legend,
+.admin-chart .u-title {
+  color: rgb(var(--mo-body));
+  font-family: var(--mo-font-sans);
+  font-size: 12px;
 }

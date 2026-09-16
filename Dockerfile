@@ -20,10 +20,21 @@ RUN bun install --frozen-lockfile
 # ── build ─────────────────────────────────────────────────────────
 FROM oven/bun:1.1 AS builder
 ARG ZONE
+# Admin console only (apps/admin reads these at build time; other zones ignore
+# them). "/" serves the console at the root of its own host; the default keeps
+# the /admin zone path. See apps/admin/next.config.ts.
+ARG ADMIN_BASE_PATH=/admin
+ARG NEXT_PUBLIC_ADMIN_SIGN_IN_URL=
+ARG NEXT_PUBLIC_ADMIN_API_ORIGIN=
+ARG ADMIN_IMAGE_ORIGINS=https://*.cleestudio.com
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN bunx turbo run build --filter=@atpost/${ZONE}
+RUN ADMIN_BASE_PATH="$ADMIN_BASE_PATH" \
+    NEXT_PUBLIC_ADMIN_SIGN_IN_URL="$NEXT_PUBLIC_ADMIN_SIGN_IN_URL" \
+    NEXT_PUBLIC_ADMIN_API_ORIGIN="$NEXT_PUBLIC_ADMIN_API_ORIGIN" \
+    ADMIN_IMAGE_ORIGINS="$ADMIN_IMAGE_ORIGINS" \
+    bunx turbo run build --filter=@atpost/${ZONE}
 
 # ── runner ────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner

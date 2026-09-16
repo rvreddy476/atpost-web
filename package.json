@@ -14,7 +14,7 @@
     "dev": "turbo run dev --concurrency=15",
     "e2e": "playwright test",
     "e2e:commerce": "playwright test e2e/commerce.spec.ts",
-    "e2e:admin": "playwright test e2e/admin.spec.ts",
+    "e2e:admin": "playwright test -c playwright.admin.config.ts",
     "e2e:auth": "playwright test e2e/auth.spec.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",

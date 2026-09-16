@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { adminMe } from './admin-fixtures'
 
 // The catalogue console, driven against a mocked admin-service. Same shape as
 // admin.spec.ts: every /v1/** call is fulfilled here, so the specs assert what
@@ -121,7 +122,7 @@ const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
 
 interface MockOptions {
-  /** Status for every admin catalogue route — 403 exercises the gate. */
+  /** Status for /v1/admin/me and every admin catalogue route — 403 exercises the shell's gate. */
   adminStatus?: number
   onPatchDefinition?: (search: string) => void
 }
@@ -133,6 +134,14 @@ async function mockCatalogue(page: Page, options: MockOptions = {}) {
     const url = new URL(route.request().url())
     const path = url.pathname
     const method = route.request().method()
+
+    // The console's access check. A 403 here is what closes the shell.
+    if (path.endsWith('/v1/admin/me')) {
+      if (adminStatus !== 200) {
+        return json(route, { error: { code: 'FORBIDDEN', message: 'no admin permissions' } }, adminStatus)
+      }
+      return json(route, adminMe())
+    }
 
     // Public routes — no auth, and the same payloads the shop consumes.
     if (path.endsWith('/v1/commerce/categories') && url.searchParams.get('tree') === 'true') {

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { adminMe } from './admin-fixtures'
 
 test('admin can approve a submitted product', async ({ page }) => {
   let approved = false
@@ -15,6 +16,10 @@ test('admin can approve a submitted product', async ({ page }) => {
   await page.route('**/v1/**', async (route) => {
     const request = route.request()
     const path = new URL(request.url()).pathname
+    // The console renders nothing until /v1/admin/me says who is looking.
+    if (path.endsWith('/v1/admin/me')) {
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(adminMe()) })
+    }
     if (path.endsWith('/v1/admin/commerce/products/queue') && request.method() === 'GET') {
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: approved ? [] : [product] }) })
     }

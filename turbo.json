@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["ADMIN_BASE_PATH", "ADMIN_IMAGE_ORIGINS", "NEXT_PUBLIC_ADMIN_*"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "lint": {},
@@ -14,7 +15,8 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["ADMIN_BASE_PATH", "ADMIN_IMAGE_ORIGINS", "NEXT_PUBLIC_ADMIN_*"]
     }
   }
 }

@@ -1,16 +1,11 @@
-import { redirect } from 'next/navigation'
+import AdminLogin from "../login/page"
 
 /**
- * There is one registration form on the platform and it lives in the shell, so
- * this route only exists to point at it — same as ../login/page.tsx, and same
- * as the commerce zone's pair.
- *
- * The zone config already declares a `/admin/register` redirect
- * (packages/config/next-config.mjs), but that one is built from AUTH_APP_URL
- * and quietly does nothing when the variable is unset — which is every local
- * run. Without this file that case is a 404 on a link the sign-in page itself
- * offers. Two mechanisms for one route is redundant only while both work.
+ * Admin accounts are not created here: an ordinary account is granted an admin
+ * role by a platform admin. As a zone, next.config.ts forwards /admin/register
+ * to the shell; on its own host this shows the sign-in explanation instead of
+ * redirecting to itself.
  */
-export default function LegacyAdminRegister() {
-  redirect('/register?redirect=/admin')
+export default function AdminRegister() {
+  return <AdminLogin />
 }

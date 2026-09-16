@@ -1,25 +1,38 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import api from "@atpost/api-client"
-import { useToast } from "@atpost/ui"
 import type { Seller, Product } from "@atpost/types/commerce"
-import { apiErrorMessage } from "@/lib/catalogue"
+import { useAdminMutation } from "@/hooks/useAdminMutation"
 
-// Admin commerce endpoints live under /v1/commerce/admin. They require the
-// caller's JWT to carry admin scopes — locally that means the logged-in user's
-// id is in the gateway's SUPERADMIN_USER_IDS (then re-login). Otherwise 403.
+/**
+ * MStore through admin-service (`/v1/admin/commerce`). Every route is
+ * permission-checked and audited there:
+ *
+ *   sellers queue, approve, reject    commerce:seller.approve
+ *   suspend, unsuspend                commerce:seller.suspend
+ *   products queue and decisions      commerce:products.moderate
+ *   KYC verify                        commerce:kyc.verify, step-up
+ *   pending payouts (a READ)          commerce:payouts.read, step-up
+ *   COD remittance settle             commerce:cod.settle, step-up, two-person
+ *
+ * Writes go through useAdminMutation, so a STEP_UP_REQUIRED opens the OTP
+ * dialog and a 202 says "Sent for approval".
+ */
 const ADMIN = "/v1/admin/commerce"
 
-const list = <T>(path: string) => async (): Promise<T[]> =>
-  (await api.get(`${ADMIN}${path}`)).data.data ?? []
+const list = <T>(path: string) => async (): Promise<T[]> => (await api.get(`${ADMIN}${path}`)).data.data ?? []
+
+export const SELLERS_KEY = ["admin", "sellers", "queue"] as const
+export const PRODUCTS_KEY = ["admin", "products", "queue"] as const
+export const PAYOUTS_KEY = ["admin", "payouts"] as const
 
 export function useSellerQueue() {
-  return useQuery<Seller[]>({ queryKey: ["admin", "sellers", "queue"], queryFn: list<Seller>("/sellers/queue") })
+  return useQuery<Seller[]>({ queryKey: SELLERS_KEY, queryFn: list<Seller>("/sellers/queue") })
 }
 
 export function useProductQueue() {
-  return useQuery<Product[]>({ queryKey: ["admin", "products", "queue"], queryFn: list<Product>("/products/queue") })
+  return useQuery<Product[]>({ queryKey: PRODUCTS_KEY, queryFn: list<Product>("/products/queue") })
 }
 
 export type PendingPayout = {
@@ -30,47 +43,30 @@ export type PendingPayout = {
   status: string
 }
 
-export function usePendingPayouts() {
-  return useQuery<PendingPayout[]>({ queryKey: ["admin", "payouts"], queryFn: list<PendingPayout>("/payouts/pending") })
+/** Needs step-up: the page offers the 2FA prompt when this fails with STEP_UP_REQUIRED. */
+export function usePendingPayouts({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery<PendingPayout[]>({ queryKey: PAYOUTS_KEY, queryFn: list<PendingPayout>("/payouts/pending"), enabled })
 }
 
-// Generic POST action that re-fetches the affected queue on success.
-//
-// Both outcomes are reported now that the layout mounts a ToastProvider: before
-// this, a rejected approval simply re-enabled its button and said nothing, so a
-// 403 on the whole queue looked identical to a no-op.
-function useAdminAction(
-  makePath: (id: string) => string,
-  invalidate: string[],
-  done: string,
-) {
-  const qc = useQueryClient()
-  const { success, error } = useToast()
-  return useMutation({
-    mutationFn: async (vars: { id: string; body?: Record<string, unknown> }) =>
-      (await api.post(makePath(vars.id), vars.body ?? {})).data,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: invalidate })
-      success(done)
-    },
-    onError: (err) =>
-      error(`${done} failed`, apiErrorMessage(err, "The server did not say why.")),
+type ActionVars = { id: string; reason?: string; notes?: string }
+
+function useCommerceAction(path: (id: string) => string, invalidate: readonly string[], done: string) {
+  return useAdminMutation<ActionVars>({
+    request: ({ id, reason, notes }) => ({
+      method: "post",
+      url: `${ADMIN}${path(encodeURIComponent(id))}`,
+      body: { ...(reason ? { reason } : {}), ...(notes ? { notes } : {}) },
+    }),
+    invalidate: [invalidate],
+    successMessage: done,
+    errorTitle: `${done} failed`,
   })
 }
 
-const SELLERS = ["admin", "sellers", "queue"]
-const PRODUCTS = ["admin", "products", "queue"]
+export const useApproveSeller = () => useCommerceAction((id) => `/sellers/${id}/approve`, SELLERS_KEY, "Seller approved")
+export const useRejectSeller = () => useCommerceAction((id) => `/sellers/${id}/reject`, SELLERS_KEY, "Seller rejected")
+export const useSuspendSeller = () => useCommerceAction((id) => `/sellers/${id}/suspend`, SELLERS_KEY, "Seller suspended")
+export const useVerifySellerKYC = () => useCommerceAction((id) => `/sellers/${id}/kyc/verify`, SELLERS_KEY, "KYC verified")
 
-export const useApproveSeller = () =>
-  useAdminAction((id) => `${ADMIN}/sellers/${id}/approve`, SELLERS, "Seller approved")
-export const useRejectSeller = () =>
-  useAdminAction((id) => `${ADMIN}/sellers/${id}/reject`, SELLERS, "Seller rejected")
-export const useVerifySellerKYC = () =>
-  useAdminAction((id) => `${ADMIN}/sellers/${id}/kyc/verify`, SELLERS, "KYC verified")
-export const useSuspendSeller = () =>
-  useAdminAction((id) => `${ADMIN}/sellers/${id}/suspend`, SELLERS, "Seller suspended")
-
-export const useApproveProduct = () =>
-  useAdminAction((id) => `${ADMIN}/products/${id}/approve`, PRODUCTS, "Product approved")
-export const useRejectProduct = () =>
-  useAdminAction((id) => `${ADMIN}/products/${id}/reject`, PRODUCTS, "Product rejected")
+export const useApproveProduct = () => useCommerceAction((id) => `/products/${id}/approve`, PRODUCTS_KEY, "Product approved")
+export const useRejectProduct = () => useCommerceAction((id) => `/products/${id}/reject`, PRODUCTS_KEY, "Product rejected")
