@@ -2,8 +2,8 @@
 
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import api from "@atpost/api-client"
-import { buildAdminNav, mfaBlocks, parseAdminMe, readMfaEnrolled, type AdminMe, type AdminNavModel } from "@/lib/admin/me"
+import api, { ADMIN_SESSION_ROUTES } from "@/lib/admin/api"
+import { buildAdminNav, mfaBlocks, parseAdminMe, type AdminMe, type AdminNavModel } from "@/lib/admin/me"
 import { MFA_REQUIRED, adminErrorMessage, readApiError } from "@/lib/admin/mutation"
 
 export const ADMIN_ME_KEY = ["admin", "me"] as const
@@ -30,9 +30,11 @@ export type AdminAccess =
 
 class UnreadableMe extends Error {}
 
-export function useAdminMe() {
+export function useAdminMe(enabled = true) {
   const query = useQuery({
     queryKey: ADMIN_ME_KEY,
+    // Off on the sign-in page: there is no session to ask about yet.
+    enabled,
     queryFn: async () => {
       const response = await api.get("/v1/admin/me")
       const me = parseAdminMe(response.data)
@@ -65,12 +67,20 @@ export function useAdminMe() {
   return { access, refetch: query.refetch, isFetching: query.isFetching }
 }
 
-/** Whether an authenticator is enrolled; asked only while MFA blocks the console. */
-export function useMfaEnrolled(enabled: boolean) {
+/**
+ * The signed-in admin's address, from the admin session itself
+ * (GET /v1/auth/admin-session). Display only; null until known or when the
+ * answer has no email.
+ */
+export function useAdminIdentity() {
   return useQuery({
-    queryKey: ["admin", "mfa-enrolled"],
-    enabled,
+    queryKey: ["admin", "session"],
     retry: false,
-    queryFn: async () => readMfaEnrolled((await api.get("/v1/auth/me/capabilities")).data),
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const body = (await api.get(ADMIN_SESSION_ROUTES.status)).data as { data?: { email?: unknown } } | undefined
+      const email = body?.data?.email
+      return typeof email === "string" && email !== "" ? email : null
+    },
   })
 }

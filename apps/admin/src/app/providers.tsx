@@ -1,22 +1,13 @@
 "use client"
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { SessionProvider } from "@atpost/api-client/session"
 import { ToastProvider } from "@atpost/ui"
 import { useState } from "react"
 
-// `initialSignedIn` is read from the request's cookies by the layout. AdminGate
-// renders "You are not signed in" the moment the session is known to be empty,
-// so without the seed an administrator with a perfectly good session sees that
-// refusal for a frame on every hard load. With it, the gate's first paint is
-// already "checking your admin access".
-export function Providers({
-  initialSignedIn = null,
-  children,
-}: {
-  initialSignedIn?: boolean | null
-  children: React.ReactNode
-}) {
+// No consumer SessionProvider here: the console's session is the admin session
+// (admin_* cookies), and whether it exists is answered by the server —
+// /v1/admin/me in AdminShell — not by the consumer csrf_token presence cookie.
+export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -27,9 +18,7 @@ export function Providers({
     <QueryClientProvider client={queryClient}>
       {/* Inside the query client, because every catalogue mutation's onError
           reports through useToast(). */}
-      <SessionProvider initialSignedIn={initialSignedIn}>
-        <ToastProvider>{children}</ToastProvider>
-      </SessionProvider>
+      <ToastProvider>{children}</ToastProvider>
     </QueryClientProvider>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import api from "@atpost/api-client"
+import api from "@/lib/admin/api"
 import { useAdmin } from "@/components/shell/AdminShell"
 import { useAdminMutation } from "@/hooks/useAdminMutation"
 import { parseApprovals } from "@/lib/admin/approvals"

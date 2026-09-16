@@ -1,11 +1,12 @@
 "use client"
 
-import { createContext, useContext, useState } from "react"
-import { usePathname } from "next/navigation"
+import { createContext, useContext, useEffect, useState } from "react"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import { KeyRound, ShieldAlert, ShieldQuestion, Smartphone, TriangleAlert } from "lucide-react"
 import { buttonPrimary, buttonSecondary } from "@/components/blocks/buttons"
-import { signOut } from "@atpost/api-client"
-import { useAdminMe, useMfaEnrolled } from "@/hooks/useAdminMe"
+import { adminSignOut, withBasePath } from "@/lib/admin/api"
+import { useAdminMe } from "@/hooks/useAdminMe"
 import type { AdminMe, AdminNavModel } from "@/lib/admin/me"
 import { ProductMark, TopBar } from "./TopBar"
 import { SideNav } from "./SideNav"
@@ -34,10 +35,13 @@ export function useAdmin(): AdminContextValue {
   return ctx
 }
 
-const SIGN_IN_URL = process.env.NEXT_PUBLIC_ADMIN_SIGN_IN_URL ?? ""
-
-/** Routes that render without the console chrome (they explain how to get in). */
+/** Routes that render without the console chrome (sign-in happens there). */
 const BARE_ROUTES = ["/login", "/register"]
+
+/** The console's own sign-in page, returning to `next` afterwards. */
+export function signInHref(next?: string | null): string {
+  return next && next !== "/" && next !== "/login" ? `/login?next=${encodeURIComponent(next)}` : "/login"
+}
 
 function Screen({ icon: Icon, title, children }: { icon: typeof ShieldAlert; title: string; children: React.ReactNode }) {
   return (
@@ -54,45 +58,31 @@ function Screen({ icon: Icon, title, children }: { icon: typeof ShieldAlert; tit
   )
 }
 
-export function SignInLink() {
-  if (!SIGN_IN_URL) {
-    return (
-      <p className="text-mo-warn">
-        No admin sign-in page is configured for this host. Set NEXT_PUBLIC_ADMIN_SIGN_IN_URL when building the console.
-      </p>
-    )
-  }
+export function SignInLink({ next }: { next?: string | null }) {
   return (
-    // A plain <a>: the sign-in page is outside this app's base path.
-    <a href={SIGN_IN_URL} className={`${buttonPrimary} mt-3`}>
+    <Link href={signInHref(next)} className={`${buttonPrimary} mt-3`}>
       Sign in
-    </a>
+    </Link>
   )
 }
 
 /**
- * The blocking screen for an admin whose session is not 2FA-verified. Whether
- * they must first ENROL an authenticator or just VERIFY with one comes from
- * identity (`admin.mfa_enrolled`); when that is unknown, both steps are shown.
+ * The blocking screen for a session the server does not treat as 2FA-verified.
+ * The console's own sign-in always completes a TOTP challenge, so reaching this
+ * means the session predates it or the server no longer accepts it: signing in
+ * again is the way through. Enrolment happens in account security settings.
  */
 function MfaRequiredScreen({ onRecheck, checking }: { onRecheck: () => void; checking: boolean }) {
-  const enrolled = useMfaEnrolled(true)
-  const known = enrolled.data ?? null
   return (
     <Screen icon={Smartphone} title="Two-factor authentication is required">
       <p>
         Every admin account must use an authenticator app. The console stays closed until this session has been verified
         with a 2FA code.
       </p>
-      {known !== true ? (
-        <p data-testid="mfa-enrol">
-          {known === false ? "Your account has no authenticator enrolled yet. " : "If your account has no authenticator yet, "}
-          enrol one from your account security settings, then sign out and sign in again.
-        </p>
-      ) : null}
-      {known !== false ? (
-        <p data-testid="mfa-verify">Sign out and sign in again, entering the code from your authenticator app when asked.</p>
-      ) : null}
+      <p data-testid="mfa-verify">Sign out and sign in again, entering the code from your authenticator app when asked.</p>
+      <p data-testid="mfa-enrol">
+        If your account has no authenticator yet, enrol one from your account security settings first.
+      </p>
       <div className="flex justify-center gap-2">
         <button type="button" className={buttonSecondary} onClick={onRecheck} disabled={checking}>
           Check again
@@ -100,22 +90,36 @@ function MfaRequiredScreen({ onRecheck, checking }: { onRecheck: () => void; che
         <button
           type="button"
           className={buttonSecondary}
-          onClick={() => void signOut().then(() => window.location.reload())}
+          onClick={() => void adminSignOut().then(() => window.location.assign(withBasePath("/login")))}
         >
           Sign out
         </button>
       </div>
-      <SignInLink />
+    </Screen>
+  )
+}
+
+/** Sends a signed-out visitor to the sign-in page, keeping where they were going. */
+function SignedOutScreen({ pathname }: { pathname: string }) {
+  const router = useRouter()
+  useEffect(() => {
+    router.replace(signInHref(pathname))
+  }, [router, pathname])
+  return (
+    <Screen icon={ShieldQuestion} title="You are not signed in">
+      <p>Your session has ended. Sign in again to continue.</p>
+      <SignInLink next={pathname} />
     </Screen>
   )
 }
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { access, refetch, isFetching } = useAdminMe()
+  const bare = BARE_ROUTES.includes(pathname)
+  const { access, refetch, isFetching } = useAdminMe(!bare)
   const [navOpen, setNavOpen] = useState(false)
 
-  if (BARE_ROUTES.includes(pathname)) return <>{children}</>
+  if (bare) return <>{children}</>
 
   // The session cookie is not consulted here: /v1/admin/me answering 401 is
   // the authority, and a stale presence cookie cannot open or close the shell.
@@ -127,12 +131,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </Screen>
       )
     case "signed-out":
-      return (
-        <Screen icon={ShieldQuestion} title="You are not signed in">
-          <p>Your session has ended. Sign in again to continue.</p>
-          <SignInLink />
-        </Screen>
-      )
+      return <SignedOutScreen pathname={pathname} />
     case "mfa":
       return <MfaRequiredScreen onRecheck={() => void refetch()} checking={isFetching} />
     case "denied":

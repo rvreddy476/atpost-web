@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query"
-import api from "@atpost/api-client"
+import api from "@/lib/admin/api"
 import { useToast } from "@atpost/ui"
 import { useStepUp } from "@/components/shell/StepUpProvider"
 import { adminErrorMessage, runAdminMutation, type MutationOutcome } from "@/lib/admin/mutation"

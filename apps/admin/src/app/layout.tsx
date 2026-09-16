@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { Figtree, Outfit } from "next/font/google"
 import "./globals.css"
 import { BRAND, zoneTitle } from "@momentum/brand"
-import { readServerSession } from "@atpost/api-client/server"
+import { cookies } from "next/headers"
 import { Providers } from "./providers"
 import { AdminShell } from "@/components/shell/AdminShell"
 
@@ -21,20 +21,20 @@ export const metadata: Metadata = {
 }
 
 /**
- * Async, and therefore dynamically rendered: it reads the request's session
- * cookie, and middleware.ts issues a fresh CSP nonce per request, which only a
- * dynamic render can carry.
+ * Async, and therefore dynamically rendered: middleware.ts issues a fresh CSP
+ * nonce per request, which only a dynamic render can carry (reading the
+ * request's cookies below keeps it dynamic explicitly).
  *
  * `mo-root` brings the ground, ink, font stack, focus ring and dark
  * color-scheme. AdminShell is a real component boundary: nothing below it
  * renders until `/v1/admin/me` has said who this admin is and what they may see.
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const { signedIn } = await readServerSession()
+  await cookies()
   return (
     <html lang="en" className={`${outfit.variable} ${figtree.variable}`}>
       <body className="mo-root">
-        <Providers initialSignedIn={signedIn}>
+        <Providers>
           <AdminShell>{children}</AdminShell>
         </Providers>
       </body>

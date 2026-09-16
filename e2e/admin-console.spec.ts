@@ -32,15 +32,18 @@ function watchCsp(page: Page) {
 }
 
 test('an admin whose session is not 2FA-verified sees only the blocking screen', async ({ page }) => {
-  await mockApi(page, { verified: false }, (route, path) => {
-    if (path.endsWith('/v1/auth/me/capabilities')) return json(route, { data: { admin: { mfa_enrolled: false } } })
+  let consumerCalls = 0
+  await mockApi(page, { verified: false }, (_route, path) => {
+    // The console never asks the consumer session anything.
+    if (path.includes('/v1/auth/me')) consumerCalls += 1
     return false
   })
   await page.goto(`${BASE}/sellers`)
 
   await expect(page.getByRole('heading', { name: 'Two-factor authentication is required' })).toBeVisible()
-  await expect(page.getByTestId('mfa-enrol')).toContainText('no authenticator enrolled')
-  await expect(page.getByTestId('mfa-verify')).toHaveCount(0)
+  await expect(page.getByTestId('mfa-verify')).toContainText('sign in again')
+  await expect(page.getByTestId('mfa-enrol')).toContainText('account security settings')
+  expect(consumerCalls).toBe(0)
   await expect(page.getByRole('navigation', { name: 'Admin' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Seller queue' })).toHaveCount(0)
 })
@@ -102,11 +105,17 @@ test('navigation shows only the applications this admin holds permissions for', 
   expect(violations).toEqual([])
 })
 
-test('a mutation that needs step-up opens the 2FA dialog and retries once', async ({ page }) => {
+test('a mutation that needs step-up opens the 2FA dialog and retries once', async ({ page, context }) => {
   const seller = { id: '33333333-3333-4333-8333-333333333333', store_name: 'Asha Stores', email: 'asha@example.com', seller_type: 'individual', status: 'pending' }
   let kycCalls = 0
   let stepUpBody: unknown = null
+  let stepUpCsrf: string | undefined
   let stepUpDone = false
+  // Both CSRF cookies present: the console must echo the ADMIN one.
+  await context.addCookies([
+    { name: 'csrf_token', value: 'consumer-csrf', domain: '127.0.0.1', path: '/' },
+    { name: 'admin_csrf_token', value: 'admin-csrf', domain: '127.0.0.1', path: '/' },
+  ])
 
   await mockApi(page, { apps: { commerce: ALL_COMMERCE } }, (route, path, method) => {
     if (path.endsWith('/v1/admin/commerce/sellers/queue')) return json(route, { data: [seller] })
@@ -115,8 +124,9 @@ test('a mutation that needs step-up opens the 2FA dialog and retries once', asyn
       if (!stepUpDone) return apiError(route, 403, 'STEP_UP_REQUIRED', 'step-up required')
       return json(route, { data: { status: 'verified' } })
     }
-    if (path.endsWith('/v1/auth/step-up') && method === 'POST') {
+    if (path.endsWith('/v1/auth/admin-session/step-up') && method === 'POST') {
       stepUpBody = route.request().postDataJSON()
+      stepUpCsrf = route.request().headers()['x-csrf-token']
       stepUpDone = true
       return json(route, { data: { step_up_valid_until: new Date(Date.now() + 300_000).toISOString() } })
     }
@@ -136,6 +146,7 @@ test('a mutation that needs step-up opens the 2FA dialog and retries once', asyn
   await expect(page.getByText('KYC verified')).toBeVisible()
   await expect(dialog).toBeHidden()
   expect(stepUpBody).toEqual({ otp: '123456' })
+  expect(stepUpCsrf).toBe('admin-csrf')
   expect(kycCalls).toBe(2)
 })
 

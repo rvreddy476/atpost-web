@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import api from "@atpost/api-client"
+import api from "@/lib/admin/api"
 import type { Seller, Product } from "@atpost/types/commerce"
 import { useAdminMutation } from "@/hooks/useAdminMutation"
 

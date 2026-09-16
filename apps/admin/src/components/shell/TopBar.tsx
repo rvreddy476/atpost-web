@@ -4,8 +4,8 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { LogOut, Menu, ShieldCheck, ShieldAlert, Timer } from "lucide-react"
 import { BRAND } from "@momentum/brand"
-import { signOut } from "@atpost/api-client"
-import { useSession } from "@atpost/api-client/session"
+import { adminSignOut, withBasePath } from "@/lib/admin/api"
+import { useAdminIdentity } from "@/hooks/useAdminMe"
 import type { AdminMe } from "@/lib/admin/me"
 import { formatCountdown, stepUpSecondsLeft } from "@/lib/admin/stepUp"
 
@@ -55,8 +55,8 @@ export function StepUpCountdown({ validUntil }: { validUntil: number | null }) {
 }
 
 export function TopBar({ me, onToggleNav }: { me: AdminMe; onToggleNav: () => void }) {
-  const { user } = useSession()
-  const identity = user?.email ?? me.userId
+  const { data: email } = useAdminIdentity()
+  const identity = email ?? me.userId
 
   return (
     <header className="sticky top-0 z-40 border-b border-mo bg-mo-bg/95 backdrop-blur">
@@ -86,7 +86,7 @@ export function TopBar({ me, onToggleNav }: { me: AdminMe; onToggleNav: () => vo
           </span>
           <button
             type="button"
-            onClick={() => void signOut().then(() => window.location.reload())}
+            onClick={() => void adminSignOut().then(() => window.location.assign(withBasePath("/login")))}
             className="inline-flex items-center gap-1 rounded-mo-sm px-2 py-1.5 text-mo-body hover:bg-mo-raised hover:text-mo-ink"
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />

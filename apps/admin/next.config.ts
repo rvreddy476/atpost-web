@@ -24,22 +24,12 @@ import { API_CSP, resolveAdminBasePath, staticSecurityHeaders } from "./src/lib/
 const basePath = resolveAdminBasePath(process.env.ADMIN_BASE_PATH)
 const production = process.env.NODE_ENV === "production"
 const zone = createZoneConfig({ basePath: "/admin" })
-const authOrigin = (process.env.AUTH_APP_URL || "").replace(/\/$/, "")
 
-/**
- * Where a signed-out admin is sent. As a zone, the shell's /login sits on the
- * same host. On its own host there is no such page next door, so the URL must
- * be configured (an empty value makes the console say so instead of looping).
+/*
+ * Sign-in lives in this app (src/app/login): password, then TOTP, against
+ * auth-service's /v1/auth/admin-session/* routes, which set the console's own
+ * host-only admin_* cookies. Nothing redirects to the consumer sign-in page.
  */
-const signInUrl =
-  // `||`, not `??`: the Dockerfile passes an empty build arg when unset.
-  process.env.NEXT_PUBLIC_ADMIN_SIGN_IN_URL ||
-  (authOrigin
-    ? `${authOrigin}/login?redirect=${encodeURIComponent(basePath || "/")}`
-    : basePath
-      ? `/login?redirect=${encodeURIComponent(basePath)}`
-      : "")
-
 const nextConfig: NextConfig = {
   ...zone,
   basePath,
@@ -49,20 +39,11 @@ const nextConfig: NextConfig = {
     // equal the base path, so it is derived rather than configured twice.
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? basePath,
     NEXT_PUBLIC_ADMIN_BASE_PATH: basePath,
-    NEXT_PUBLIC_ADMIN_SIGN_IN_URL: signInUrl,
   },
+  // The zone defaults forward /login and /register to the consumer sign-in
+  // page. The console signs in on its own host, so it keeps both routes.
   async redirects() {
-    // As a zone, /admin/login and /admin/register forward to the one auth page
-    // (same behaviour as before). On its own host a "/login" → "/login"
-    // redirect would loop, so it exists only when an auth app is configured.
-    if (!basePath && !authOrigin) return []
-    const returnTo = encodeURIComponent(basePath || "/")
-    return ["login", "register"].map((page) => ({
-      source: `${basePath}/${page}`,
-      destination: `${authOrigin}/${page}?redirect=${returnTo}`,
-      permanent: false,
-      basePath: false as const,
-    }))
+    return []
   },
   async headers() {
     const noStore = [

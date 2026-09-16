@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react"
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import api from "@atpost/api-client"
+import api from "@/lib/admin/api"
 import { useToast } from "@atpost/ui"
 import type { AttributeSchema, AttributeScope, Category } from "@atpost/types/commerce"
 import {

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react"
 import { ShieldCheck } from "lucide-react"
 import { useQueryClient } from "@tanstack/react-query"
-import api from "@atpost/api-client"
+import api, { ADMIN_SESSION_ROUTES } from "@/lib/admin/api"
 import { Dialog } from "@/components/blocks/Dialog"
 import { buttonPrimary, buttonSecondary, inputClass } from "@/components/blocks/buttons"
 import { ADMIN_ME_KEY } from "@/hooks/useAdminMe"
@@ -18,8 +18,8 @@ const StepUpContext = createContext<RequestStepUp | null>(null)
  * One OTP prompt for the whole console.
  *
  * `requestStepUp()` opens the dialog and resolves `true` once
- * `POST /v1/auth/step-up` accepted a code (auth-service has then re-issued the
- * access cookie with a fresh step-up claim), or `false` if the admin closed
+ * `POST /v1/auth/admin-session/step-up` accepted a code (auth-service has then
+ * re-issued the admin access cookie with a fresh step-up claim), or `false` if the admin closed
  * it. Concurrent callers share the same prompt and the same answer.
  */
 export function StepUpProvider({
@@ -63,7 +63,7 @@ export function StepUpProvider({
     setBusy(true)
     setError(null)
     try {
-      await api.post("/v1/auth/step-up", { otp })
+      await api.post(ADMIN_SESSION_ROUTES.stepUp, { otp })
       // The countdown in the top bar reads step_up_valid_until from /me.
       await queryClient.invalidateQueries({ queryKey: ADMIN_ME_KEY })
       finish(true)
