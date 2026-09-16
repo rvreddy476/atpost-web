@@ -59,6 +59,29 @@ export const COMMERCE_SECTIONS = [
   { id: "cod", label: "COD settlement", anyOf: ["cod.settle"] },
 ] as const satisfies readonly SectionDef[]
 
+export const MONETIZATION_SECTIONS = [
+  { id: "fraud", label: "Fraud reviews", anyOf: ["fraud.review"] },
+  { id: "wallets", label: "Wallets", anyOf: ["wallet.freeze", "wallet.unfreeze", "wallet.rebuild"] },
+  { id: "fund", label: "Creator fund", anyOf: ["fund.read", "fund.rates", "fund.budget", "fund.settle", "fund.reverse"] },
+  { id: "creators", label: "Creators", anyOf: ["creators.suspend"] },
+  { id: "disputes", label: "Disputes", anyOf: ["disputes.read", "disputes.act"] },
+  { id: "refunds", label: "Refunds", anyOf: ["refund.issue"] },
+  { id: "payouts", label: "Payout requests", anyOf: ["payouts.read"] },
+  { id: "audit", label: "Audit", anyOf: ["audit.read"] },
+] as const satisfies readonly SectionDef[]
+
+/**
+ * Payments sections. The actions are checked through payments.ts
+ * `paymentsCan`, which also admits a confined `<app>:payments_<action>`.
+ */
+export const PAYMENTS_SECTIONS = [
+  { id: "refunds", label: "Refunds needing attention", anyOf: ["refunds.read", "refund.issue"] },
+  { id: "intents", label: "Intents", anyOf: ["intents.read"] },
+  { id: "reconciliation", label: "Reconciliation", anyOf: ["reconciliation.read"] },
+  { id: "applications", label: "Applications", anyOf: ["applications.read", "applications.manage"] },
+  { id: "audit", label: "Audit", anyOf: ["audit.read"] },
+] as const satisfies readonly SectionDef[]
+
 export function can(me: AdminMe, app: AdminAppId, action: string): boolean {
   return hasPermission(me, app, action)
 }

@@ -10,7 +10,7 @@ export interface Choice {
   value: string
   label?: string
   /** Shown under the select when this choice is picked (e.g. "needs a fresh 2FA code"). */
-  hint?: string
+  hint?: React.ReactNode
   destructive?: boolean
 }
 

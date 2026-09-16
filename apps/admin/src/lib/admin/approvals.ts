@@ -99,10 +99,70 @@ export function approvalDetails(item: ApprovalItem): [string, string][] {
     const value = item.payload[key]
     if (typeof value === "string" && value.trim()) rows.push([label, value])
   }
+  rows.push(...moneyPayloadRows(item.payload))
   rows.push(["Requested by", item.requestedBy ?? "Unknown"])
   if (item.requestedAt) rows.push(["Requested at", new Date(item.requestedAt).toLocaleString()])
   rows.push(["Their reason", item.reason ?? "None given"])
   if (item.expiresAt) rows.push(["Expires", new Date(item.expiresAt).toLocaleString()])
   if (item.requiredPermission) rows.push(["Needs permission", item.requiredPermission])
+  return rows
+}
+
+const RESOLUTION_LABELS: Record<string, string> = {
+  refunded_manually: "Refunded manually",
+  written_off: "Written off",
+  test_data: "Test data",
+}
+
+const paiseOrNull = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null)
+
+/**
+ * The Money requests: a monetization stored call (`{path, query, body}`) or a
+ * payments refund resolve (`{command_id, resolution, application_id}`).
+ * "Before" values are what the requester's console showed when they asked,
+ * and are labelled so; the server keeps only the requested change.
+ */
+export function moneyPayloadRows(payload: Record<string, unknown>): [string, string][] {
+  const rows: [string, string][] = []
+  const body = isRecord(payload.body) ? payload.body : null
+  if (typeof payload.query === "string" && payload.query) {
+    const query = new URLSearchParams(payload.query)
+    const day = query.get("day")
+    const period = query.get("period")
+    if (day) rows.push(["Day", day])
+    if (period) rows.push(["Period", period])
+  }
+  if (body) {
+    const text = (key: string) => str(body[key])
+    if (text("content_type")) rows.push(["Content type", text("content_type") as string])
+    if (text("region_code")) rows.push(["Region", text("region_code") as string])
+    if (text("period_key")) rows.push(["Period", text("period_key") as string])
+    const rpm = paiseOrNull(body.rpm_paise)
+    if (rpm !== null) {
+      const before = paiseOrNull(body.previous_rpm_paise)
+      rows.push(["Rate per 1,000 views", before === null ? `New: ${formatPaise(rpm)}` : `${formatPaise(before)} → ${formatPaise(rpm)} (before as the requester saw it)`])
+    }
+    const cap = paiseOrNull(body.cap_paise)
+    if (cap !== null) {
+      const before = paiseOrNull(body.previous_cap_paise)
+      rows.push(["Budget cap", before === null ? `New: ${formatPaise(cap)}` : `${formatPaise(before)} → ${formatPaise(cap)} (before as the requester saw it)`])
+    }
+    for (const [key, label] of [
+      ["floor_bps", "Floor (basis points)"],
+      ["ceiling_bps", "Ceiling (basis points)"],
+      ["pivot_cqs", "Pivot quality score"],
+      ["confidence_impressions", "Confidence impressions"],
+    ] as const) {
+      const n = paiseOrNull(body[key])
+      if (n !== null) rows.push([label, n.toLocaleString("en-IN")])
+    }
+    if (typeof body.enabled === "boolean") rows.push(["Band enabled", body.enabled ? "Yes" : "No"])
+    if (text("transaction_id")) rows.push(["Transaction", text("transaction_id") as string])
+    if (text("dispute_id")) rows.push(["Dispute", text("dispute_id") as string])
+  }
+  const resolution = str(payload.resolution)
+  if (resolution) rows.push(["Resolution", RESOLUTION_LABELS[resolution] ?? resolution])
+  if (str(payload.application_id)) rows.push(["Payments application", str(payload.application_id) as string])
+  if (str(payload.command_id)) rows.push(["Refund command", str(payload.command_id) as string])
   return rows
 }

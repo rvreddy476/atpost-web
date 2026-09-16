@@ -30,6 +30,23 @@ export interface AdminMe {
 export interface AdminNavEntry {
   app: AdminAppId
   label: string
+  /**
+   * Payments only: the payments applications (`feast`, `mstore`, `dating`) an
+   * admin confined to product apps may view. Absent means every application.
+   */
+  applications?: string[]
+}
+
+/** A product app whose admins may hold a confined payments view, and its payments application key. */
+export const PAYMENTS_CONFINABLE = [
+  { app: "commerce", application: "mstore" },
+  { app: "food", application: "feast" },
+  { app: "dating", application: "dating" },
+] as const satisfies readonly { app: AdminAppId; application: string }[]
+
+/** Does this admin hold `<app>:payments_<x>` in any product app? */
+export function hasConfinedPayments(me: AdminMe): boolean {
+  return PAYMENTS_CONFINABLE.some(({ app }) => (me.apps[app] ?? []).some((perm) => perm.startsWith(`${app}:payments_`)))
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -71,7 +88,9 @@ export function parseAdminMe(raw: unknown): AdminMe | null {
       if (!isRecord(item) || !isAdminAppId(item.app)) continue
       if (navigation.some((entry) => entry.app === item.app)) continue
       const label = typeof item.label === "string" && item.label.trim() ? item.label.trim() : adminAppLabel(item.app)
-      navigation.push({ app: item.app, label })
+      const entry: AdminNavEntry = { app: item.app, label }
+      if (item.app === "payments" && Array.isArray(item.applications)) entry.applications = strings(item.applications)
+      navigation.push(entry)
     }
   }
 
@@ -123,6 +142,8 @@ function covers(perm: string, app: AdminAppId, action?: string): boolean {
 export function hasAppAccess(me: AdminMe, app: AdminAppId): boolean {
   if (app === "platform") return me.platform.length > 0
   if ((me.apps[app]?.length ?? 0) > 0) return true
+  // A Feast, MStore or Dating admin with a payments view of their own application.
+  if (app === "payments" && hasConfinedPayments(me)) return true
   return me.platform.some((perm) => perm === "*" || perm.startsWith("*:"))
 }
 

@@ -5,6 +5,7 @@ import { ArrowRight, Inbox } from "lucide-react"
 import { useAdmin } from "@/components/shell/AdminShell"
 import { PageHeader } from "@/components/blocks/PageHeader"
 import { StatTiles, useAppStats } from "@/components/blocks/StatGrid"
+import { MonetizationCard, PaymentsCard, useMoneyCards } from "@/components/money/MoneyCards"
 import { useApprovals } from "@/hooks/useApprovals"
 import { canReadStats } from "@/lib/admin/sections"
 import { STATS_APPS, statsView, type StatsApp } from "@/lib/admin/stats"
@@ -52,7 +53,17 @@ export default function AdminOverview() {
     const group = nav.apps.find((g) => g.app === app)
     return group && canReadStats(me, app) ? [{ app, group }] : []
   })
-  const others = nav.apps.filter((g) => !(isStatsApp(g.app) && canReadStats(me, g.app)))
+  const money = useMoneyCards(nav.apps)
+  const others = nav.apps.filter(
+    (g) =>
+      !(isStatsApp(g.app) && canReadStats(me, g.app)) &&
+      !(g.app === "monetization" && money.monetization) &&
+      !(g.app === "payments" && money.payments),
+  )
+  const moneyCards = [
+    money.monetization ? <MonetizationCard key="monetization" group={money.monetization} /> : null,
+    money.payments ? <PaymentsCard key="payments" group={money.payments.group} applications={money.payments.applications} /> : null,
+  ].filter(Boolean)
 
   return (
     <div>
@@ -85,11 +96,12 @@ export default function AdminOverview() {
         </Link>
       ) : null}
 
-      {withStats.length > 0 ? (
+      {withStats.length + moneyCards.length > 0 ? (
         <div className="mb-6 grid gap-4 lg:grid-cols-2" aria-label="Application numbers">
           {withStats.map(({ app, group }) => (
             <StatsCard key={app} app={app} group={group} />
           ))}
+          {moneyCards}
         </div>
       ) : null}
 

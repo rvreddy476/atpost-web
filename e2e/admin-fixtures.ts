@@ -19,7 +19,7 @@ export const ALL_COMMERCE = [
 export interface AdminMeFixture {
   platform?: string[]
   apps?: Record<string, string[]>
-  navigation?: Array<{ app: string; label: string }>
+  navigation?: Array<{ app: string; label: string; applications?: string[] }>
   verified?: boolean
   required?: boolean
   stepUpValidUntil?: string | null

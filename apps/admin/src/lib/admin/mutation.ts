@@ -56,6 +56,12 @@ const ADMIN_ERROR_MESSAGES: Record<string, string> = {
   IDEMPOTENCY_KEY_REQUIRED: "This request was missing its safety key. Reload the page and try again.",
   KYC_NOT_CONFIGURED: "KYC checks are not configured on this deployment.",
   INVALID_TRANSITION: "That status change is not allowed from the current status.",
+  MONETIZATION_NOT_LAUNCHED: "Money actions are switched off for the beta, so nothing was done.",
+  APPLICATION_ID_REQUIRED: "You may view more than one payments application: choose one first.",
+  APPLICATION_NOT_PERMITTED: "Your roles do not cover that payments application.",
+  BUDGET_BELOW_ACCRUED: "The cap cannot be lower than what this period has already accrued.",
+  CADENCE_MISMATCH: "That period key does not match the configured settlement cadence.",
+  REFUND_ALREADY_EXISTS: "This transaction has already been refunded.",
 }
 
 /** A sentence for an admin error: known codes first, then the server's message. */
