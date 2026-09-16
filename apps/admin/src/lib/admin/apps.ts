@@ -40,6 +40,11 @@ export function adminAppLabel(id: AdminAppId): string {
   return BY_ID.get(id)?.label ?? id
 }
 
+/** The console URL of an application's dashboard. Trust & safety lives at /trust. */
+export function appHref(id: AdminAppId): string {
+  return id === "trust_safety" ? "/trust" : `/${id}`
+}
+
 export function adminAppOrder(id: AdminAppId): number {
   return ADMIN_APPS.findIndex((app) => app.id === id)
 }

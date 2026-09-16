@@ -1,4 +1,4 @@
-import { COMMERCE_LEGACY_SECTIONS, adminAppLabel, adminAppOrder, isAdminAppId, type AdminAppId } from "./apps"
+import { COMMERCE_LEGACY_SECTIONS, adminAppLabel, adminAppOrder, appHref, isAdminAppId, type AdminAppId } from "./apps"
 
 /**
  * `GET /v1/admin/me`, as admin-service answers it (inside `{data: ...}`):
@@ -157,13 +157,13 @@ export interface AdminNavModel {
  */
 function sectionsFor(me: AdminMe, app: AdminAppId): NavLink[] {
   if (app !== "commerce") return []
-  const need: Record<string, string> = {
-    catalogue: "catalogue.edit",
-    sellers: "seller.approve",
-    products: "products.moderate",
-    payouts: "payouts.read",
+  const need: Record<string, string[]> = {
+    catalogue: ["catalogue.edit"],
+    sellers: ["sellers.read", "seller.approve"],
+    products: ["products.moderate"],
+    payouts: ["payouts.read"],
   }
-  return COMMERCE_LEGACY_SECTIONS.filter((s) => hasPermission(me, "commerce", need[s.id])).map((s) => ({
+  return COMMERCE_LEGACY_SECTIONS.filter((s) => need[s.id].some((action) => hasPermission(me, "commerce", action))).map((s) => ({
     id: s.id,
     label: s.label,
     href: s.href,
@@ -183,7 +183,7 @@ export function buildAdminNav(me: AdminMe): AdminNavModel {
     .map<NavGroup>((entry) => ({
       app: entry.app,
       label: entry.label,
-      href: `/${entry.app}`,
+      href: appHref(entry.app),
       links: sectionsFor(me, entry.app),
     }))
 

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/admin/api"
+import { readList } from "@/lib/admin/data"
 import type { Seller, Product } from "@atpost/types/commerce"
 import { useAdminMutation } from "@/hooks/useAdminMutation"
 
@@ -21,31 +22,40 @@ import { useAdminMutation } from "@/hooks/useAdminMutation"
  */
 const ADMIN = "/v1/admin/commerce"
 
-const list = <T>(path: string) => async (): Promise<T[]> => (await api.get(`${ADMIN}${path}`)).data.data ?? []
+/** Queues answer as a bare array, {items} or {sellers}; readList takes any of them. */
+const list = <T>(path: string) => async (): Promise<T[]> => readList((await api.get(`${ADMIN}${path}`)).data) as unknown as T[]
 
 export const SELLERS_KEY = ["admin", "sellers", "queue"] as const
 export const PRODUCTS_KEY = ["admin", "products", "queue"] as const
 export const PAYOUTS_KEY = ["admin", "payouts"] as const
 
-export function useSellerQueue() {
-  return useQuery<Seller[]>({ queryKey: SELLERS_KEY, queryFn: list<Seller>("/sellers/queue") })
+export function useSellerQueue({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery<Seller[]>({ queryKey: SELLERS_KEY, queryFn: list<Seller>("/sellers/queue"), enabled })
 }
 
-export function useProductQueue() {
-  return useQuery<Product[]>({ queryKey: PRODUCTS_KEY, queryFn: list<Product>("/products/queue") })
+export function useProductQueue({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery<Product[]>({ queryKey: PRODUCTS_KEY, queryFn: list<Product>("/products/queue"), enabled })
 }
 
+/**
+ * One seller's pending payout, as commerce answers GET /payouts/pending
+ * ({sellers: [...]}). Amounts arrive as rupees; the page converts to paise.
+ */
 export type PendingPayout = {
-  id: string
   seller_id: string
-  amount_minor: number
-  currency_code?: string
-  status: string
+  store_name?: string
+  remittance_count?: number
+  total_gross?: number
+  total_commission?: number
+  total_platform_fee?: number
+  total_tds?: number
+  total_net?: number
+  oldest_delivered?: string
 }
 
 /** Needs step-up: the page offers the 2FA prompt when this fails with STEP_UP_REQUIRED. */
 export function usePendingPayouts({ enabled = true }: { enabled?: boolean } = {}) {
-  return useQuery<PendingPayout[]>({ queryKey: PAYOUTS_KEY, queryFn: list<PendingPayout>("/payouts/pending"), enabled })
+  return useQuery<PendingPayout[]>({ queryKey: PAYOUTS_KEY, queryFn: list<PendingPayout>("/payouts/pending"), enabled, retry: false })
 }
 
 type ActionVars = { id: string; reason?: string; notes?: string }

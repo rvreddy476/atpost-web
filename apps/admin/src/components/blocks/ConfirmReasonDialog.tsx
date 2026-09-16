@@ -23,6 +23,9 @@ export function ConfirmReasonDialog({
   busy = false,
   onConfirm,
   onClose,
+  children,
+  canConfirm = true,
+  reasonLabel = "Reason",
 }: {
   open: boolean
   title: string
@@ -33,6 +36,11 @@ export function ConfirmReasonDialog({
   busy?: boolean
   onConfirm: (reason: string) => void
   onClose: () => void
+  /** Extra fields (an amount, a status), rendered above the reason. */
+  children?: React.ReactNode
+  /** False while those extra fields are incomplete. */
+  canConfirm?: boolean
+  reasonLabel?: string
 }) {
   const [reason, setReason] = useState("")
   const [touched, setTouched] = useState(false)
@@ -55,12 +63,13 @@ export function ConfirmReasonDialog({
         onSubmit={(event) => {
           event.preventDefault()
           setTouched(true)
-          if (check.ok && !busy) onConfirm(reason.trim())
+          if (check.ok && canConfirm && !busy) onConfirm(reason.trim())
         }}
         className="space-y-3"
       >
+        {children}
         <label htmlFor={fieldId} className="block text-sm font-semibold text-mo-ink">
-          Reason{asksReason ? "" : " (optional)"}
+          {reasonLabel}{asksReason ? "" : " (optional)"}
         </label>
         <textarea
           id={fieldId}
@@ -84,7 +93,7 @@ export function ConfirmReasonDialog({
           <button type="button" className={buttonSecondary} onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button type="submit" className={destructive ? buttonDanger : buttonPrimary} disabled={busy || (asksReason && !check.ok)}>
+          <button type="submit" className={destructive ? buttonDanger : buttonPrimary} disabled={busy || !canConfirm || (asksReason && !check.ok)}>
             {busy ? "Working…" : confirmLabel}
           </button>
         </div>

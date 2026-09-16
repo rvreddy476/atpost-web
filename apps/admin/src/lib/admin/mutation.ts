@@ -49,6 +49,13 @@ const ADMIN_ERROR_MESSAGES: Record<string, string> = {
   SELF_APPROVAL_FORBIDDEN: "You raised this request, so a different admin has to decide it.",
   PAYLOAD_HASH_MISMATCH: "The request changed after it was raised, so it cannot be approved as it stands.",
   REASON_REQUIRED: "A reason is required.",
+  PRODUCT_UNAVAILABLE: "This application's admin actions are not configured on this deployment.",
+  PERMISSION_DENIED: "Your admin roles do not allow this.",
+  FORBIDDEN: "Your admin roles do not allow this.",
+  APPROVAL_UNAVAILABLE: "The two-person rule could not be applied just now, so nothing was done.",
+  IDEMPOTENCY_KEY_REQUIRED: "This request was missing its safety key. Reload the page and try again.",
+  KYC_NOT_CONFIGURED: "KYC checks are not configured on this deployment.",
+  INVALID_TRANSITION: "That status change is not allowed from the current status.",
 }
 
 /** A sentence for an admin error: known codes first, then the server's message. */
@@ -94,6 +101,39 @@ export type MutationOutcome =
   | { kind: "done"; status: number; data: unknown }
   | { kind: "approval"; approval: PendingApproval }
   | { kind: "cancelled" }
+
+export const IDEMPOTENCY_HEADER = "Idempotency-Key"
+
+/** A fresh key for one admin action (a UUID; crypto.randomUUID is in every supported browser). */
+export function newIdempotencyKey(): string {
+  return globalThis.crypto.randomUUID()
+}
+
+export interface AdminWrite {
+  method: "get" | "post" | "put" | "patch" | "delete"
+  url: string
+  body?: unknown
+  /** Money routes that need an Idempotency-Key (Feast refund issue, settlement generate). */
+  idempotent?: boolean
+}
+
+export type Transport = (request: AdminWrite & { headers: Record<string, string> }) => Promise<SentResponse>
+
+/**
+ * Binds ONE admin action to its request. The Idempotency-Key is minted here,
+ * once, and every call of the returned `send` — the first attempt and the
+ * retry after a step-up — carries the same key, so the server can never
+ * refund twice. A new action (a new `prepareSend`) gets a new key.
+ */
+export function prepareSend(
+  request: AdminWrite,
+  transport: Transport,
+  makeKey: () => string = newIdempotencyKey,
+): { send: () => Promise<SentResponse>; idempotencyKey: string | null } {
+  const idempotencyKey = request.idempotent ? makeKey() : null
+  const headers: Record<string, string> = idempotencyKey ? { [IDEMPOTENCY_HEADER]: idempotencyKey } : {}
+  return { send: () => transport({ ...request, headers: { ...headers } }), idempotencyKey }
+}
 
 /**
  * @param send     performs the request; rejects with an axios-shaped error
