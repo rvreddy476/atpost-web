@@ -190,7 +190,7 @@ export interface QAStatusResponse {
 }
 
 /**
- * Ask's own notification and email settings (`GET`/`PUT /v1/qa/settings`).
+ * Know It's own notification and email settings (`GET`/`PUT /v1/qa/settings`).
  * Separate from the app-wide notification preferences. `PUT` replaces the
  * whole object, so a client always sends all sixteen fields.
  */

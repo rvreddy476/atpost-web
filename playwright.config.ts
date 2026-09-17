@@ -31,7 +31,7 @@ export default defineConfig({
         AUTH_SERVICE_URL: 'http://127.0.0.1:8081',
         COMMERCE_ZONE_URL: 'http://127.0.0.1:3021',
         ADMIN_ZONE_URL: 'http://127.0.0.1:3022',
-        ASK_ZONE_URL: 'http://127.0.0.1:3023',
+        KWIT_ZONE_URL: 'http://127.0.0.1:3023',
       },
     },
     {
@@ -52,8 +52,8 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: 'bun run --cwd apps/ask dev:e2e',
-      url: 'http://127.0.0.1:3023/ask',
+      command: 'bun run --cwd apps/kwit dev:e2e',
+      url: 'http://127.0.0.1:3023/kwit',
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
