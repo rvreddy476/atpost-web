@@ -82,6 +82,42 @@ export const PAYMENTS_SECTIONS = [
   { id: "audit", label: "Audit", anyOf: ["audit.read"] },
 ] as const satisfies readonly SectionDef[]
 
+/**
+ * Content apps (admin-service handler_social.go, handler_tube.go,
+ * handler_qa.go, handler_chat.go). A `.remove` holder may read the queue
+ * without `.moderate`, so both show the section; the buttons inside check
+ * which of the two the admin holds.
+ */
+export const SOCIAL_SECTIONS = [
+  { id: "posts", label: "Posts", anyOf: ["posts.moderate", "posts.remove"] },
+  { id: "reels", label: "Reels", anyOf: ["reels.moderate", "reels.remove"] },
+  { id: "comments", label: "Comments", anyOf: ["comments.moderate", "comments.remove"] },
+  { id: "reports", label: "Reports", anyOf: ["reports.act"] },
+  { id: "creators", label: "Creators", anyOf: ["users.read"] },
+  { id: "pages", label: "Business pages", anyOf: ["pages.moderate", "pages.suspend", "pages.disable", "documents.review"] },
+] as const satisfies readonly SectionDef[]
+
+export const TUBE_SECTIONS = [
+  { id: "videos", label: "Videos", anyOf: ["videos.moderate", "videos.remove"] },
+  { id: "reports", label: "Reports", anyOf: ["reports.act"] },
+  { id: "channels", label: "Channels", anyOf: ["channels.moderate"] },
+  { id: "series", label: "Creator series", anyOf: ["videos.moderate", "videos.remove"] },
+] as const satisfies readonly SectionDef[]
+
+export const QA_SECTIONS = [
+  { id: "reports", label: "Reports", anyOf: ["reports.read", "reports.act"] },
+  { id: "questions", label: "Questions", anyOf: ["questions.moderate", "questions.merge"] },
+  { id: "answers", label: "Answers", anyOf: ["answers.moderate"] },
+  { id: "comments", label: "Comments", anyOf: ["comments.moderate"] },
+  { id: "actions", label: "Actions", anyOf: ["audit.read"] },
+] as const satisfies readonly SectionDef[]
+
+export const CHAT_SECTIONS = [
+  { id: "channels", label: "Channels", anyOf: ["reports.read", "reports.act", "channels.moderate"] },
+  { id: "groups", label: "Groups", anyOf: ["reports.read", "reports.act"] },
+  { id: "communities", label: "Communities", anyOf: ["reports.read", "reports.act"] },
+] as const satisfies readonly SectionDef[]
+
 export function can(me: AdminMe, app: AdminAppId, action: string): boolean {
   return hasPermission(me, app, action)
 }

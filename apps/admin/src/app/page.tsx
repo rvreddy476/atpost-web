@@ -5,6 +5,7 @@ import { ArrowRight, Inbox } from "lucide-react"
 import { useAdmin } from "@/components/shell/AdminShell"
 import { PageHeader } from "@/components/blocks/PageHeader"
 import { StatTiles, useAppStats } from "@/components/blocks/StatGrid"
+import { ContentCard, useContentCards } from "@/components/content/ContentCards"
 import { MonetizationCard, PaymentsCard, useMoneyCards } from "@/components/money/MoneyCards"
 import { useApprovals } from "@/hooks/useApprovals"
 import { canReadStats } from "@/lib/admin/sections"
@@ -54,11 +55,13 @@ export default function AdminOverview() {
     return group && canReadStats(me, app) ? [{ app, group }] : []
   })
   const money = useMoneyCards(nav.apps)
+  const content = useContentCards(nav.apps)
   const others = nav.apps.filter(
     (g) =>
       !(isStatsApp(g.app) && canReadStats(me, g.app)) &&
       !(g.app === "monetization" && money.monetization) &&
-      !(g.app === "payments" && money.payments),
+      !(g.app === "payments" && money.payments) &&
+      !content.some((c) => c.app === g.app),
   )
   const moneyCards = [
     money.monetization ? <MonetizationCard key="monetization" group={money.monetization} /> : null,
@@ -96,12 +99,15 @@ export default function AdminOverview() {
         </Link>
       ) : null}
 
-      {withStats.length + moneyCards.length > 0 ? (
+      {withStats.length + moneyCards.length + content.length > 0 ? (
         <div className="mb-6 grid gap-4 lg:grid-cols-2" aria-label="Application numbers">
           {withStats.map(({ app, group }) => (
             <StatsCard key={app} app={app} group={group} />
           ))}
           {moneyCards}
+          {content.map(({ app, group }) => (
+            <ContentCard key={app} app={app} group={group} />
+          ))}
         </div>
       ) : null}
 

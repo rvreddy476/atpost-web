@@ -7,10 +7,13 @@ export interface ReasonCheck {
   message: string | null
 }
 
-export function checkReason(reason: string, { destructive, required }: { destructive: boolean; required?: boolean }): ReasonCheck {
+export function checkReason(
+  reason: string,
+  { destructive, required, max = MAX_REASON_LENGTH }: { destructive: boolean; required?: boolean; max?: number },
+): ReasonCheck {
   const text = reason.trim()
-  if (text.length > MAX_REASON_LENGTH) {
-    return { ok: false, message: `Keep the reason under ${MAX_REASON_LENGTH} characters.` }
+  if (text.length > max) {
+    return { ok: false, message: `Keep the reason under ${max} characters.` }
   }
   if (!destructive && !required) return { ok: true, message: null }
   if (text.length === 0) return { ok: false, message: "A reason is required for this action." }

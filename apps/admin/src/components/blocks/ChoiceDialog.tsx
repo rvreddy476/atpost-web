@@ -27,6 +27,7 @@ export function ChoiceDialog({
   confirmLabel = "Confirm",
   reasonLabel,
   requireReason = false,
+  maxReasonLength,
   busy,
   onConfirm,
   onClose,
@@ -39,6 +40,7 @@ export function ChoiceDialog({
   confirmLabel?: string
   reasonLabel?: string
   requireReason?: boolean
+  maxReasonLength?: number
   busy: boolean
   onConfirm: (choice: string, reason: string) => void
   onClose: () => void
@@ -58,6 +60,7 @@ export function ChoiceDialog({
       confirmLabel={confirmLabel}
       destructive={picked?.destructive ?? false}
       requireReason={requireReason}
+      maxReasonLength={maxReasonLength}
       reasonLabel={reasonLabel}
       busy={busy}
       canConfirm={!!picked}

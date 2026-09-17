@@ -26,6 +26,7 @@ export function ConfirmReasonDialog({
   children,
   canConfirm = true,
   reasonLabel = "Reason",
+  maxReasonLength = MAX_REASON_LENGTH,
 }: {
   open: boolean
   title: string
@@ -41,6 +42,8 @@ export function ConfirmReasonDialog({
   /** False while those extra fields are incomplete. */
   canConfirm?: boolean
   reasonLabel?: string
+  /** A product with its own limit (Q&A allows 2000); a counter is shown when it differs from the default. */
+  maxReasonLength?: number
 }) {
   const [reason, setReason] = useState("")
   const [touched, setTouched] = useState(false)
@@ -54,8 +57,9 @@ export function ConfirmReasonDialog({
     }
   }, [open])
 
-  const check = checkReason(reason, { destructive, required: requireReason })
+  const check = checkReason(reason, { destructive, required: requireReason, max: maxReasonLength })
   const asksReason = destructive || requireReason
+  const showCounter = maxReasonLength !== MAX_REASON_LENGTH
 
   return (
     <Dialog open={open} title={title} description={description} onClose={onClose} dismissible={!busy}>
@@ -75,7 +79,7 @@ export function ConfirmReasonDialog({
           id={fieldId}
           name="reason"
           rows={3}
-          maxLength={MAX_REASON_LENGTH + 1}
+          maxLength={maxReasonLength + 1}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           onBlur={() => setTouched(true)}
@@ -84,6 +88,11 @@ export function ConfirmReasonDialog({
           aria-describedby={touched && !check.ok ? errorId : undefined}
           placeholder="What happened, and why this action"
         />
+        {showCounter ? (
+          <p className="text-xs text-mo-body" data-testid="reason-counter">
+            {reason.trim().length} / {maxReasonLength} characters
+          </p>
+        ) : null}
         {touched && !check.ok ? (
           <p id={errorId} role="alert" className="text-sm text-mo-bad">
             {check.message}
