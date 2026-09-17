@@ -34,8 +34,8 @@ import { PAYMENTS_SECTIONS } from "@/lib/admin/sections"
  * Payments. A platform or payments admin sees every application and may
  * narrow to one; an admin confined to Feast, MStore or Dating sees only their
  * own application and is never offered another. Resolving a refund needs a
- * fresh 2FA code, and refunded manually or written off at ₹5,000 or more
- * waits for a second admin.
+ * fresh 2FA code, and refunded manually or written off always waits for a
+ * second admin, whatever the amount; only test data resolves at once.
  */
 export default function PaymentsDashboard() {
   const { me, nav } = useAdmin()

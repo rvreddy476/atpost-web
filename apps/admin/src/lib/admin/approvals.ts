@@ -69,6 +69,13 @@ export function canDecide(item: ApprovalItem): boolean {
   return item.status === "pending" && !item.requestedByMe
 }
 
+export const AMOUNT_NOT_STATED = "Not stated"
+
+/** A refund or a refund resolve: an approver expects an amount, so its absence is said, not skipped. */
+export function isRefundLike(item: Pick<ApprovalItem, "operation" | "payload">): boolean {
+  return /refund|resolve/i.test(item.operation) || typeof item.payload.resolution === "string" || typeof item.payload.transaction_id === "string"
+}
+
 /** Payload fields an approver needs to judge the request. Anything else (keys, hashes) stays out. */
 const PAYLOAD_FIELDS: Record<string, string> = {
   order_id: "Order",
@@ -82,8 +89,9 @@ const PAYLOAD_FIELDS: Record<string, string> = {
 
 /**
  * What the approver sees before deciding: what, on which target, for how
- * much, who asked and why. Amounts are integer paise; a Feast refund with no
- * amount is a full refund.
+ * much, who asked and why. Amounts are integer paise, shown when the server
+ * stored one. A Feast refund with none is a full refund; any other refund or
+ * resolve with none says "not stated" rather than guessing.
  */
 export function approvalDetails(item: ApprovalItem): [string, string][] {
   const rows: [string, string][] = [
@@ -92,9 +100,12 @@ export function approvalDetails(item: ApprovalItem): [string, string][] {
     ["Operation", item.operation],
   ]
   if (item.targetType || item.targetId) rows.push(["Target", [item.targetType, item.targetId].filter(Boolean).join(" ")])
-  const amount = item.payload.amount_paise
+  // A Feast refund or payments resolve stores the amount at the top; a monetization stored call keeps it in `body`.
+  const body = isRecord(item.payload.body) ? item.payload.body : null
+  const amount = typeof item.payload.amount_paise === "number" ? item.payload.amount_paise : body?.amount_paise
   if (typeof amount === "number" && Number.isFinite(amount) && amount > 0) rows.push(["Amount", formatPaise(amount)])
   else if (item.operation === "food.order.refund") rows.push(["Amount", "Full refund (whatever remains on the order)"])
+  else if (isRefundLike(item)) rows.push(["Amount", AMOUNT_NOT_STATED])
   for (const [key, label] of Object.entries(PAYLOAD_FIELDS)) {
     const value = item.payload[key]
     if (typeof value === "string" && value.trim()) rows.push([label, value])

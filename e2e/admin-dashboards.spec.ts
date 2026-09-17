@@ -126,7 +126,7 @@ test('a Dating suspend asks for step-up, then succeeds', async ({ page }) => {
   expect(bodies[1]).toEqual({ action: 'suspend', reason: 'Threatening messages confirmed in the evidence', target_user_id: report.target_id })
 })
 
-test('a Feast refund of ₹5,000 returns 202 and says it was sent for approval', async ({ page }) => {
+test('a Feast refund of ₹1 returns 202 and says it was sent for approval: every refund is two-person', async ({ page }) => {
   const order = {
     id: '44444444-4444-4444-8444-444444444444',
     order_number: 'FE-1001',
@@ -148,7 +148,7 @@ test('a Feast refund of ₹5,000 returns 202 and says it was sent for approval',
     if (url.pathname.endsWith(`/orders/${order.id}/refund`) && method === 'POST') {
       refundHeaders = route.request().headers()
       refundBody = route.request().postDataJSON()
-      return json(route, { data: { approval: { id: 'ap-7', status: 'pending', summary: 'Refund Feast order 44444444 for ₹5,000.00' } } }, 202)
+      return json(route, { data: { approval: { id: 'ap-7', status: 'pending', summary: 'Refund Feast order 44444444 for ₹1.00' } } }, 202)
     }
     return false
   })
@@ -159,16 +159,21 @@ test('a Feast refund of ₹5,000 returns 202 and says it was sent for approval',
   await page.getByRole('button', { name: 'Refund', exact: true }).click()
 
   const dialog = page.getByRole('dialog', { name: 'Refund this order' })
+  // No threshold: the hint states the rule for a full refund, for ₹4,999.99 and for ₹1 alike.
+  await expect(dialog.getByTestId('refund-hint')).toContainText('Refunds are sent to a second approver.')
+  await expect(dialog.getByTestId('refund-hint')).toContainText('Full refund')
   await dialog.getByLabel('Amount in rupees (leave empty for a full refund)').fill('4999.99')
-  await expect(dialog.getByTestId('refund-hint')).not.toContainText('second admin')
-  await dialog.getByLabel('Amount in rupees (leave empty for a full refund)').fill('5000')
-  await expect(dialog.getByTestId('refund-hint')).toContainText('second admin must approve')
+  await expect(dialog.getByTestId('refund-hint')).toContainText('₹4,999.99. Refunds are sent to a second approver.')
+  await expect(dialog.getByTestId('refund-hint')).not.toContainText('5,000')
+  await dialog.getByLabel('Amount in rupees (leave empty for a full refund)').fill('1')
+  await expect(dialog.getByTestId('refund-hint')).toContainText('₹1.00. Refunds are sent to a second approver.')
+  await expect(dialog.getByTestId('refund-hint')).not.toContainText('or more')
   await dialog.getByLabel('Reason').fill('Order arrived cold and incomplete')
   await dialog.getByRole('button', { name: 'Refund' }).click()
 
   await expect(page.getByText('Sent for approval')).toBeVisible()
   await expect(page.getByText('Refund issued')).toHaveCount(0)
-  expect(refundBody).toEqual({ reason: 'Order arrived cold and incomplete', amount_paise: 500000 })
+  expect(refundBody).toEqual({ reason: 'Order arrived cold and incomplete', amount_paise: 100 })
   expect(refundHeaders['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/)
 })
 

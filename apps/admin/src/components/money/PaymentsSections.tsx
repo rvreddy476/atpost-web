@@ -10,7 +10,7 @@ import { buttonPrimary, buttonSecondary, inputClass } from "@/components/blocks/
 import { useAdminMutation } from "@/hooks/useAdminMutation"
 import { adminKey, useAdminList, useAdminObject } from "@/hooks/useAdminQuery"
 import { humanise, isRecord, isUuid, num, readList, readObject, str, when, type Row } from "@/lib/admin/data"
-import { formatPaise } from "@/lib/admin/money"
+import { REFUND_SECOND_APPROVER_NOTE, formatPaise } from "@/lib/admin/money"
 import { PAY, RESOLUTIONS, paymentsApplicationLabel, paymentsQuery, resolveHint, resolveNeedsSecondApprover } from "@/lib/admin/payments"
 
 export const PAY_KEY = adminKey("payments")
@@ -118,7 +118,7 @@ export function PaymentsRefunds({ application, can }: PaymentsSectionProps) {
         description={
           resolving ? (
             <>
-              {formatPaise(amount)} for {humanise(resolving.reference_type)} {str(resolving.reference_id)}. Every resolution needs a fresh 2FA code; refunded manually and written off at ₹5,000.00 or more also wait for a second admin.
+              {formatPaise(amount)} for {humanise(resolving.reference_type)} {str(resolving.reference_id)}. Every resolution needs a fresh 2FA code. {REFUND_SECOND_APPROVER_NOTE} Only test data is resolved at once.
             </>
           ) : null
         }
@@ -129,7 +129,7 @@ export function PaymentsRefunds({ application, can }: PaymentsSectionProps) {
           destructive: r.destructive,
           hint: (
             <>
-              {r.explain} <span data-testid="resolve-hint" data-second-approver={resolveNeedsSecondApprover(r.value, amount)}>{resolveHint(r.value, amount)}</span>
+              {r.explain} <span data-testid="resolve-hint" data-second-approver={resolveNeedsSecondApprover(r.value)}>{resolveHint(r.value, amount)}</span>
             </>
           ),
         }))}

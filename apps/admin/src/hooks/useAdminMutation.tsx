@@ -6,7 +6,7 @@ import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-quer
 import api from "@/lib/admin/api"
 import { useToast } from "@atpost/ui"
 import { useStepUp } from "@/components/shell/StepUpProvider"
-import { NOT_LAUNCHED_TITLE, isNotLaunchedError } from "@/lib/admin/monetization"
+import { NOT_LAUNCHED_BODY, NOT_LAUNCHED_TITLE, isNotLaunchedError } from "@/lib/admin/monetization"
 import {
   adminErrorMessage,
   prepareSend,
@@ -90,8 +90,8 @@ export function useAdminMutation<Vars>({
     },
     onError: (err) => {
       if (isNotLaunchedError(err)) {
-        // Switched off for the beta: a state, not a failure.
-        toast.toast({ title: NOT_LAUNCHED_TITLE, description: "Nothing was done.", variant: "info" })
+        // Switched off for the beta: a state, not a failure. Said on this action only; the page keeps its numbers.
+        toast.toast({ title: NOT_LAUNCHED_TITLE, description: NOT_LAUNCHED_BODY, variant: "info" })
         return
       }
       toast.error(errorTitle, adminErrorMessage(err))

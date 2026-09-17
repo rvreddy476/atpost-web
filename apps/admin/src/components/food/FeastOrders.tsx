@@ -111,7 +111,7 @@ function OrderDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const history = readList({ items: o.history })
   const typed = amount.trim() ? parseRupeeInput(amount) : null
   const amountInvalid = amount.trim() !== "" && typed === null
-  const hint = refundHint(typed, total)
+  const hint = refundHint(typed ?? total)
 
   return (
     <div className="space-y-4">
@@ -200,12 +200,9 @@ function OrderDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <Field label="Amount in rupees (leave empty for a full refund)" hint={amountInvalid ? "Enter an amount like 5000 or 249.50." : undefined}>
           {(fid) => <input id={fid} className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}
         </Field>
-        <p
-          role="note"
-          data-testid="refund-hint"
-          className={`rounded-mo-sm border p-2 text-xs ${hint.secondApprover === false ? "border-mo text-mo-body" : "border-mo-warn/60 bg-mo-warn/10 text-mo-ink"}`}
-        >
-          {hint.message}
+        <p role="note" data-testid="refund-hint" className="rounded-mo-sm border border-mo-warn/60 bg-mo-warn/10 p-2 text-xs text-mo-ink">
+          {typed === null ? "Full refund: whatever remains on the order. " : ""}
+          {hint}
         </p>
       </ConfirmReasonDialog>
     </div>

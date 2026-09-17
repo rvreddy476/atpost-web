@@ -13,9 +13,10 @@ import { MONETIZATION_SECTIONS, canReadStats, visibleSections } from "@/lib/admi
 
 /**
  * Monetization. Every write needs a fresh 2FA code; creator-fund rates, quality
- * bands, budgets, settlement and reversals always wait for a second approver,
- * and refunds do at ₹5,000 or more. While money is switched off for the beta
- * the page says so instead of showing numbers.
+ * bands, budgets, settlement, reversals and refunds always wait for a second
+ * approver. During the beta the page shows real numbers, lists and tables
+ * (reads work); a write the server refuses as not launched says so on that
+ * action's toast alone, never as a page-level block.
  */
 export default function MonetizationDashboard() {
   const { me, nav } = useAdmin()

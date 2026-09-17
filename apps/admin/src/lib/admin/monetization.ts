@@ -1,23 +1,29 @@
 import { isRecord, num, readObject, str, unwrap } from "./data"
-import { REFUND_TWO_PERSON_THRESHOLD_PAISE, formatPaise, refundNeedsSecondApprover, type RefundHint } from "./money"
+import { REFUND_SECOND_APPROVER_NOTE, formatPaise } from "./money"
 import { readApiError } from "./mutation"
 import type { StatsResult } from "./stats"
 
 /**
  * The Monetization dashboard's rules, as plain functions.
  *
- * While money is switched off (monetization's MONETIZATION_WRITES_ENABLED is
- * off) admin-service answers every READ with 200 `{data: {state:
- * "not_launched"}}` and every WRITE with 503 MONETIZATION_NOT_LAUNCHED. That
- * is a state, not a fault: the console says so calmly and never shows the
- * empty lists or zero counts it would otherwise read into those answers.
+ * During the beta (monetization's MONETIZATION_WRITES_ENABLED is off) every
+ * READ returns real data — admins may see the creator-fund numbers, lists and
+ * tables (2026-09-17) — while every WRITE answers 503 MONETIZATION_NOT_LAUNCHED
+ * (admin-service maps it to `details.state: "not_launched"`). A refused write
+ * is a state, not a fault: the console says so calmly on that action alone,
+ * never as a page-level block. Should a read still answer `{data: {state:
+ * "not_launched"}}`, it is shown as "not reported yet", never as zeros.
  */
 
 export const MON = "/v1/admin/monetization"
 
+/** A write refused during the beta. Shown on the action (a toast), not the page. */
 export const NOT_LAUNCHED_TITLE = "Money actions are switched off for the beta"
-export const NOT_LAUNCHED_BODY =
-  "Monetization has not launched yet, so nothing here can move money and its queues are not counted. This is expected, not a fault."
+export const NOT_LAUNCHED_BODY = "Nothing was done. Reads still work; every money action stays off until monetization launches."
+
+/** A read that still answers the not-launched state: no numbers to count, not zeros, not an error. */
+export const NOT_REPORTED_TITLE = "Numbers not reported yet"
+export const NOT_REPORTED_BODY = "Monetization answered with its not-launched state instead of data, so there is nothing to count here. This is expected during the beta, not a fault."
 
 /** A read answered with the not-launched state. */
 export function isNotLaunched(raw: unknown): boolean {
@@ -52,7 +58,7 @@ export type MonetizationWrite =
   | "dispute.act"
   | "refund.issue"
 
-/** Always wait for a second approver, whatever the amount. */
+/** Always wait for a second approver, whatever the amount. Refunds included: there is no threshold. */
 export const MONETIZATION_ALWAYS_TWO_PERSON: readonly MonetizationWrite[] = [
   "fund.rates",
   "fund.quality_bands",
@@ -61,6 +67,7 @@ export const MONETIZATION_ALWAYS_TWO_PERSON: readonly MonetizationWrite[] = [
   "fund.settle_period",
   "fund.settle_creator_period",
   "fund.reverse",
+  "refund.issue",
 ]
 
 /** Every monetization write needs a fresh 2FA code. */
@@ -68,31 +75,16 @@ export function monetizationStepUp(_write: MonetizationWrite): true {
   return true
 }
 
-/**
- * Will this write wait for a second approver? True or false when the console
- * can tell; null for a refund whose amount is not known yet.
- */
-export function monetizationTwoPerson(write: MonetizationWrite, amountPaise: number | null = null): boolean | null {
-  if (MONETIZATION_ALWAYS_TWO_PERSON.includes(write)) return true
-  if (write === "refund.issue") return amountPaise === null ? null : refundNeedsSecondApprover(amountPaise)
-  return false
+/** Will this write wait for a second approver? The console always knows: it is per route, never per amount. */
+export function monetizationTwoPerson(write: MonetizationWrite): boolean {
+  return MONETIZATION_ALWAYS_TWO_PERSON.includes(write)
 }
 
 export const ALWAYS_TWO_PERSON_NOTE = "This always goes to a second admin for approval, and needs a fresh 2FA code. Nothing changes until they approve."
 
-/** What to tell the admin before a monetization refund is sent (≥ ₹5,000 is two-person). */
-export function monetizationRefundHint(amountPaise: number | null): RefundHint {
-  const threshold = formatPaise(REFUND_TWO_PERSON_THRESHOLD_PAISE)
-  if (amountPaise === null) {
-    return { secondApprover: null, message: `Enter the amount. A refund of ${threshold} or more goes to a second approver.` }
-  }
-  if (refundNeedsSecondApprover(amountPaise)) {
-    return {
-      secondApprover: true,
-      message: `${formatPaise(amountPaise)} is ${threshold} or more, so a second admin must approve this refund before any money moves.`,
-    }
-  }
-  return { secondApprover: false, message: `Below ${threshold}: it is refunded once you confirm with 2FA.` }
+/** What to tell the admin before a monetization refund is sent: the amount once typed, then the rule. */
+export function monetizationRefundHint(amountPaise: number | null): string {
+  return amountPaise === null ? `Enter the amount. ${REFUND_SECOND_APPROVER_NOTE}` : `${formatPaise(amountPaise)}. ${REFUND_SECOND_APPROVER_NOTE}`
 }
 
 // ---------------------------------------------------------------------------
@@ -205,8 +197,8 @@ export function monetizationStatsView(result: StatsResult, limit?: number): Mone
     return { state: "loading", message: null, generatedAt: null, tiles: metrics.map((m) => ({ key: m.key, label: m.label, display: "…", tone: "unknown" })) }
   }
   if (result.status === "ok" && isNotLaunched(result.raw)) {
-    // No tiles at all: a switched-off product has no numbers, not zeros.
-    return { state: "not_launched", message: NOT_LAUNCHED_BODY, generatedAt: null, tiles: [] }
+    // Reads return data during the beta; should this still arrive, no tiles at all: not reported, not zeros.
+    return { state: "not_launched", message: NOT_REPORTED_BODY, generatedAt: null, tiles: [] }
   }
   const body = result.status === "ok" ? readObject(result.raw) : null
   if (!body) {

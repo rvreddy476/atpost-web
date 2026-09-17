@@ -36,31 +36,82 @@ async function completeStepUp(page: Page) {
   await expect(dialog).toBeHidden()
 }
 
-const NOT_LAUNCHED = { data: { state: 'not_launched', app: 'monetization', code: 'MONETIZATION_NOT_LAUNCHED', message: 'Monetization is not launched: money actions are not available yet.' } }
+const SWITCHED_OFF = 'Money actions are switched off for the beta'
 
-test('Monetization while not launched shows the calm switched-off state, never zeros', async ({ page }) => {
+test('Monetization during the beta shows real numbers and lists; a refused write says money actions are off, on that action only', async ({ page }) => {
+  const stats = {
+    open_fraud_reviews: 3,
+    open_disputes: 1,
+    frozen_wallets: 0,
+    pending_payout_requests: 2,
+    pending_payout_paise: 1250000,
+    current_period: { period_key: '2026-09', accrued_paise: 50000, cap_paise: 100000, capped: false },
+    reversals_last_7_days: 0,
+    last_settlement_run: null,
+    generated_at: '2026-09-17T09:00:00Z',
+  }
+  const review = { id: '88888888-8888-4888-8888-888888888888', creator_id: '99999999-9999-4999-8999-999999999999', review_type: 'view_spike', risk_score: 82, status: 'pending', created_at: '2026-09-16T08:00:00Z' }
+  const rate = { id: '11111111-1111-4111-8111-111111111111', content_type: 'reel', region_code: 'IN', rpm_paise: 1200, effective_from: '2026-09-01T00:00:00Z' }
+  let putCalls = 0
   await mockApi(
     page,
     {
-      apps: { monetization: ['monetization:stats.read', 'monetization:fraud.review'] },
+      apps: { monetization: ['monetization:stats.read', 'monetization:fraud.review', 'monetization:fund.read', 'monetization:fund.rates'] },
       navigation: [{ app: 'monetization', label: 'Monetization' }],
     },
-    (route, url) => (url.pathname.includes('/v1/admin/monetization/') ? json(route, NOT_LAUNCHED) : false),
+    (route, url, method) => {
+      if (url.pathname.endsWith('/v1/admin/monetization/stats')) return json(route, { data: stats })
+      if (url.pathname.endsWith('/v1/admin/monetization/fraud-reviews')) return json(route, { data: { items: [review] } })
+      if (url.pathname.endsWith('/v1/admin/monetization/creator-fund/rates') && method === 'GET') return json(route, { data: [rate] })
+      if (url.pathname.endsWith('/v1/admin/monetization/creator-fund/budgets') && method === 'GET') return json(route, { data: { cadence: 'monthly', budgets: [] } })
+      if (url.pathname.endsWith('/v1/admin/monetization/creator-fund/rates') && method === 'PUT') {
+        putCalls += 1
+        // Writes stay off: admin-service maps monetization's 503 to details.state "not_launched".
+        return json(route, { error: { code: 'MONETIZATION_NOT_LAUNCHED', message: 'Monetization is not launched', details: { state: 'not_launched' } } }, 503)
+      }
+      return false
+    },
   )
 
+  // Reads render: numbers, the fraud queue, the rates table. No page-level switched-off note.
   await page.goto(`${BASE}/monetization`)
   await expect(page.getByRole('heading', { name: 'Monetization' })).toBeVisible()
-  await expect(page.getByRole('tab', { name: 'Fraud reviews' })).toBeVisible()
-  await expect(page.locator('[data-state="not_launched"]')).toHaveCount(2) // the numbers and the fraud queue
-  await expect(page.getByText('Money actions are switched off for the beta').first()).toBeVisible()
-  await expect(page.locator('[data-stat]')).toHaveCount(0)
-  await expect(page.getByText('No fraud reviews waiting.')).toHaveCount(0)
+  await expect(page.locator('[data-stat="open_fraud_reviews"]')).toContainText('3')
+  await expect(page.locator('[data-stat="open_disputes"]')).toContainText('1')
+  await expect(page.locator('[data-stat="frozen_wallets"]')).toContainText('0')
+  await expect(page.locator('[data-stat="pending_payout_paise"]')).toContainText('₹12,500.00')
+  await expect(page.locator('[data-state="not_launched"]')).toHaveCount(0)
+  await expect(page.getByText(SWITCHED_OFF)).toHaveCount(0)
   await expect(page.getByText(/unavailable/i)).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Fraud reviews' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('button', { name: `Decide fraud review ${review.id}` })).toBeVisible()
 
+  await page.getByRole('tab', { name: 'Creator fund' }).click()
+  await expect(page.getByRole('button', { name: 'Change rate reel IN' })).toBeVisible()
+
+  // A write is refused: the calm note appears on the action's toast, and the page keeps its numbers.
+  await page.getByRole('button', { name: 'Change rate reel IN' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Change this rate' })
+  await dialog.getByLabel('New rate in rupees per 1,000 views').fill('15')
+  await dialog.getByLabel('Reason').fill('Raising the reel rate for September')
+  await dialog.getByRole('button', { name: 'Send for approval' }).click()
+
+  await expect(page.getByText(SWITCHED_OFF)).toBeVisible()
+  await expect(page.getByText('Nothing was done', { exact: false })).toBeVisible()
+  await expect(page.getByText('Sent for approval', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Rate changed')).toHaveCount(0)
+  await expect(page.getByText('Changing the rate failed')).toHaveCount(0)
+  expect(putCalls).toBe(1)
+  await expect(page.locator('[data-stat="open_fraud_reviews"]')).toContainText('3')
+  await expect(page.locator('[data-state="not_launched"]')).toHaveCount(0)
+
+  // The overview card shows the same real numbers.
   await page.goto(BASE)
   const card = page.locator('[data-app-card="monetization"]')
-  await expect(card.getByText('Money actions are switched off for the beta')).toBeVisible()
-  await expect(card.locator('[data-stat]')).toHaveCount(0)
+  await expect(card.locator('[data-stat="open_fraud_reviews"]')).toContainText('3')
+  await expect(card.locator('[data-stat="pending_payout_requests"]')).toContainText('2')
+  await expect(card.getByText(SWITCHED_OFF)).toHaveCount(0)
+  await expect(card.locator('[data-state="not_launched"]')).toHaveCount(0)
 })
 
 test('a creator fund rate change returns 202 and says it was sent for approval', async ({ page }) => {
@@ -143,14 +194,14 @@ test('a Feast-confined admin sees only Feast payments and no application picker'
   expect(seen.some((s) => /mstore|dating/.test(s))).toBe(false)
 })
 
-test('a ₹5,000 manual refund resolve asks for step-up, then goes for approval', async ({ page }) => {
+test('a ₹120 manual refund resolve asks for step-up, then goes for approval: every refund resolve is two-person', async ({ page }) => {
   const refund = {
     id: '55555555-5555-4555-8555-555555555555',
     intent_id: '66666666-6666-4666-8666-666666666666',
     application_id: 'mstore',
     reference_type: 'commerce_order',
     reference_id: '77777777-7777-4777-8777-777777777777',
-    amount_minor: 500000,
+    amount_minor: 12000,
     currency: 'INR',
     status: 'needs_attention',
     attempts: 8,
@@ -180,7 +231,9 @@ test('a ₹5,000 manual refund resolve asks for step-up, then goes for approval'
 
   const dialog = page.getByRole('dialog', { name: 'Resolve this refund' })
   await dialog.getByLabel('Resolution').selectOption('refunded_manually')
-  await expect(dialog.getByTestId('resolve-hint')).toContainText('₹5,000.00 is ₹5,000.00 or more, so a second admin must approve')
+  await expect(dialog.getByTestId('resolve-hint')).toContainText('₹120.00. Refunds are sent to a second approver.')
+  await expect(dialog.getByTestId('resolve-hint')).toHaveAttribute('data-second-approver', 'true')
+  await expect(dialog.getByTestId('resolve-hint')).not.toContainText('5,000')
   await dialog.getByLabel('Note').fill('Paid back by NEFT, UTR 1234567890')
   await dialog.getByRole('button', { name: 'Resolve' }).click()
 

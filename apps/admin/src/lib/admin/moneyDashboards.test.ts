@@ -3,7 +3,10 @@ import { moneyPayloadRows } from "./approvals"
 import { buildAdminNav, hasAppAccess, parseAdminMe } from "./me"
 import {
   MONETIZATION_ALWAYS_TWO_PERSON,
+  NOT_LAUNCHED_BODY,
   NOT_LAUNCHED_TITLE,
+  NOT_REPORTED_BODY,
+  NOT_REPORTED_TITLE,
   isNotLaunched,
   isNotLaunchedError,
   isPeriodKey,
@@ -50,15 +53,26 @@ function me(apps: Record<string, string[]>, platform: string[] = [], navigation?
 const ids = (sections: { id: string }[]) => sections.map((s) => s.id)
 const notLaunchedRead = { data: { state: "not_launched", app: "monetization", code: "MONETIZATION_NOT_LAUNCHED", message: "Monetization is not launched" } }
 
-describe("monetization not launched", () => {
-  it("shows the switched-off state with no tiles, never zeros", () => {
+describe("monetization during the beta: reads work, writes are off", () => {
+  it("renders real numbers from a successful read even while money actions are switched off", () => {
+    // The stats route answers with data during the beta (2026-09-17); nothing on the page blocks it.
+    const view = monetizationStatsView({ status: "ok", raw: { data: { open_fraud_reviews: 3, open_disputes: 0, frozen_wallets: 1, pending_payout_requests: 2 } } })
+    expect(view.state).toBe("ok")
+    expect(view.tiles.find((t) => t.key === "open_fraud_reviews")).toMatchObject({ display: "3", tone: "bad" })
+    expect(view.tiles.find((t) => t.key === "open_disputes")).toMatchObject({ display: "0", tone: "normal" })
+    expect(JSON.stringify(view)).not.toContain(NOT_LAUNCHED_TITLE)
+  })
+
+  it("still handles a read that answers {state: not_launched} gracefully: not reported, no tiles, never zeros", () => {
+    // Reads no longer answer this during the beta, but if it ever appears again it must not read as zeros or a fault.
     const view = monetizationStatsView({ status: "ok", raw: notLaunchedRead })
     expect(view.state).toBe("not_launched")
     expect(view.tiles).toEqual([])
-    expect(view.message).toMatch(/not launched/i)
+    expect(view.message).toBe(NOT_REPORTED_BODY)
+    expect(view.message).not.toContain(NOT_LAUNCHED_TITLE)
+    expect(NOT_REPORTED_TITLE).toBe("Numbers not reported yet")
     const text = JSON.stringify(view)
     expect(text).not.toMatch(/₹0|"0"|display":"0/)
-    expect(NOT_LAUNCHED_TITLE).toBe("Money actions are switched off for the beta")
   })
 
   it("tells a not-launched list from an empty one", () => {
@@ -67,10 +81,13 @@ describe("monetization not launched", () => {
     expect(isNotLaunched({ data: null })).toBe(false)
   })
 
-  it("reads a 503 write as not launched and explains it calmly", () => {
+  it("reads a 503 write as not launched and explains it calmly, on the action", () => {
     const err = { response: { status: 503, data: { error: { code: "MONETIZATION_NOT_LAUNCHED", message: "x", details: { state: "not_launched" } } } } }
     expect(isNotLaunchedError(err)).toBe(true)
     expect(adminErrorMessage(err)).toBe("Money actions are switched off for the beta, so nothing was done.")
+    expect(NOT_LAUNCHED_TITLE).toBe("Money actions are switched off for the beta")
+    expect(NOT_LAUNCHED_BODY).toMatch(/Nothing was done/)
+    expect(NOT_LAUNCHED_BODY).toMatch(/Reads still work/)
     expect(isNotLaunchedError({ response: { status: 503, data: { error: { code: "MAINTENANCE" } } } })).toBe(false)
   })
 
@@ -109,12 +126,12 @@ describe("monetization not launched", () => {
 })
 
 describe("two-person and step-up per route", () => {
-  const always: MonetizationWrite[] = ["fund.rates", "fund.quality_bands", "fund.budget", "fund.settle_day", "fund.settle_period", "fund.settle_creator_period", "fund.reverse"]
+  const always: MonetizationWrite[] = ["fund.rates", "fund.quality_bands", "fund.budget", "fund.settle_day", "fund.settle_period", "fund.settle_creator_period", "fund.reverse", "refund.issue"]
   const never: MonetizationWrite[] = ["fraud.decide", "wallet.freeze", "wallet.unfreeze", "wallet.rebuild", "creator.suspend", "creator.unsuspend", "dispute.act"]
 
-  it("rates, bands, budgets, settle, settle-period and reversal are always two-person", () => {
+  it("rates, bands, budgets, settle, settle-period, reversal and refunds are always two-person", () => {
     expect([...MONETIZATION_ALWAYS_TWO_PERSON].sort()).toEqual([...always].sort())
-    for (const w of always) expect(monetizationTwoPerson(w, 1)).toBe(true)
+    for (const w of always) expect(monetizationTwoPerson(w)).toBe(true)
   })
 
   it("fraud, wallet, creator and dispute actions are step-up only", () => {
@@ -124,25 +141,28 @@ describe("two-person and step-up per route", () => {
     }
   })
 
-  it("a monetization refund is two-person at ₹5,000 and above, not below", () => {
-    expect(monetizationTwoPerson("refund.issue", 499_999)).toBe(false)
-    expect(monetizationTwoPerson("refund.issue", 500_000)).toBe(true)
-    expect(monetizationTwoPerson("refund.issue", 500_001)).toBe(true)
-    expect(monetizationTwoPerson("refund.issue", null)).toBeNull()
-    expect(monetizationRefundHint(500_000).message).toContain("second admin must approve")
-    expect(monetizationRefundHint(499_999).secondApprover).toBe(false)
+  it("a monetization refund is two-person at any amount, with no ₹5,000 threshold", () => {
+    expect(monetizationTwoPerson("refund.issue")).toBe(true)
+    for (const paise of [1, 499_999, 500_000, 500_001]) {
+      expect(monetizationRefundHint(paise)).toContain("Refunds are sent to a second approver.")
+      expect(monetizationRefundHint(paise)).not.toMatch(/or more|below|threshold/i)
+    }
+    expect(monetizationRefundHint(1)).toBe("₹0.01. Refunds are sent to a second approver.")
+    expect(monetizationRefundHint(null)).toBe("Enter the amount. Refunds are sent to a second approver.")
   })
 
-  it("a payments resolve is two-person at ₹5,000 and above for refunded_manually and written_off only", () => {
+  it("a payments resolve is two-person at any amount for refunded_manually and written_off, never for test_data", () => {
     for (const r of ["refunded_manually", "written_off"] as const) {
-      expect(resolveNeedsSecondApprover(r, 499_999)).toBe(false)
-      expect(resolveNeedsSecondApprover(r, 500_000)).toBe(true)
-      expect(resolveNeedsSecondApprover(r, null)).toBe(true)
-      expect(resolveHint(r, 500_000)).toContain("second admin")
-      expect(resolveHint(r, 499_999)).not.toContain("second admin")
+      expect(resolveNeedsSecondApprover(r)).toBe(true)
+      for (const paise of [1, 499_999, 500_000, null]) {
+        expect(resolveHint(r, paise)).toContain("Refunds are sent to a second approver.")
+        expect(resolveHint(r, paise)).not.toMatch(/or more|below|threshold/i)
+      }
+      expect(resolveHint(r, 12_000)).toBe("₹120.00. Refunds are sent to a second approver.")
+      expect(resolveHint(r)).toBe("Refunds are sent to a second approver.")
     }
-    expect(resolveNeedsSecondApprover("test_data", 10_000_000)).toBe(false)
-    expect(resolveHint("test_data", 10_000_000)).not.toContain("second admin")
+    expect(resolveNeedsSecondApprover("test_data")).toBe(false)
+    expect(resolveHint("test_data", 10_000_000)).not.toContain("second approver")
   })
 
   it("accepts period keys of either cadence", () => {

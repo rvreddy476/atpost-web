@@ -1,6 +1,6 @@
 import { isRecord, num, readObject } from "./data"
 import { PAYMENTS_CONFINABLE, hasPermission, type AdminMe } from "./me"
-import { REFUND_TWO_PERSON_THRESHOLD_PAISE, formatPaise, refundNeedsSecondApprover } from "./money"
+import { REFUND_SECOND_APPROVER_NOTE, formatPaise } from "./money"
 import type { MoneyStatsView, MoneyTile } from "./monetization"
 import type { StatsResult } from "./stats"
 
@@ -146,22 +146,17 @@ export const RESOLUTIONS: readonly { value: Resolution; label: string; explain: 
 ]
 
 /**
- * refunded_manually and written_off at or above ₹5,000 wait for a second
- * approver; so does one whose amount the server cannot establish. test_data
- * never does.
+ * refunded_manually and written_off always wait for a second approver,
+ * whatever the amount (there is no threshold). test_data never does.
  */
-export function resolveNeedsSecondApprover(resolution: Resolution, amountPaise: number | null): boolean {
-  if (resolution === "test_data") return false
-  return amountPaise === null ? true : refundNeedsSecondApprover(amountPaise)
+export function resolveNeedsSecondApprover(resolution: Resolution): boolean {
+  return resolution !== "test_data"
 }
 
-export function resolveHint(resolution: Resolution, amountPaise: number | null): string {
-  const threshold = formatPaise(REFUND_TWO_PERSON_THRESHOLD_PAISE)
+/** What to tell the admin before a resolve is sent: the amount when known, then the rule. */
+export function resolveHint(resolution: Resolution, amountPaise: number | null = null): string {
   if (resolution === "test_data") return "Test data moves no money: it is resolved once you confirm with 2FA."
-  if (amountPaise === null) return `The amount is not known, so a second admin must approve this, as for any refund of ${threshold} or more.`
-  return resolveNeedsSecondApprover(resolution, amountPaise)
-    ? `${formatPaise(amountPaise)} is ${threshold} or more, so a second admin must approve this resolution.`
-    : `Below ${threshold}: it is resolved once you confirm with 2FA.`
+  return amountPaise === null ? REFUND_SECOND_APPROVER_NOTE : `${formatPaise(amountPaise)}. ${REFUND_SECOND_APPROVER_NOTE}`
 }
 
 // ---------------------------------------------------------------------------

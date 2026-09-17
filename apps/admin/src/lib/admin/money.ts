@@ -4,50 +4,18 @@
  */
 
 /**
- * ₹5,000. A Feast refund AT OR ABOVE this goes to a second approver
- * (admin-service `ADMIN_REFUND_TWO_PERSON_THRESHOLD_PAISE`). The server
- * decides; the console only warns before sending.
+ * Every refund is two-person (2026-09-17): a Feast refund issue or request
+ * approval, a monetization refund, and a payments resolve as refunded
+ * manually or written off all go to a second approver, whatever the amount.
+ * There is no threshold. The server decides: when the caller is the sole
+ * holder of the permission it executes at once and is recorded as such,
+ * which the console cannot know in advance, so it states the rule plainly.
  */
-export const REFUND_TWO_PERSON_THRESHOLD_PAISE = 500_000
+export const REFUND_SECOND_APPROVER_NOTE = "Refunds are sent to a second approver."
 
-export function refundNeedsSecondApprover(paise: number, thresholdPaise = REFUND_TWO_PERSON_THRESHOLD_PAISE): boolean {
-  return paise >= thresholdPaise
-}
-
-export interface RefundHint {
-  /** True when this refund will wait for a second approver; null when the console cannot tell. */
-  secondApprover: boolean | null
-  message: string
-}
-
-/**
- * What to tell the admin before a refund is sent.
- *
- * @param amountPaise  the amount typed, or null for a full refund
- * @param totalPaise   the order total, when known (bounds a full refund)
- */
-export function refundHint(amountPaise: number | null, totalPaise: number | null = null): RefundHint {
-  const threshold = formatPaise(REFUND_TWO_PERSON_THRESHOLD_PAISE)
-  const basis = amountPaise ?? totalPaise
-  if (basis === null) {
-    return {
-      secondApprover: null,
-      message: `A full refund whose amount cannot be confirmed goes to a second approver, like any refund of ${threshold} or more.`,
-    }
-  }
-  if (refundNeedsSecondApprover(basis)) {
-    return {
-      secondApprover: true,
-      message: `${formatPaise(basis)} is ${threshold} or more, so a second admin must approve this refund before any money moves.`,
-    }
-  }
-  return {
-    secondApprover: false,
-    message:
-      amountPaise === null
-        ? `Below ${threshold}: it is refunded once you confirm with 2FA, unless the server cannot confirm the order total — then it goes to a second approver.`
-        : `Below ${threshold}: it is refunded once you confirm with 2FA.`,
-  }
+/** What to tell the admin before a refund is sent: the amount when known, then the rule. */
+export function refundHint(amountPaise: number | null = null): string {
+  return amountPaise === null ? REFUND_SECOND_APPROVER_NOTE : `${formatPaise(amountPaise)}. ${REFUND_SECOND_APPROVER_NOTE}`
 }
 
 const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 })

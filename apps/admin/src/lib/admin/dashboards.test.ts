@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { ADMIN_APPS } from "./apps"
 import { readList } from "./data"
 import { buildAdminNav, parseAdminMe } from "./me"
-import { REFUND_TWO_PERSON_THRESHOLD_PAISE, formatPaise, parseRupeeInput, refundHint, refundNeedsSecondApprover } from "./money"
+import { REFUND_SECOND_APPROVER_NOTE, formatPaise, parseRupeeInput, refundHint } from "./money"
 import { IDEMPOTENCY_HEADER, prepareSend, runAdminMutation, type AdminWrite, type SentResponse } from "./mutation"
 import {
   COMMERCE_SECTIONS,
@@ -64,31 +64,26 @@ describe("sections for a permission set", () => {
   })
 })
 
-describe("refund two-person hint", () => {
-  it("is ₹5,000", () => {
-    expect(REFUND_TWO_PERSON_THRESHOLD_PAISE).toBe(500_000)
-    expect(formatPaise(REFUND_TWO_PERSON_THRESHOLD_PAISE)).toBe("₹5,000.00")
+describe("refund second-approver hint", () => {
+  it("is the plain rule, with no ₹5,000 threshold at any amount", () => {
+    expect(REFUND_SECOND_APPROVER_NOTE).toBe("Refunds are sent to a second approver.")
+    for (const paise of [1, 100, 499_999, 500_000, 500_001, 10_000_000]) {
+      const hint = refundHint(paise)
+      expect(hint).toContain(REFUND_SECOND_APPROVER_NOTE)
+      // The amount itself may read "₹5,000.00"; what must be gone is the boundary language around it.
+      expect(hint).not.toMatch(/or more|below|threshold|2FA/i)
+    }
   })
 
-  it("applies AT the threshold, not only above it", () => {
-    expect(refundNeedsSecondApprover(499_999)).toBe(false)
-    expect(refundNeedsSecondApprover(500_000)).toBe(true)
-    expect(refundNeedsSecondApprover(500_001)).toBe(true)
-    expect(refundNeedsSecondApprover(parseRupeeInput("5000") ?? 0)).toBe(true)
-    expect(refundNeedsSecondApprover(parseRupeeInput("4,999.99") ?? 0)).toBe(false)
-  })
-
-  it("tells the admin before sending, at the boundary and for full refunds", () => {
-    expect(refundHint(500_000).secondApprover).toBe(true)
-    expect(refundHint(500_000).message).toMatch(/second admin/)
-    expect(refundHint(499_999).secondApprover).toBe(false)
-    expect(refundHint(null, 500_000).secondApprover).toBe(true)
-    expect(refundHint(null, 12_000).secondApprover).toBe(false)
-    expect(refundHint(null, null).secondApprover).toBeNull()
-    expect(refundHint(100, 900_000).secondApprover).toBe(false)
+  it("shows the amount when it is known and only the rule for a full refund of unknown total", () => {
+    expect(refundHint(100)).toBe("₹1.00. Refunds are sent to a second approver.")
+    expect(refundHint(parseRupeeInput("4,999.99"))).toBe("₹4,999.99. Refunds are sent to a second approver.")
+    expect(refundHint(null)).toBe(REFUND_SECOND_APPROVER_NOTE)
+    expect(refundHint()).toBe(REFUND_SECOND_APPROVER_NOTE)
   })
 
   it("reads typed rupees as integer paise", () => {
+    expect(formatPaise(500_000)).toBe("₹5,000.00")
     expect(parseRupeeInput("₹5,000")).toBe(500_000)
     expect(parseRupeeInput("4999.5")).toBe(499_950)
     expect(parseRupeeInput("0.07")).toBe(7)
@@ -218,5 +213,24 @@ describe("approval details shown before deciding", () => {
     expect(JSON.stringify(details)).not.toContain("secret-key")
     const full = approvalDetails({ ...item, payload: { order_id: "o-1" } })
     expect(Object.fromEntries(full).Amount).toMatch(/Full refund/)
+  })
+
+  it("shows the amount the server stored, or says it is not stated, for any refund of any size", async () => {
+    const { AMOUNT_NOT_STATED, approvalDetails, parseApprovals } = await import("./approvals")
+    const parse = (item: Record<string, unknown>) => parseApprovals({ data: { items: [{ id: "ap-x", status: "pending", requested_by: "u-2", ...item }] } }, "u-1")[0]
+    const details = (item: Record<string, unknown>) => Object.fromEntries(approvalDetails(parse(item)))
+
+    // A ₹1 Feast refund is two-person like any other; its amount is shown as stored.
+    expect(details({ app: "food", operation: "food.order.refund", payload: { order_id: "o-1", amount_paise: 100 } }).Amount).toBe("₹1.00")
+    // A monetization refund and a payments resolve with an amount.
+    expect(details({ app: "monetization", operation: "monetization.refund.issue", payload: { body: { transaction_id: "t-1", amount_paise: 2_500 } } }).Amount).toBe("₹25.00")
+    expect(details({ app: "payments", operation: "payments.refund.resolve", payload: { command_id: "c-1", resolution: "written_off", amount_paise: 12_000 } }).Amount).toBe("₹120.00")
+    // Without one, the approver is told so rather than shown a guess.
+    expect(AMOUNT_NOT_STATED).toBe("Not stated")
+    expect(details({ app: "monetization", operation: "monetization.refund.issue", payload: { body: { transaction_id: "t-1" } } }).Amount).toBe("Not stated")
+    expect(details({ app: "payments", operation: "payments.refund.resolve", payload: { command_id: "c-1", resolution: "refunded_manually" } }).Amount).toBe("Not stated")
+    expect(details({ app: "food", operation: "food.refund.decide", payload: { refund_id: "r-1", status: "approved" } }).Amount).toBe("Not stated")
+    // A request that is not a refund has no amount row at all.
+    expect(details({ app: "monetization", operation: "monetization.fund.rates", payload: { body: { content_type: "reel", rpm_paise: 1500 } } }).Amount).toBeUndefined()
   })
 })

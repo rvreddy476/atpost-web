@@ -8,9 +8,10 @@ import { FeastAudit, FeastCoupons, FeastModeration, FeastReports, FeastServiceAr
 import { FOOD_SECTIONS } from "@/lib/admin/sections"
 
 /**
- * Feast. Money actions ask for a fresh 2FA code; refunds of ₹5,000 or more and
- * every settlement mark-paid wait for a second approver; refund issue and
- * settlement generate carry an Idempotency-Key reused across the 2FA retry.
+ * Feast. Money actions ask for a fresh 2FA code; every refund (issue or
+ * request approval, whatever the amount) and every settlement mark-paid wait
+ * for a second approver; refund issue and settlement generate carry an
+ * Idempotency-Key reused across the 2FA retry.
  */
 export default function FeastDashboard() {
   return (

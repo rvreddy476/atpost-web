@@ -8,7 +8,7 @@ import { useAdmin } from "@/components/shell/AdminShell"
 import { useAdminMutation } from "@/hooks/useAdminMutation"
 import { isUuid, num, readObject } from "@/lib/admin/data"
 import { MON, monetizationRefundHint } from "@/lib/admin/monetization"
-import { formatPaise, parseRupeeInput } from "@/lib/admin/money"
+import { REFUND_SECOND_APPROVER_NOTE, formatPaise, parseRupeeInput } from "@/lib/admin/money"
 import { can } from "@/lib/admin/sections"
 import { MON_KEY } from "./MonetizationQueues"
 
@@ -141,7 +141,7 @@ export function Creators() {
   )
 }
 
-/** Refund a monetization transaction. ₹5,000 or more waits for a second approver. */
+/** Refund a monetization transaction. Every refund goes to a second approver, whatever the amount. */
 export function MonetizationRefunds() {
   const [transactionId, setTransactionId] = useState("")
   const [disputeId, setDisputeId] = useState("")
@@ -170,22 +170,22 @@ export function MonetizationRefunds() {
   return (
     <section className="max-w-xl space-y-3">
       <Field label="Transaction id">{(id) => <input id={id} className={inputClass} value={transactionId} onChange={(e) => setTransactionId(e.target.value)} />}</Field>
-      <Field label="Amount in rupees" hint={<span data-testid="mon-refund-hint">{hint.message}</span>}>
+      <Field label="Amount in rupees" hint={<span data-testid="mon-refund-hint">{hint}</span>}>
         {(id) => <input id={id} className={inputClass} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />}
       </Field>
       <Field label="Dispute id (optional)">{(id) => <input id={id} className={inputClass} value={disputeId} onChange={(e) => setDisputeId(e.target.value)} />}</Field>
       <button type="button" className={buttonPrimary} disabled={!valid} onClick={() => setConfirming(true)}>
-        {hint.secondApprover ? "Send refund for approval" : "Refund"}
+        Send refund for approval
       </button>
       <ConfirmReasonDialog
         open={confirming}
         title="Refund this transaction?"
         description={
           <>
-            {formatPaise(paise)} on transaction {transactionId.trim()}. Needs a fresh 2FA code. <span data-testid="mon-refund-confirm-hint">{hint.message}</span>
+            {formatPaise(paise)} on transaction {transactionId.trim()}. Needs a fresh 2FA code. <span data-testid="mon-refund-confirm-hint">{REFUND_SECOND_APPROVER_NOTE}</span>
           </>
         }
-        confirmLabel={hint.secondApprover ? "Send for approval" : "Refund"}
+        confirmLabel="Send for approval"
         destructive
         busy={refund.isPending}
         onConfirm={(reason) => refund.mutate({ reason })}

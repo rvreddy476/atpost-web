@@ -11,7 +11,7 @@ import { useAdmin } from "@/components/shell/AdminShell"
 import { useAdminMutation, useStepUpRead } from "@/hooks/useAdminMutation"
 import { useAdminList } from "@/hooks/useAdminQuery"
 import { humanise, num, readObject, str, when, type Row } from "@/lib/admin/data"
-import { formatPaise, refundHint, rupeesToPaise } from "@/lib/admin/money"
+import { REFUND_SECOND_APPROVER_NOTE, formatPaise, rupeesToPaise } from "@/lib/admin/money"
 import { adminErrorMessage } from "@/lib/admin/mutation"
 import { can } from "@/lib/admin/sections"
 import { FOOD, FOOD_KEY } from "./FeastApprovals"
@@ -19,7 +19,7 @@ import { FOOD, FOOD_KEY } from "./FeastApprovals"
 const LIMIT = 50
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
-/** Refund requests raised by support. Approving ₹5,000 or more goes to a second approver. */
+/** Refund requests raised by support. Approving one goes to a second approver, whatever the amount; rejecting needs only a fresh 2FA code. */
 export function FeastRefunds() {
   const { me } = useAdmin()
   const [status, setStatus] = useState("requested")
@@ -58,8 +58,6 @@ export function FeastRefunds() {
     },
   ]
 
-  const hint = deciding ? refundHint(rupeesToPaise(deciding.amount)) : null
-
   return (
     <>
       <div className="mb-3 w-56">
@@ -81,17 +79,17 @@ export function FeastRefunds() {
         open={deciding !== null}
         title="Decide this refund request"
         description={
-          hint ? (
+          deciding ? (
             <>
-              {formatPaise(rupeesToPaise(deciding?.amount))} requested. Deciding needs a fresh 2FA code.{" "}
-              <span data-testid="refund-hint">Approving: {hint.message}</span>
+              {formatPaise(rupeesToPaise(deciding.amount))} requested. Deciding needs a fresh 2FA code.{" "}
+              <span data-testid="refund-hint">Approving: {REFUND_SECOND_APPROVER_NOTE}</span>
             </>
           ) : null
         }
         choiceLabel="Decision"
         choices={[
-          { value: "approved", label: "Approve", hint: hint?.secondApprover !== false ? "This approval goes to a second admin." : undefined },
-          { value: "rejected", label: "Reject", destructive: true },
+          { value: "approved", label: "Approve", hint: REFUND_SECOND_APPROVER_NOTE },
+          { value: "rejected", label: "Reject", hint: "Rejecting is done once you confirm with 2FA.", destructive: true },
         ]}
         busy={decide.isPending}
         onConfirm={(next, reason) => deciding && decide.mutate({ id: String(deciding.id), status: next, reason })}

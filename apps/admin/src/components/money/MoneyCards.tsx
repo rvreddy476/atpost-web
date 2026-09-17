@@ -25,7 +25,7 @@ function Card({ group, app, children }: { group: NavGroup; app: string; children
   )
 }
 
-/** Monetization: open fraud reviews first, or the calm "not launched" note instead of numbers. */
+/** Monetization: real numbers during the beta, open fraud reviews first; a failed read shows "unavailable", never 0. */
 export function MonetizationCard({ group }: { group: NavGroup }) {
   const stats = useMoneyStats("monetization", `${MON}/stats`, true)
   return (

@@ -6,17 +6,22 @@ import api from "@/lib/admin/api"
 import { buttonSecondary } from "@/components/blocks/buttons"
 import { useAdminList, useAdminObject } from "@/hooks/useAdminQuery"
 import { adminErrorMessage } from "@/lib/admin/mutation"
-import { NOT_LAUNCHED_BODY, NOT_LAUNCHED_TITLE, isNotLaunched, type MoneyStatsView, type MoneyTile } from "@/lib/admin/monetization"
+import { NOT_REPORTED_BODY, NOT_REPORTED_TITLE, isNotLaunched, type MoneyStatsView, type MoneyTile } from "@/lib/admin/monetization"
 import type { StatsResult } from "@/lib/admin/stats"
 
-/** The calm "switched off" state. Not an error: no red, no retry, no numbers. */
+/**
+ * A read that still answered the not-launched state. Reads return real data
+ * during the beta, so this is rare; when it happens the numbers are "not
+ * reported", never zeros. Not an error: no red, no retry. The "money actions
+ * are switched off" note belongs to a refused write (the action's toast), not here.
+ */
 export function NotLaunchedNote({ compact = false }: { compact?: boolean }) {
   return (
     <div role="status" data-state="not_launched" className={`flex items-start gap-3 rounded-mo border border-mo bg-mo-surface ${compact ? "p-3" : "p-5"}`}>
       <PauseCircle className="mt-0.5 h-5 w-5 shrink-0 text-mo-body" aria-hidden="true" />
       <div>
-        <p className="text-sm font-semibold text-mo-ink">{NOT_LAUNCHED_TITLE}</p>
-        <p className="text-sm text-mo-body">{NOT_LAUNCHED_BODY}</p>
+        <p className="text-sm font-semibold text-mo-ink">{NOT_REPORTED_TITLE}</p>
+        <p className="text-sm text-mo-body">{NOT_REPORTED_BODY}</p>
       </div>
     </div>
   )
