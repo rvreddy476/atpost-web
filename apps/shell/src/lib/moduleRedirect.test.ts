@@ -5,6 +5,7 @@ describe('moduleHome', () => {
   it.each([
     ['/shop', '/shop'], ['/shop/cart', '/shop'], ['/admin/products', '/admin'],
     ['/social/feed', '/social'], ['/apps?id=1', '/apps'],
+    ['/ask', '/ask'], ['/ask/questions/4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f80', '/ask'],
   ])('keeps the explicit destination %s, landing on %s', (requested, expected) =>
     expect(moduleHome(requested)).toBe(expected))
 
@@ -46,6 +47,12 @@ describe('moduleLabel', () => {
   it('names an explicitly requested zone', () => {
     expect(moduleLabel('/admin')).toBe('the admin console')
     expect(moduleLabel('/shop/cart')).toBe('the shop')
+    expect(moduleLabel('/ask/questions/4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f80')).toBe('Ask')
+  })
+
+  it('does not let a near-prefix of /ask borrow its label', () => {
+    expect(requestedModule('/asking')).toBeNull()
+    expect(moduleLabel('/asking')).toBeNull()
   })
 
   it('names nothing when no zone was requested', () => {

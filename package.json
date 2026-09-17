@@ -16,6 +16,7 @@
     "e2e:commerce": "playwright test e2e/commerce.spec.ts",
     "e2e:admin": "playwright test -c playwright.admin.config.ts",
     "e2e:auth": "playwright test e2e/auth.spec.ts",
+    "e2e:ask": "playwright test e2e/ask.spec.ts",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish"
