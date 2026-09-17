@@ -10,9 +10,9 @@ import { formatPaise } from "./money"
  * all look the same — an admin must not read "0 overdue grievances" when the
  * truth is "we don't know".
  */
-export type StatsApp = "trust_safety" | "dating" | "food" | "commerce"
+export type StatsApp = "trust_safety" | "dating" | "food" | "commerce" | "rider"
 
-export const STATS_APPS: readonly StatsApp[] = ["trust_safety", "dating", "food", "commerce"]
+export const STATS_APPS: readonly StatsApp[] = ["trust_safety", "dating", "food", "commerce", "rider"]
 
 export interface StatMetric {
   key: string
@@ -64,6 +64,20 @@ export const STATS_METRICS: Record<StatsApp, readonly StatMetric[]> = {
     { key: "compliance_gaps_open", label: "Compliance gaps" },
     { key: "orders_today", label: "Orders today" },
     { key: "gmv_today_paise", label: "GMV today", kind: "paise" },
+  ],
+  // rider-service store/admin_stats.go. Revenue is partner subscriptions (customers ride free).
+  rider: [
+    { key: "partners_pending_review", label: "Partners to approve", alert: "warn" },
+    { key: "open_safety_incidents", label: "Open safety incidents", alert: "bad" },
+    { key: "open_complaints", label: "Open complaints", alert: "warn" },
+    { key: "documents_pending", label: "Documents pending" },
+    { key: "vehicles_pending", label: "Vehicles pending" },
+    { key: "payments_awaiting_verification", label: "Payments to verify" },
+    { key: "live_rides_now", label: "Live rides now" },
+    { key: "rides_today", label: "Rides today" },
+    { key: "cancellations_today", label: "Cancellations today" },
+    { key: "rides_last_7_days", label: "Rides, 7 days" },
+    { key: "revenue_today_paise", label: "Subscription revenue today", kind: "paise" },
   ],
 }
 

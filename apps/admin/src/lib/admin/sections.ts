@@ -118,6 +118,25 @@ export const CHAT_SECTIONS = [
   { id: "communities", label: "Communities", anyOf: ["reports.read", "reports.act"] },
 ] as const satisfies readonly SectionDef[]
 
+/**
+ * Mopedu (admin-service handler_rider.go). Nothing here is two-person; the
+ * step-up writes and reveals are listed in lib/admin/rider.ts. Cities, zones
+ * and fare rules have no admin list route yet, so those tabs are forms.
+ */
+export const RIDER_SECTIONS = [
+  { id: "partners", label: "Partners", anyOf: ["partners.read", "partners.approve", "partners.suspend"] },
+  { id: "documents", label: "Documents", anyOf: ["documents.review"] },
+  { id: "vehicles", label: "Vehicles", anyOf: ["vehicles.review"] },
+  { id: "payments", label: "Payments", anyOf: ["payments.read", "payments.settle", "payments.reject"] },
+  { id: "rides", label: "Rides", anyOf: ["rides.read", "rides.cancel", "ratings.moderate"] },
+  { id: "complaints", label: "Complaints", anyOf: ["complaints.act"] },
+  { id: "incidents", label: "Safety incidents", anyOf: ["incidents.read", "incidents.act", "incidents.reveal"] },
+  { id: "cities", label: "Cities & zones", anyOf: ["cities.manage"] },
+  { id: "fares", label: "Fare rules", anyOf: ["fares.manage"] },
+  { id: "reports", label: "Reports", anyOf: ["reports.read"] },
+  { id: "audit", label: "Audit", anyOf: ["audit.read"] },
+] as const satisfies readonly SectionDef[]
+
 export function can(me: AdminMe, app: AdminAppId, action: string): boolean {
   return hasPermission(me, app, action)
 }
@@ -136,6 +155,6 @@ export function canReadStats(me: AdminMe, app: AdminAppId): boolean {
 }
 
 /** admin-service's prefix for an application's routes. */
-export function adminPrefix(app: "dating" | "food" | "commerce" | "trust_safety"): string {
+export function adminPrefix(app: "dating" | "food" | "commerce" | "trust_safety" | "rider"): string {
   return app === "trust_safety" ? "/v1/admin/trust" : `/v1/admin/${app}`
 }

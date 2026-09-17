@@ -62,6 +62,14 @@ const ADMIN_ERROR_MESSAGES: Record<string, string> = {
   BUDGET_BELOW_ACCRUED: "The cap cannot be lower than what this period has already accrued.",
   CADENCE_MISMATCH: "That period key does not match the configured settlement cadence.",
   REFUND_ALREADY_EXISTS: "This transaction has already been refunded.",
+  // Access (/v1/admin/access/*)
+  SUPERADMIN_REQUIRED: "Only a platform super-admin can grant or revoke this role.",
+  LAST_SUPERADMIN: "This is the last super-admin. Grant the role to someone else before revoking it.",
+  ENV_BOOTSTRAP_ROLE: "This role is granted by the deployment's configuration, not by a grant, so it cannot be revoked here. Remove it from the environment allowlist instead.",
+  SELF_GRANT_REFUSED: "You cannot change your own roles. Ask another admin.",
+  INVALID_APP: "That application is not one roles can be scoped to.",
+  ROLE_NOT_SCOPABLE: "That role is platform-wide only and cannot be limited to one application.",
+  INVALID_EXPIRY: "The expiry must be a time in the future.",
 }
 
 /** A sentence for an admin error: known codes first, then the server's message. */
