@@ -7,6 +7,19 @@
  * was a `?redirect=` this page would accept, sign someone in for, and then
  * hand them a 404. When a zone comes back it comes back here and in the
  * shell's `zones` rewrite table together, or the two drift again.
+ *
+ * `/admin` stays on this list although the console now lives on its own host
+ * (admin.cleestudio.com; `ADMIN_HOST_URL` in `apps/shell/next.config.ts`).
+ * A `?redirect=/admin` still resolves to this host's `/admin`, and the shell
+ * answers that path with a redirect to the admin host whenever
+ * `ADMIN_HOST_URL` is set. The hop is decided there, at runtime and per
+ * environment — not here: this module runs in the browser and can only see
+ * what was baked in at build time, and the shell image is built once for
+ * every environment. Locally, with `ADMIN_HOST_URL` unset, `/admin` is still
+ * the zone on port 3002 and nothing changes. The guards in
+ * `requestedModule` are untouched by this: an absolute admin URL in
+ * `?redirect=` is still refused, because the only way to that host from here
+ * is the shell's own redirect.
  */
 const moduleHomes = ['/shop', '/admin', '/social', '/apps', '/reels', '/tube'] as const
 

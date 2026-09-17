@@ -59,15 +59,18 @@ jobs:
         name: Build & push web-${{ matrix.zone }}
         env:
           IMAGE: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-south-1.amazonaws.com/atpost/web-${{ matrix.zone }}
-          # The admin console is served at the root of its own host
-          # (e.g. admin.cleestudio.com) with its own strict CSP and HSTS.
-          # Set these repository variables before the first own-host deploy.
-          ADMIN_SIGN_IN_URL: ${{ vars.ADMIN_SIGN_IN_URL }}
-          ADMIN_API_ORIGIN: ${{ vars.ADMIN_API_ORIGIN }}
         run: |
           extra=""
+          # The admin console is served at the ROOT of its own host —
+          # admin.cleestudio.com (staging: admin.staging.cleestudio.com), see
+          # modernsmapp deploy/web/admin/values-*.yaml — with its own strict
+          # CSP, HSTS and host-only cookies. It needs no repository variables:
+          # sign-in is the console's own /login (NEXT_PUBLIC_ADMIN_SIGN_IN_URL
+          # is no longer read), and the browser only ever calls its own host
+          # (/v1 → /api/proxy), so no API origin belongs in its CSP and
+          # NEXT_PUBLIC_ADMIN_API_ORIGIN stays empty.
           if [ "${{ matrix.zone }}" = "admin" ]; then
-            extra="--build-arg ADMIN_BASE_PATH=/ --build-arg NEXT_PUBLIC_ADMIN_SIGN_IN_URL=$ADMIN_SIGN_IN_URL --build-arg NEXT_PUBLIC_ADMIN_API_ORIGIN=$ADMIN_API_ORIGIN"
+            extra="--build-arg ADMIN_BASE_PATH=/"
           fi
           docker build --build-arg ZONE=${{ matrix.zone }} $extra \
             -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .

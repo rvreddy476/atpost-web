@@ -22,6 +22,36 @@ const zones = [
   ["/tube", "TUBE_ZONE_URL", "http://localhost:3012"],
 ] as const
 
+/**
+ * Where the admin console lives once it has its own host.
+ *
+ * Founder decision 2026-09-17: the console is served at the root of
+ * admin.cleestudio.com (staging: admin.staging.cleestudio.com), not under
+ * /admin on this host. Set `ADMIN_HOST_URL` to that origin and every /admin
+ * request here becomes a redirect there — the console stops being a zone of
+ * this shell and is another site with its own sign-in, host-only cookies and
+ * CSP, and nothing of it is served under app.cleestudio.com. Left unset (local
+ * dev, e2e) the /admin zone row above keeps working exactly as before.
+ *
+ * Read at RUNTIME, per environment: the shell image is built once, so this
+ * cannot be a NEXT_PUBLIC_ value baked into the bundle. Only an http(s)
+ * origin is accepted; anything else is ignored rather than trusted, so a
+ * mis-set value falls back to dev behaviour instead of sending people
+ * somewhere odd.
+ */
+function adminHostUrl(): string | null {
+  const raw = process.env.ADMIN_HOST_URL?.trim()
+  if (!raw) return null
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null
+    return url.origin
+  } catch {
+    return null
+  }
+}
+const adminHost = adminHostUrl()
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
@@ -36,8 +66,21 @@ const nextConfig: NextConfig = {
       { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
     ] }]
   },
+  // Redirects run before rewrites, so with ADMIN_HOST_URL set the /admin zone
+  // row is never consulted; it is also dropped from the rewrite table below so
+  // the two cannot disagree. Temporary (307), not permanent: a 308 would be
+  // cached by browsers for as long as they like, and the console's address is
+  // a deployment decision that must stay changeable.
+  async redirects() {
+    if (!adminHost) return []
+    return [
+      { source: '/admin', destination: `${adminHost}/`, permanent: false },
+      { source: '/admin/:path*', destination: `${adminHost}/:path*`, permanent: false },
+    ]
+  },
   async rewrites() {
-    const beforeFiles: Rewrite[] = [{ source: '/v1/:path*', destination: '/api/proxy/:path*' }, ...zones.flatMap(([path, envName, localUrl]) => {
+    const routed = adminHost ? zones.filter(([path]) => path !== '/admin') : zones
+    const beforeFiles: Rewrite[] = [{ source: '/v1/:path*', destination: '/api/proxy/:path*' }, ...routed.flatMap(([path, envName, localUrl]) => {
       const origin = process.env[envName] || localUrl
       return [
         { source: path, destination: `${origin}${path}` },
