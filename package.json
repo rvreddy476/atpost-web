@@ -10,6 +10,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
+    "test:bun": "bun run ./scripts/run-bun-tests.ts",
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev --concurrency=15",
     "e2e": "playwright test",
