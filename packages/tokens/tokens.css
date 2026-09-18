@@ -21,6 +21,21 @@
    very slightly violet, which is what lets #1F1D33 sit above it as the same
    colour lit rather than as a different colour entirely.
 
+   ── There is also a LIGHT theme, and it is a scope, not a mode ────────────
+   `.mo-light` (below, after :root) redefines the COLOUR tokens for a white
+   ground: green as the action colour, orange as the accent. It redefines
+   nothing else — spacing, radii, motion, fonts, tracking, leading and the
+   ember label floor are all shared, declared once in :root, and inherited.
+   :root itself is untouched, and there is deliberately no
+   `@media (prefers-color-scheme: light)` anywhere in this file: a media query
+   would repaint every zone whether or not it asked, and the whole point of a
+   scope is that opting in is a visible act. A zone that wants to follow the
+   OS toggles the class itself.
+
+   Everything from here to the LIGHT THEME banner describes the DARK theme and
+   is unchanged by its arrival — including every ratio in the table below,
+   which is measured against the violet-black ground and only that.
+
    ── Colour families ───────────────────────────────────────────────────────
    --mo-*      the Momentum vocabulary. Space-separated RGB triplets so
                Tailwind can do `rgb(var(--mo-bg) / <alpha-value>)`, which is
@@ -254,6 +269,51 @@
      its own, at full strength. See .mo-root *:focus-visible. */
   --mo-focus: rgb(6 182 212);
 
+  /* ── The scrim, and why it is declared ONCE ─────────────────────────────
+     A veil over MEDIA — the gradient under a player's controls, the pill
+     holding a page counter over a photograph, the backdrop behind a sheet.
+     It is the one surface in this package that is NOT a theme colour, and
+     `.mo-light` deliberately does not redefine it. Deleting it from :root on
+     the grounds that "the light block has no scrim" would be deleting the
+     scrim; the light block is silent about it BECAUSE it is the same value.
+
+     The reason is that a scrim is not there to match the page. It is there to
+     make light type legible over arbitrary pixels, and the pixels under it
+     belong to a photograph nobody in this repo chose. Tint it white for a
+     light zone and the first bright frame of a video puts white text on white
+     and the text is gone — which is not a subtle regression, it is an unusable
+     control. So the veil stays dark in both scopes and carries --mo-on-scrim,
+     and a light zone accepts a dark chip over its media the way every other
+     light-theme product on the web does.
+
+     The value is the dark theme's own --mo-sunken, which is what makes the
+     dark zones' appearance unchanged by this token's arrival, and the ink is
+     the dark theme's --mo-ink. A triplet, not a colour, because every use of
+     it is `bg-mo-scrim/<alpha>`.
+
+     ── What the alpha has to be ──────────────────────────────────────────
+     Measured against the WORST ground a scrim can ever have, which is pure
+     white media — a snow photograph, a whiteboard, an overexposed frame.
+     Composite #08070E over the ground at each alpha, then --mo-on-scrim on
+     the result. Same script and same truncation as every other table here.
+
+                    over WHITE   over MID GREY   over BLACK
+       .40 ......     2.38          7.02          17.97   FAILS on white
+       .60 ......     4.68         10.29          17.83   AA at any size
+       .70 ......     6.86         12.25          17.72   AA, AAA large
+       .80 ......    10.02         14.27          17.64   AAA
+       .85 ......    12.07         15.23          17.61   AAA (a hover step)
+
+     The white column is the one that governs, because it is the only column a
+     photograph can actually reach and the other two only ever improve on it.
+     .60 is the floor a veil carrying TEXT may use and .40 is below it — an
+     overlay at .40 is a dimmer, not a scrim, and nothing may be written on
+     one. Everything in this repo that carries words uses .70 or more; .60 is
+     the modal backdrop, which carries none at all and is chosen for how much
+     of the page it puts away rather than for what sits on it. */
+  --mo-scrim: 8 7 14;            /* #08070E dark in BOTH scopes            */
+  --mo-on-scrim: 241 238 248;    /* #F1EEF8 the ONLY type on a scrim       */
+
   /* ── Elevation ──────────────────────────────────────────────────────────
      Long, soft, and very dark. Paired with the surface step above; across a
      1.19:1 step, neither alone reads as lift. */
@@ -339,6 +399,506 @@
   --brand-card: var(--mo-surface);
 }
 
+/* ═══════════════════════════════════════════════════════════════ LIGHT THEME
+
+   Normal mode: a white page, GREEN for action, ORANGE for accent. It is a
+   scope, exactly like .mo-commerce below — put `mo-light` on a zone's root
+   element and the colour vocabulary underneath it changes meaning. Zones that
+   do not opt in never see any of this.
+
+   ── Where the class goes ──────────────────────────────────────────────────
+   Any of these three work, and all three were designed for:
+
+     <body class="mo-root mo-light">   both on the same element  (the usual)
+     <html class="mo-light"> <body class="mo-root">   light on an ancestor
+     <body class="mo-root"> ... <section class="mo-light">   a light region
+                                                             inside a dark page
+
+   .mo-root's three jobs all survive every one of those orders, because none
+   of them is copied here:
+     · background / colour / color-scheme — .mo-root paints from rgb(var(--mo-bg))
+       and rgb(var(--mo-ink)), which resolve per element, so on the same element
+       or on an ancestor it simply paints white. For the nested case there is a
+       three-line .mo-light rule in the PRIMITIVES section that paints the
+       region itself; it is written as `.mo-light, .mo-root.mo-light` so it wins
+       on specificity when the two classes share an element and on source order
+       when they do not. That rule also flips `color-scheme` to light, which
+       .mo-root hard-codes to dark and which is the difference between a date
+       input arriving correct and arriving as a black slab on a white form.
+     · .mo-root *:focus-visible — matches descendants and reads var(--mo-focus),
+       which is inherited, so a light zone gets the green ring from the same
+       rule. No copy.
+     · .mo-root ::selection — likewise; it reads --mo-purple, retuned below.
+
+   ── The substitution trap (this is why the aliases are re-declared) ────────
+   `--brand-bg: var(--mo-bg)` in :root is substituted AT :ROOT. What inherits
+   down is the resolved dark triplet, not a live reference — so a light scope
+   that redefined only --mo-bg would still hand @atpost/ui the violet-black.
+   Same for --mo-ember and --mo-ember-hover, which are built out of
+   var(--mo-primary). Every token here that is composed from another token is
+   therefore re-declared in full. Nothing in this block may be deleted on the
+   grounds that "it's the same expression as :root" — it is not the same value.
+
+   ── Elevation is not lightness here, and three grounds are one white ───────
+   On the dark theme lift means MORE light: five grounds, five tones, a card
+   visibly paler than the page. The obvious translation is to run that ladder
+   downward — white page, grey card. This file did that first and it was
+   wrong. A grey card on a white page does not read as a card lifted off the
+   ground; it reads as a dirty patch ON the ground, because the page is the
+   brightest thing in the frame and the card is a subtraction from it. The
+   light-theme convention that works is the opposite: the CARD is the white
+   one, and the lift is a hairline plus a small shadow.
+
+   So --mo-bg, --mo-surface and --mo-overlay are ALL #FFFFFF, and tone only
+   ever goes DOWN from the ground:
+
+     bg / surface / overlay   #FFFFFF   the page, the card, the menu
+     raised                   #F1F4F2   hover, nested panel, disabled fill
+     sunken                   #E9EDEB   wells, inputs, anything recessed
+
+   --mo-surface against --mo-bg is therefore 1.00:1. Not "flatter than the
+   dark theme's 1.19" — IDENTICAL. There, the hairline and the shadow did most
+   of the work of making a card; here they do ALL of it. That is the model,
+   not a weakness in it, and the consequence is a rule rather than a caution:
+
+     A CARD, PANEL, DIALOG, MENU OR POPOVER IN A LIGHT ZONE MUST CARRY
+     --mo-line OR A SHADOW. `bg-mo-surface` or `bg-mo-overlay` with neither
+     is an invisible element every time, not merely a subtle one.
+
+   That is not softened with a fallback, for the same reason gold outside
+   .mo-commerce is not: an element that vanishes gets caught in review, and an
+   element that is faintly grey for no reason ships.
+
+   --mo-raised and --mo-sunken keep their jobs and inherit the tone the card
+   gave up, which is where it was always more use — a hover state, a disabled
+   fill and an input well all want to read as recessed, and now they do so
+   against white without needing a border at all: sunken is 1.18 against the
+   ground, a stronger signal than the 1.27 hairline that would have outlined
+   it.
+
+   ── Contrast (WCAG 2.1 relative luminance, computed, not estimated) ───────
+   Same script, same thresholds as the dark block: 4.5 normal text, 3.0 large
+   text (>=18.66px bold / >=24px) and non-text, 7.0 AAA normal. Ratios are
+   truncated, never rounded up.
+
+   There are only THREE distinct grounds to measure against, not five: bg,
+   surface and overlay are the same #FFFFFF, so one column covers all three.
+
+     TYPE ON GROUNDS   (bg/surface/overlay #FFFFFF, raised #F1F4F2,
+                        sunken #E9EDEB)
+                                        WHITE   RAISED  SUNKEN
+     #0F1A14 ink    .................... 17.82   16.09   15.08   AAA throughout
+     #46554D body   ....................  7.87    7.11    6.66   AAA/AAA/AA
+     #74847C muted  ....................  3.93    3.55    3.33   LARGE/NON-TEXT
+     Note: unlike the dark theme's #6B658A, this muted clears 3.0 on ALL THREE
+     grounds — it does not fall off on `raised`. The name still carries the
+     real limit, which is that 3.93 is not 4.5 anywhere. Small secondary text
+     is --mo-body here as it is there.
+
+     THE ACTION COLOUR: GREEN  (#0B6B37 -> #12833F, 135deg)
+     One measurement governs both directions, because white is the lighter
+     colour in both pairs: green-on-white and white-on-green are the SAME
+     ratio. Choosing a green that reads on the page therefore also chooses a
+     green that can carry white type, which is why one hue does both jobs.
+                                        WHITE   RAISED  SUNKEN
+     #0B6B37 green as text .............  6.61    5.97    5.60   AA at any size
+     #12833F light end as text .........  4.83    4.36    4.09   NOT A TEXT
+                                                                 COLOUR — it is
+                                                                 a gradient stop
+                                                                 and nothing else
+     #FFFFFF white  on #0B6B37 deep end .........  6.61  AA at any size
+     #FFFFFF white  on #12833F light end ........  4.83  AA at any size
+     #FFFFFF white  on the ramp, worst of 11 ....  4.83  (it is the light end)
+     #FFFFFF white  on the hover ramp, worst ....  6.36
+     #0F1A14 ink    on #0B6B37 green ............  2.69  FAILS — never used
+
+     THE ACCENT: ORANGE  — read the rule below before using it
+                                        WHITE   RAISED  SUNKEN
+     #E2560B orange as a colour ........  3.77    3.40    3.19   LARGE TEXT AND
+                                                                 NON-TEXT ONLY,
+                                                                 on every ground
+     #0F1A14 ink    on #E2560B orange fill ......  4.72  AA at any size — this
+                                                          is why a badge is a
+                                                          FILL and not a word
+     #FFFFFF white  on #E2560B orange fill ......  3.77  FAILS — never used
+     #46554D body   on #E2560B orange fill ......  2.08  FAILS — never used
+
+     SEMANTIC AND HUES  (every one clears 4.5 on all three grounds)
+                                        WHITE   RAISED  SUNKEN
+     #147838 good   ....................  5.56    5.02    4.71
+     #B91C1C bad    ....................  6.47    5.84    5.47
+     #7A5C00 warn   ....................  6.25    5.64    5.29
+     #0C6E86 cyan   ....................  5.84    5.28    4.95
+     #6D28D9 purple ....................  7.10    6.41    6.01
+     #0F1A14 ink    on the #CCB4F2 selection wash ...  9.65  AAA
+
+     EDGES AND ELEVATION (not text; this is the model, per the note above)
+     #FFFFFF surface vs #FFFFFF bg ..............  1.00  the card IS the page
+                                                          colour — the hairline
+                                                          and the shadow are the
+                                                          entire card
+     #F1F4F2 raised  vs #FFFFFF bg ..............  1.10
+     #E9EDEB sunken  vs #FFFFFF bg ..............  1.18  a well needs no border;
+                                                          this beats the 1.08 it
+                                                          would have against its
+                                                          own hairline
+     ink @ .12 over white, vs white .............  1.27  --mo-line
+     ink @ .22 over white, vs white .............  1.60  --mo-line-strong
+     #46554D body on #F1F4F2 raised .............  7.11  the disabled button
+
+     GOLD, MEASURED AGAINST THIS GROUND — see the warning at the end
+     #D4AF37 gold   on #FFFFFF (bg AND card now)   2.10  FAILS AT EVERY SIZE
+     #041122 navy   on #D4AF37 gold .............  9.00  AAA, ground-independent
+
+     THE @atpost/ui CONTRACT, AS IT LANDS HERE
+     #FFFFFF brand-card on #0F1A14 brand-text ... 17.82  the `default` Button
+                                                          variant is a BLACK
+                                                          button in light, the
+                                                          same way it is a
+                                                          near-white one in dark
+     #FFFFFF brand-bg   on #0B6B37 brand-accent .  6.61  RoleSwitcher chip
+     #0B6B37 brand-highlight on a white card ....  6.61  MessageToast, 11px
+
+   ── Why the primary fill is GREEN->GREEN and not green->orange ────────────
+   The obvious move is to keep the ember shape and swap its ends for the two
+   new colours. It was tried and rejected on sight and then on measurement.
+   A 135deg ramp between a green and an orange passes through the midpoint of
+   the two hues, which is olive — around #7A6B22 at 50% — so the middle two
+   thirds of every primary button would be mud, and the button would be dirty
+   exactly where the label sits. There is no saturation at which that stops
+   being true; it is what the hue circle does between 140deg and 25deg.
+
+   So the light theme's primary fill is a GREEN ramp: #0B6B37 to #12833F, deep
+   forest to a slightly brighter leaf. The token is still called --mo-ember
+   because --mo-ember means "the primary fill" to every consumer of this
+   package; it is simply not made of embers here. Orange is not in the button
+   at all — it is the accent, which is a different job and is applied beside
+   the button rather than inside it.
+
+   That choice pays a dividend the dark theme could not have. Both ends of
+   this ramp clear 4.5 with white type (6.61 and 4.83), so unlike the ember
+   button there is NO SIZE FLOOR on a light primary button — a 14px label is
+   legal. --mo-ember-label-size and -weight are still inherited from :root and
+   still do no harm, but in a light zone they are not load-bearing for the
+   button. They have a new job; see the orange rule.
+
+   --mo-primary stays a usable solid on its own, because a solid is what
+   paints when a gradient cannot — accent-color, a 1px border, an SVG fill, a
+   browser that drops background-image. It is the DEEP end, and the reason is
+   the opposite of the dark theme's. There, the fallback had to be the worst
+   end so the label size chosen for it stayed honest. Here neither end is
+   unsafe, so the fallback is free to be chosen for its OTHER job: --mo-primary
+   is also the link colour, the active-nav colour and the focus ring, and those
+   want the deeper green (6.61 on the page, 5.60 in a well). The light end is
+   4.83 on white and 4.09 on sunken — good enough to be painted under white
+   type, not good enough to be a link. That is why --mo-primary-to is labelled
+   a gradient stop and nothing else.
+
+   Hover DARKENS here. The dark theme brightens because dark ink on a lighter
+   fill gains contrast; white ink on a darker fill gains it the same way, in
+   the opposite direction. Worst point of the ramp goes 4.83 -> 6.36. Press
+   still returns to the resting gradient rather than going darker still,
+   because "darker" now means "further from the rest state" and the press
+   feedback is the 1px drop, not a third colour.
+
+   ── THE ORANGE RULE — read this before using --mo-accent ──────────────────
+   Orange does not reach 4.5:1 on white at any saturation a human would call
+   orange. #E2560B is already as deep as it can go before it reads brown, and
+   it measures 3.77. Push it to 4.5 and you have #C2410C, which is rust.
+
+   So the rule, and it is the same shape as the ember label rule:
+
+     1. ORANGE NEVER CARRIES SMALL TEXT ON A GROUND. Not a caption, not a
+        count, not a link, not an 11px "NEW". 3.77 clears the LARGE-text and
+        non-text bar (3.0) and clears nothing else.
+     2. As TEXT on a ground it must be >= --mo-ember-label-size at
+        --mo-ember-label-weight — 19px / 700. Those two tokens are inherited
+        from :root unchanged and in a light zone this is what they guard: the
+        button no longer needs them, orange does. A section heading, a big
+        "LIVE", a display number. Nothing smaller.
+     3. As a FILL it takes --mo-on-accent, which is #0F1A14, the ink. That is
+        the form a badge, a pill, a "3 unread" count or a live dot should
+        take, and at 4.72 it is legal at ANY size — which is precisely why a
+        notification badge is a fill and not a word.
+     4. WHITE NEVER GOES ON ORANGE: 3.77, and --mo-body is 2.08. The same
+        sentence this file has carried about gold since the beginning, about
+        a different colour, on the same evidence.
+     5. As a NON-TEXT mark — a highlight underline, a 3px active-tab rule, a
+        chart series, an icon — full strength orange on any ground in this
+        block is fine (3.77 / 3.40 / 3.19, all over 3.0). This is orange's
+        best job and most of the brand's energy should come from here rather
+        than from orange type.
+
+   WHERE ORANGE GOES, so that every zone puts it in the same places instead of
+   each inventing one: unread and notification marks, "new" and "live" pills,
+   count bubbles, and the active tab's indicator or underline — and nothing
+   pressable, ever, because every pressable thing is green.
+
+   That list is the accent's whole territory and it is meant to be used in
+   full. Orange appearing once per screen, on a single badge, is not an accent
+   — it reads as a stray mark on a green theme, which is the failure mode this
+   line exists to prevent. Note what the list has in common: every item is a
+   FILL or a RULE, never a run of words, which is exactly what rules 1 to 4
+   permit. The contrast rule and the placement rule agree, and neither has to
+   be bent to satisfy the other.
+
+   Orange is also NOT the action colour. Green is. A screen with an orange
+   button and a green button on it has two primary actions, which is none —
+   the dark block says the same thing about purple and ember, and it is the
+   same mistake. A count bubble is not pressable; the tab it sits on is, and
+   that tab's label is green when active.
+
+   ── The glows are rebuilt, not recoloured ─────────────────────────────────
+   --mo-ember-glow on the dark theme is a 30px bloom at .70 alpha: a light
+   source leaking out from under a bright button on a near-black page. Tint
+   that green and put it on white and it is not a glow, it is a smudge — on a
+   white ground there is no darkness for a bloom to be visible against, so the
+   only thing the eye reads is a large soft dirty-green halo.
+
+   They are therefore rebuilt as what a light theme actually has instead: a
+   short, tight, strongly-offset coloured DROP SHADOW, keyed to the button's
+   own deep green so it reads as the button's own shadow rather than as a
+   second object. Blur drops 30px -> 14px, alpha .70 -> .38, and the negative
+   spread is kept so it never escapes sideways past the button's edge. Hover
+   deepens it slightly — matching the fill, which also darkens on hover —
+   instead of blooming wider.
+
+   The three neutral shadows get the same treatment. rgba(0,0,0,.9) over white
+   is a grey rectangle; these are tinted with the ink's green-black and run at
+   a fraction of the alpha, because on a light ground a shadow only has to
+   suggest a lifted edge, not carve one out of the dark.
+
+   ── GOLD IS A DARK-GROUND COLOUR, AND THIS BLOCK DOES NOT FIX IT ──────────
+   .mo-commerce is measured above against this ground and the result is
+   unambiguous: gold as TEXT is 2.10 on white — and the card is white too, so
+   there is no surface anywhere in a light zone where it does any better. It
+   fails at every size, worse than it ever did anywhere. Gold as a FILL under navy is
+   9.00 and is ground-independent, so it is unaffected.
+
+   Nothing here overrides it, because "what the storefront's money colour is
+   on a white page" is a brand decision and not a rounding error, and a token
+   file that quietly substituted a darker gold would be making that decision
+   on the shop's behalf. Until it is made: inside `.mo-light .mo-commerce`,
+   gold may appear as a FILL with --mo-on-gold navy type, and prices and
+   payout figures take --mo-ink. A gold price on white is a bug.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.mo-light {
+  /* ── Ground and surfaces ────────────────────────────────────────────────
+     Same five names, same five jobs — but only THREE tones, because a card on
+     a white page is white and tone only goes down from the ground. The full
+     reasoning is in the elevation note above; the short version is that a grey
+     card reads as a stain on the page rather than as a thing lifted off it.
+
+     The two that do carry tone keep the faintest green-grey cast, the
+     light-ground counterpart of the dark theme's violet, so a well and a
+     hover state read as the same material as the page and not as a different
+     one. */
+  --mo-bg: 255 255 255;          /* #FFFFFF the white page                  */
+  --mo-surface: 255 255 255;     /* #FFFFFF card — LINE OR SHADOW OR IT IS
+                                    INVISIBLE; it is the page colour        */
+  --mo-raised: 241 244 242;      /* #F1F4F2 hover, nested panel, disabled   */
+  --mo-sunken: 233 237 235;      /* #E9EDEB wells, inputs, anything recessed;
+                                    1.18 on the ground, so it needs no border */
+  --mo-overlay: 255 255 255;     /* #FFFFFF menus — SHADOW + BORDER OR NOTHING */
+
+  /* ── Type ───────────────────────────────────────────────────────────────
+     #0F1A14 rather than #000000 for the same reason the dark theme uses
+     #F1EEF8 rather than #FFFFFF: pure black is 21.00 against ink's 17.82,
+     both far past AAA, so the extra points buy nothing readable, and the
+     near-black carries the green cast the rest of this block is built on.
+
+     --mo-muted-lg keeps its name and its limit here even though it is the
+     better-behaved of the two (3.93 on white, 3.55 on raised, 3.33 on sunken,
+     clearing 3.0 on every ground, where the dark one fails outright on
+     raised). 3.93 is still not 4.5 anywhere. Captions, timestamps and helper
+     text are --mo-body. */
+  --mo-ink: 15 26 20;            /* #0F1A14 primary type                    */
+  --mo-body: 70 85 77;           /* #46554D body copy, secondary type       */
+  --mo-muted-lg: 116 132 124;    /* #74847C LARGE TEXT / NON-TEXT ONLY      */
+
+  /* ── The primary action: green ──────────────────────────────────────────
+     Green to green, not green to orange — the olive problem is written out in
+     full above. Both ends carry white type at any size, so a light primary
+     button has no label-size floor. --mo-primary is the deep end and is also
+     the link / active-nav / focus colour, which is what decided it. */
+  --mo-primary: 11 107 55;           /* #0B6B37 deep end AND solid fallback */
+  --mo-primary-to: 18 131 63;        /* #12833F light end — GRADIENT STOP ONLY,
+                                        not a text colour on any ground     */
+  --mo-primary-hover: 8 88 41;       /* #085829 hover, deep end (DARKER)    */
+  --mo-primary-hover-to: 14 110 52;  /* #0E6E34 hover, light end            */
+  --mo-on-primary: 255 255 255;      /* #FFFFFF the ONLY type on green      */
+
+  /* Re-declared in full, not inherited: var() in :root was already
+     substituted there. See the substitution trap note. */
+  --mo-ember: linear-gradient(135deg, rgb(var(--mo-primary)) 0%, rgb(var(--mo-primary-to)) 100%);
+  --mo-ember-hover: linear-gradient(135deg, rgb(var(--mo-primary-hover)) 0%, rgb(var(--mo-primary-hover-to)) 100%);
+  /* Not a bloom. A tight coloured drop shadow keyed to the deep end — a glow
+     on white reads as dirt. Decorative only, as on the dark theme. */
+  --mo-ember-glow: 0 6px 14px -6px rgba(11, 107, 55, .38);
+  --mo-ember-glow-hover: 0 8px 18px -7px rgba(8, 88, 41, .46);
+
+  /* ── The accent: ORANGE ─────────────────────────────────────────────────
+     WHERE IT GOES, and it is expected in all of these, not one of them:
+     unread and notification marks, "new" and "live" pills, count bubbles, and
+     the active tab's indicator or underline. Nothing pressable, ever — every
+     pressable thing is green.
+
+     WHAT IT MAY CARRY: 3.77 on white, 3.40 on raised, 3.19 on sunken. So as a
+     colour on a ground it is LARGE TEXT (>= --mo-ember-label-size at
+     --mo-ember-label-weight, i.e. 19px/700) AND NON-TEXT ONLY; as a FILL under
+     --mo-on-accent it is legal at any size (4.72), which is the form every
+     item on that list takes. White and --mo-body never go on it (3.77 and
+     2.08). The full rule and the reasoning are in the block header — this is
+     the summary, not the source.
+
+     These two exist only inside .mo-light, the way gold exists only inside
+     .mo-commerce. Outside this scope they resolve to nothing and render
+     transparent, which is a loud failure and is not softened. */
+  --mo-accent: 226 86 11;        /* #E2560B unread, new/live, counts, active
+                                    tab rules — fills and rules, not words   */
+  --mo-on-accent: 15 26 20;      /* #0F1A14 the ONLY type on an orange fill */
+
+  /* ── The other two hues ─────────────────────────────────────────────────
+     Both are re-tuned rather than re-roled, and both lose a job to green.
+
+     CYAN is no longer the interactive colour — green is, and a page cannot
+     have two. What cyan keeps is --mo-info: a neutral notice, a hint, a
+     "we've saved that". It is deep enough (5.84 on white, 5.28 on raised, 4.95
+     on sunken) to carry small text on every ground, which an info line needs.
+
+     PURPLE keeps the presence jobs orange does not want and paints the
+     selection wash (.35 over white is #CCB4F2, ink on it 9.65 — the wash is
+     defined once in .mo-root ::selection and reads this token, so it comes
+     across without a copy). Orange is the louder mark; purple is the quieter
+     one. Neither is an action. */
+  --mo-cyan: 12 110 134;         /* #0C6E86 informational, not interactive  */
+  --mo-purple: 109 40 217;       /* #6D28D9 presence, selection wash        */
+
+  /* ── Semantic ───────────────────────────────────────────────────────────
+     All four re-chosen for a white ground; the dark theme's pale mint, pink
+     and butter are 1.2-1.5:1 here and would be invisible. Every one of these
+     clears 4.5 on all four grounds, so a status word is legal as small text
+     anywhere, which is what status words are.
+
+     --mo-good is a green, and so is the action colour. That collision is real
+     and the rule is: a success state in a light zone is a PILL — good as ink
+     on a good-at-low-alpha fill, or good as an icon beside --mo-ink text —
+     never a bare green word sitting in a paragraph next to a green link,
+     where the only thing distinguishing "delivered" from "open order" would
+     be two steps of lightness. #147838 is deliberately the brighter, grassier
+     green and #0B6B37 the deeper forest, which helps and does not suffice.
+
+     --mo-warn is a dark olive-gold rather than a yellow, because yellow does
+     not exist on white: #FCD376 is 1.3:1. Keeping it clearly yellow-leaning
+     is also what keeps it from being read as a second orange.
+
+     --mo-info is the cyan value again, deliberately, exactly as in :root. */
+  --mo-good: 20 120 56;          /* #147838 success / delivered             */
+  --mo-bad: 185 28 28;           /* #B91C1C error                           */
+  --mo-warn: 122 92 0;           /* #7A5C00 pending                         */
+  --mo-info: 12 110 134;         /* #0C6E86 = --mo-cyan, deliberately       */
+
+  /* ── Hairlines ──────────────────────────────────────────────────────────
+     Ink at low alpha, not white at low alpha — on a light ground a white line
+     is nothing at all, and a dark line is the shadow in the seam. Tinted with
+     the ink rather than pure black so the seam is the same green-black as
+     everything else.
+
+     These do more work here than anywhere else in the package.
+     Surface-to-ground is 1.19 on the dark theme; here it is 1.00, because the
+     card and the page are the same white. A card without this hairline (or a
+     shadow) is not a faint card — there is no card. */
+  --mo-line: rgba(15, 26, 20, .12);
+  --mo-line-strong: rgba(15, 26, 20, .22);
+  /* Green, because green is the interactive colour here the way cyan is on
+     the dark theme. It measures 6.61 on white — the page, a card and a menu
+     alike — 5.97 on raised and 5.60 on sunken.
+
+     THE OFFSET IS LOAD-BEARING HERE TOO, and for a sharper reason: the focus
+     colour and the primary button fill are now the SAME green. A ring drawn
+     on the button is 1.00 against the deep end and 1.36 against the light
+     end — literally invisible. outline-offset: 2px in .mo-root puts both of
+     the ring's neighbours on the page ground at 6.61. Never set
+     outline-offset to 0 on a primary button in a light zone. */
+  --mo-focus: rgb(11 107 55);
+
+  /* ── The scrim is NOT redefined here, and that is the whole point ───────
+     --mo-scrim and --mo-on-scrim are declared once in :root and inherit into
+     this scope unchanged: a dark veil with light type, on a white page.
+
+     This is the one place the light block deliberately keeps a dark-theme
+     value, so it is worth saying why in the scope that looks wrong. A scrim
+     is not the page — it is what sits between a reader and a PHOTOGRAPH, and
+     the photograph's pixels are arbitrary. A white veil with dark type reads
+     perfectly over a dark image and vanishes over a bright one, and "vanishes
+     over a bright one" is most of the images a feed shows outdoors. The dark
+     veil is the case that has one worst ground rather than two, and the
+     :root note measures it: --mo-on-scrim on a .70 veil over PURE WHITE media
+     is 6.86, and everything darker than white improves on it.
+
+     The visible consequence, stated so nobody files it as a bug: a light feed
+     has dark chips over its media — the carousel counter, the page dots, the
+     "still processing" line, the player's control gradient — while every card
+     around them is white. That is deliberate, and it is what Instagram, Google
+     Photos and every other light product with media in it also does.
+
+     Nothing else in this block may be deleted for being "the same as :root"
+     (see the substitution trap); this one may not be ADDED for looking
+     different from it. */
+
+  /* ── Elevation ──────────────────────────────────────────────────────────
+     Short, tinted with the ink's green-black, and at a fraction of the dark
+     theme's alpha. rgba(0,0,0,.9) over white is a grey box, not a shadow.
+
+     --mo-shadow-sm is not the small case here, it is the DEFAULT case: it is
+     what separates a white card from the white page when a zone would rather
+     not draw a hairline. Across a 1.00 step it and --mo-line are the only two
+     things that exist. */
+  --mo-shadow-sm: 0 1px 2px rgba(15, 26, 20, .07);
+  --mo-shadow: 0 10px 24px -14px rgba(15, 26, 20, .24);
+  --mo-shadow-lift: 0 18px 40px -18px rgba(15, 26, 20, .28);
+
+  /* ── The @atpost/ui contract, re-pointed ────────────────────────────────
+     Re-declared in full rather than inherited — the var()s in :root were
+     already substituted at :root and carry the dark triplets down. This is
+     the single most likely thing to be "cleaned up" by someone who reads it
+     as duplication. It is not duplication.
+
+     --brand-accent and --brand-highlight move from cyan to GREEN, because
+     their consumers are an interactive set — dob-picker's focus ring and
+     border, the RoleSwitcher chip whose label is `text-brand-bg` (white on
+     green, 6.61) and MessageToast's 11px preview line on a card (6.61, the card
+     being white) — and
+     green is what interactive means in this scope. Cyan would have made a
+     focus ring the colour of an information notice.
+
+     The `default` Button variant's gap is unchanged and worth restating,
+     because it lands differently here: `bg-brand-text text-brand-card` paints
+     the TYPE colour as the fill, so in a light zone the library's default
+     button is a near-black button with WHITE type (17.82), where on the
+     dark theme it is a near-white button with dark type. Legible either way,
+     and neither one is the primary action. The primary action is painted by
+     the zone, or by .mo-btn-primary below, until @atpost/ui grows a variant
+     that can hold a gradient.
+
+     The right-hand sides are the SAME EXPRESSIONS as :root's, and that is the
+     point rather than an oversight: what matters is that they are evaluated
+     HERE, against this element's --mo-* values. Writing the light triplets out
+     as literals would work too and was rejected — @atpost/config's scale reads
+     six of these as `rgb(var(--brand-x) / <alpha-value>)` and --brand-divider
+     as a whole colour, so a literal has to reproduce two different value
+     SHAPES by hand, and a `rgb(...)` written where a bare triplet belongs
+     fails silently on every `bg-brand-*` in the library. var() cannot get the
+     shape wrong. */
+  --brand-bg: var(--mo-bg);
+  --brand-text: var(--mo-ink);
+  --brand-accent: var(--mo-primary);
+  --brand-secondary: var(--mo-raised);
+  --brand-highlight: var(--mo-primary);
+  --brand-divider: var(--mo-line);
+  --brand-card: var(--mo-surface);
+}
+
 /* ═════════════════════════════════════════════════════════════ COMMERCE ONLY
 
    Gold, scoped. Unchanged by the repaint — the values, the scoping and the
@@ -355,6 +915,15 @@
 
    The ground moved under gold, so gold was re-measured: 9.25 as text on
    #0D0C14 and 7.79 on #1F1D33, both AAA. Nothing to change.
+
+   GOLD DOES NOT SURVIVE A LIGHT GROUND, and this block is not adjusted for
+   one. Inside `.mo-light .mo-commerce` these values are still in force and
+   gold as TEXT measures 2.10 — on the page and on a card alike, since there
+   they are the same white — so it fails at every size. Gold as a FILL under
+   --mo-on-gold navy is 9.00 and is unaffected, because that pair never
+   touches the ground. A light storefront therefore
+   gets gold buttons and gold fills, and its prices take --mo-ink. Why this
+   file declines to invent a darker gold instead is in the light block.
    ═════════════════════════════════════════════════════════════════════════ */
 .mo-commerce {
   --mo-gold: 212 175 55;         /* #D4AF37 the money colour               */
@@ -384,6 +953,41 @@
   color-scheme: dark;
 }
 
+/* The light scope's ONLY non-token rule, and it exists for exactly one reason:
+   `color-scheme: dark` above is a real declaration, not a custom property, so
+   it does not follow the tokens. Without this, a light zone renders correct
+   colours and then hands you a black date picker, a black scrollbar and black
+   autofill on a white form.
+
+   The background and colour are repeated here so that a light REGION nested
+   inside a dark `.mo-root` page paints its own ground. They are redundant when
+   the two classes share an element — the same white either way.
+
+   Three selectors, one per order, because they fail in three different ways:
+
+     .mo-root.mo-light  — both classes on one element. 0-2-0, so it beats
+       .mo-root on specificity no matter where either rule sits in the file.
+     .mo-light          — a light REGION nested inside a dark .mo-root page.
+       0-1-0, which TIES with .mo-root, so it wins on source order alone. That
+       is why this rule lives HERE, after .mo-root, instead of up beside the
+       token block where it would otherwise belong. Move it up there and
+       `<body class="mo-root mo-light">` silently goes back to a dark
+       colour-scheme while every colour on the page stays light.
+     .mo-light .mo-root — light on an ANCESTOR, the `<html class="mo-light">`
+       / `<body class="mo-root">` split. This one is not redundant and is the
+       easiest of the three to miss. The tokens reach body by inheritance and
+       every colour is correct, but `color-scheme` is NOT a custom property:
+       .mo-root declares it on body directly, so body's own `dark` beats the
+       `light` inherited from html, and the page renders a perfect white theme
+       with black form controls in it. 0-2-0 puts it back. */
+.mo-light,
+.mo-root.mo-light,
+.mo-light .mo-root {
+  background-color: rgb(var(--mo-bg));
+  color: rgb(var(--mo-ink));
+  color-scheme: light;
+}
+
 /* One visible focus treatment for the whole product: cyan, offset, never
    removed. Cyan rather than white because the focus ring is the most
    interactive thing on any page and cyan is the interactive colour — and
@@ -396,7 +1000,14 @@
    ember button would be invisible over most of its length. `outline-offset`
    pushes the ring clear so both of its neighbours are the page ground (8.01),
    which is what WCAG 2.4.11 actually asks for. Never set outline-offset to 0
-   on an ember surface. */
+   on an ember surface.
+
+   This rule is shared: under `.mo-light`, --mo-focus is the action GREEN and
+   the same two lines produce the light zone's ring with no copy. The offset is
+   even more load-bearing there, because the ring and the primary button are
+   the same green — 1.00 against the deep end, 1.36 against the light end, so
+   a ring drawn at offset 0 on a light primary button does not exist. Offset,
+   it sits on the white ground at 6.61. */
 .mo-root *:focus-visible {
   outline: 2px solid var(--mo-focus);
   outline-offset: 2px;
@@ -414,6 +1025,13 @@
    the red end the label is only legible as large text. Overriding them
    downward breaks the button, which is why the values are tokens rather than
    a sentence in a comment.
+
+   Under `.mo-light` this same class paints the green ramp and the constraint
+   lifts: white on the worst point of that ramp is 4.83, legal at any size, so
+   a light zone MAY set a smaller label on this button. It still inherits
+   19px/700 by default, which is only a size choice there — but note the
+   tokens themselves have not gone idle in a light zone, they are what bounds
+   orange as text. See the orange rule in the light block.
 
    disabled drops the gradient entirely instead of dimming it. `opacity: .55`
    over this ground was measured and rejected: the fill collapses toward

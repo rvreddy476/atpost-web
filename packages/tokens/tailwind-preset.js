@@ -43,6 +43,37 @@
  * and renders transparent, which is a loud enough failure to catch in review
  * and is deliberately not softened with a fallback.
  *
+ * ── The light theme needs nothing from this file ──────────────────────────
+ * `.mo-light` in tokens.css redefines the variables these classes already
+ * name, so every utility below re-resolves inside a light zone with no new
+ * class and no dark: variant — `bg-mo-bg` is white there, `bg-mo-ember` is the
+ * green ramp, `border-mo` is a dark hairline, `shadow-mo` is the light
+ * elevation. That is the whole reason the preset never declares a colour.
+ *
+ * Two exceptions, both additive:
+ *
+ * `mo-accent` / `mo-on-accent` are the light theme's ORANGE, and like
+ * `mo-gold*` the variables behind them exist only inside their scope —
+ * `.mo-light` — so they render transparent in a dark zone. Same deliberate
+ * loud failure, same absence of a fallback.
+ *
+ * ── ORANGE CANNOT CARRY SMALL TEXT, AND THIS FILE CANNOT STOP YOU ─────────
+ * `text-mo-accent` is 3.77 on white: large text (>=18.66px bold / >=24px) and
+ * non-text ONLY. A `text-mo-accent text-sm` is an accessibility bug that
+ * Tailwind will happily compile, exactly like `bg-mo-ember` with a 14px label.
+ * The sanctioned forms are `text-mo-accent text-mo-accent-label` for a word,
+ * or — better, and legal at any size — `bg-mo-accent text-mo-on-accent` for a
+ * badge, pill or count at 4.72. `text-white` on `bg-mo-accent` is 3.77 and is
+ * never correct.
+ *
+ * `mo-accent-label` is the 19px/700 floor for orange as text. It is the same
+ * two variables as `mo-ember-label`, deliberately aliased rather than
+ * duplicated: in a light zone the primary button no longer needs the floor
+ * (white on the green ramp is 4.83 at its worst) and orange does, so the
+ * constraint moved colours without moving values. The reasoning is in
+ * tokens.css; the alias exists so the class you write says which rule you are
+ * obeying.
+ *
  * @type {import('tailwindcss').Config}
  */
 module.exports = {
@@ -73,6 +104,25 @@ module.exports = {
           // reasoning, and the measurements it rests on, are in tokens.css.
           cyan: "rgb(var(--mo-cyan) / <alpha-value>)",
           purple: "rgb(var(--mo-purple) / <alpha-value>)",
+
+          // Light zones only — see the note above. As TEXT on a ground,
+          // `accent` is large-text-and-non-text only (3.77 on white); as a
+          // FILL under `on-accent` it is legal at any size (4.72).
+          accent: "rgb(var(--mo-accent) / <alpha-value>)",
+          "on-accent": "rgb(var(--mo-on-accent) / <alpha-value>)",
+
+          // The media veil, and the one pair here that is the SAME colour in
+          // both scopes — `bg-mo-scrim/70` is dark on a white page too. Why a
+          // scrim does not follow the theme is in tokens.css; what this file
+          // has to add is that it is only ever used WITH an alpha, and that
+          // the alphas were measured against pure white media, the worst
+          // ground a veil can have: .60 is 4.68, .70 is 6.86, .80 is 10.02 and
+          // .40 is 2.38 and may never carry a word.
+          // Type on it is `text-mo-on-scrim` and nothing else — `text-mo-ink`
+          // flips dark in a light zone and would be dark-on-dark here, which
+          // is the exact failure the token exists to prevent.
+          scrim: "rgb(var(--mo-scrim) / <alpha-value>)",
+          "on-scrim": "rgb(var(--mo-on-scrim) / <alpha-value>)",
 
           good: "rgb(var(--mo-good) / <alpha-value>)",
           bad: "rgb(var(--mo-bad) / <alpha-value>)",
@@ -125,6 +175,12 @@ module.exports = {
       fontSize: {
         // The minimum a label on the ember gradient may be set at.
         "mo-ember-label": [
+          "var(--mo-ember-label-size)",
+          { lineHeight: "1", fontWeight: "var(--mo-ember-label-weight)" },
+        ],
+        // The same two variables, named for the other rule they enforce: the
+        // minimum size orange may be set at as TEXT in a light zone.
+        "mo-accent-label": [
           "var(--mo-ember-label-size)",
           { lineHeight: "1", fontWeight: "var(--mo-ember-label-weight)" },
         ],
