@@ -92,3 +92,15 @@ export {
 
 /** The viewer, as the rail reads them. */
 export type { Suggestion, ViewerProfile } from "./api"
+
+/**
+ * Why a suggested person is in the rail, in this product's own words.
+ *
+ * Exported beside the rail because it is a pure rule with a table test, and
+ * because the day a second surface shows suggestions it must not compose a
+ * different sentence from the same row. ./suggestions.ts carries the
+ * argument — including why the server's prose is kept wherever it names no
+ * product, and dropped where it names one.
+ */
+export { GENERIC_REASON, namesAProduct, suggestionReason } from "./suggestions"
+export type { SuggestionReasonInput } from "./suggestions"

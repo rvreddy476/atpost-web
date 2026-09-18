@@ -139,7 +139,15 @@ export function FeedTabs({ selected, onSelect, top, onHeightChange }: FeedTabsPr
     <div
       ref={strip}
       // `bg-mo-bg` is not decoration: a transparent strip pinned over a
-      // scrolling column shows the posts sliding underneath the labels.
+      // scrolling column shows the posts sliding underneath the labels. It is
+      // the PAGE colour on purpose and it still is — this zone is light now,
+      // so the strip is white over a white feed, and the `border-b border-mo`
+      // on the tablist below is the only thing separating them. In the dark
+      // scope the ground was 1.19 away from a card and the border was a
+      // refinement; here the two grounds are 1.00 apart and the border is the
+      // entire boundary. tokens.css states that as a rule about cards; a
+      // sticky strip is the same problem wearing a different shape.
+      //
       // z-30 sits below the header's z-40, so the two overlap in the right
       // order during the frame before `top` has been measured.
       className="sticky z-30 mb-5 bg-mo-bg"
@@ -170,7 +178,10 @@ export function FeedTabs({ selected, onSelect, top, onHeightChange }: FeedTabsPr
               // the reader left it.
               tabIndex={active ? 0 : -1}
               onClick={() => onSelect(tab.id)}
-              className="flex flex-1 cursor-default justify-center py-3 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mo"
+              // `min-h-[44px]`: three tabs across a 360px screen are 120px
+              // wide each and were 42px tall, which is under the pointer-target
+              // floor on the axis that is actually hard to hit.
+              className="flex min-h-[44px] flex-1 cursor-default items-center justify-center py-3 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mo"
             >
               <span className="inline-flex flex-col items-center">
                 <span
@@ -182,15 +193,46 @@ export function FeedTabs({ selected, onSelect, top, onHeightChange }: FeedTabsPr
                   {tab.label}
                 </span>
                 {/*
-                  Cyan is this product's interactive colour and an underline is
-                  not text, so it is safe at any size here (7.9 on the ground).
-                  Always present, transparent when inactive — see the note above.
+                  ── The underline is ORANGE, and that is a rule, not a taste ──
+                  It was `bg-mo-cyan` with a note saying cyan is this product's
+                  interactive colour and an underline is not text. The second
+                  half is still true and is what makes this legal at all; the
+                  first half stopped being true when the zone became light.
+
+                  tokens.css gives --mo-accent a closed list of jobs: "unread
+                  and notification marks, 'new' and 'live' pills, count
+                  bubbles, and the active tab's indicator or underline." This
+                  is the fourth item, named. It also says the list is meant to
+                  be used in FULL — an accent that turns up once per screen on
+                  a single badge reads as a stray mark rather than as a brand.
+
+                  It is legal here for the reason the rule gives: as a non-text
+                  MARK, full-strength orange clears the 3.0 bar on every ground
+                  in the light block (3.77 on white, 3.40 on raised, 3.19 on
+                  sunken). It would NOT be legal as the label — 3.77 is under
+                  4.5 at any size a tab label would use — which is exactly why
+                  the word above stays --mo-ink at 17.82 and only the rule is
+                  orange. The two halves of the tab are coloured by two
+                  different rules and both are satisfied.
+
+                  And it is not pressable. The TAB is pressable; this is a 2px
+                  line inside it saying which one is open. tokens.css is
+                  emphatic that nothing orange may be pressable, because every
+                  pressable thing in a light zone is green.
+
+                  `h-0.5` went to `h-[3px]`: 2px of orange under a 14px label
+                  was a hairline at 3.77, and the token file's own wording for
+                  this job is "a 3px active-tab rule".
+
+                  Always laid out, transparent when inactive — see the note at
+                  the top of the file for why the label must not shift by two
+                  pixels as the selection moves.
                 */}
                 <span
                   aria-hidden="true"
                   className={[
-                    "mt-1.5 h-0.5 w-full rounded-mo-pill",
-                    active ? "bg-mo-cyan" : "bg-transparent",
+                    "mt-1.5 h-[3px] w-full rounded-mo-pill",
+                    active ? "bg-mo-accent" : "bg-transparent",
                   ].join(" ")}
                 />
               </span>

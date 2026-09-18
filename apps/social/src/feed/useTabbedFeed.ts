@@ -36,9 +36,15 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { FeedItem, FeedPage } from "@atpost/types/feed"
+import type { FeedItem } from "@atpost/types/feed"
 import { fetchFeedPage } from "./api"
-import { fetchHashtagPage, fetchHomePage, fetchTrendingTags, type TrendingTag } from "./tabApi"
+import {
+  fetchHashtagPage,
+  fetchHomePage,
+  fetchTrendingTags,
+  type LoadedPage,
+  type TrendingTag,
+} from "./tabApi"
 import { failureOf, type Failure } from "./outcomes"
 
 export type ListStatus = "loading" | "ready" | "error"
@@ -51,6 +57,27 @@ export interface ListState {
   failure: Failure | null
   loadingMore: boolean
   reachedEnd: boolean
+  /**
+   * Why the NEXT page failed, when one did. Null otherwise.
+   *
+   * Separate from `failure` because the two mean opposite things about what
+   * is on screen. A failed first page means the list is not the truth and is
+   * replaced by an error. A failed next page means the list is still true and
+   * merely shorter, so the posts stay and the caller shows a line under them
+   * — which is the half that was missing: this used to be caught, discarded,
+   * and the loading flag cleared, leaving a list that simply stopped growing
+   * with nothing on screen to say why.
+   *
+   * It is also what the pager's sentinel is disarmed on. Leaving the observer
+   * armed after a failure turns one dead connection into a request every time
+   * it re-arms.
+   */
+  loadMoreFailure: Failure | null
+  /**
+   * True when the page's author names could not be looked up. Only the
+   * hashtag lists can set it — see `hydrateAuthors` in ./tabApi.ts.
+   */
+  authorsUnresolved: boolean
 }
 
 const BLANK: ListState = {
@@ -60,6 +87,8 @@ const BLANK: ListState = {
   failure: null,
   loadingMore: false,
   reachedEnd: false,
+  loadMoreFailure: null,
+  authorsUnresolved: false,
 }
 
 /**
@@ -72,11 +101,91 @@ const BLANK: ListState = {
  * other two are in `./tabApi` — see the long note there on why Following must
  * NOT send `ranked`.
  */
-function pageFor(key: string, cursor: string | null): Promise<FeedPage> {
+function pageFor(key: string, cursor: string | null): Promise<LoadedPage> {
   if (key === "for-you") return fetchFeedPage(cursor)
   if (key === "following") return fetchHomePage("following", cursor)
   if (key.startsWith("tag:")) return fetchHashtagPage(key.slice("tag:".length), cursor)
   return Promise.reject(new Error(`no request is defined for feed list "${key}"`))
+}
+
+/* ── The transitions, pulled out so they can be checked ───────────────────── */
+
+/**
+ * Which of the two requests a list can make.
+ *
+ * They are not two flavours of the same thing. `replace` is "this list, from
+ * the top" — the first visit and the reader's own retry — and its failure
+ * means the screen is not the truth. `append` is "the next page", and its
+ * failure means the screen is true and merely shorter. Everything below turns
+ * on that difference, which is why it is a parameter and not an inference.
+ */
+export type LoadMode = "replace" | "append"
+
+/**
+ * The state a request starts from.
+ *
+ * `loadMoreFailure` is cleared on the ATTEMPT rather than on its outcome: a
+ * retry button and the sentence explaining why it is there must not both sit
+ * on screen while that very retry is in the air.
+ */
+export function startLoading(current: ListState, mode: LoadMode): ListState {
+  return { ...current, loadingMore: mode === "append", loadMoreFailure: null }
+}
+
+/**
+ * The state a page landing produces.
+ *
+ * Two things here are easy to get wrong and both are tested:
+ *
+ *   · **Dedupe by id, not by cursor.** The ranker can repeat an item across
+ *     pages. Trusting the cursor would put two cards with the same React key
+ *     in one list, which is a silent rendering corruption rather than a
+ *     visible bug.
+ *   · **`authorsUnresolved` is sticky across an append.** A later page whose
+ *     names DID resolve does not make the earlier page's unnamed cards named,
+ *     and the notice is about what is on screen rather than about the last
+ *     request. A `replace` takes the page's answer outright, which is what
+ *     makes the reader's "Try again" able to clear it.
+ */
+export function applyPage(current: ListState, page: LoadedPage, mode: LoadMode): ListState {
+  const seen = new Set(current.items.map((i) => i.id))
+  const items =
+    mode === "replace"
+      ? page.items
+      : [...current.items, ...page.items.filter((i) => !seen.has(i.id))]
+  return {
+    items,
+    cursor: page.nextCursor,
+    status: "ready",
+    failure: null,
+    loadingMore: false,
+    // No cursor means the page came back short, which on these endpoints IS
+    // the end-of-list signal rather than a missing field.
+    reachedEnd: !page.nextCursor,
+    loadMoreFailure: null,
+    authorsUnresolved:
+      Boolean(page.authorsUnresolved) || (mode === "append" && current.authorsUnresolved),
+  }
+}
+
+/**
+ * The state a rejection produces — and the whole point of the split.
+ *
+ * A failed NEXT page keeps the list that is already on screen: blanking
+ * twenty posts somebody is reading because page three failed is the worst
+ * possible response to a transient error. What it must not also do is keep
+ * QUIET, which is what this used to do — the error was caught, discarded, the
+ * loading flag cleared, and the list simply stopped growing with nothing
+ * anywhere to say why. It is recorded now, and the caller draws the retry.
+ *
+ * A failed FIRST page is the other case: there is nothing true on screen to
+ * protect, so the list goes to `error` and the caller replaces it.
+ */
+export function applyFailure(current: ListState, failure: Failure, mode: LoadMode): ListState {
+  if (mode === "append") {
+    return { ...current, loadingMore: false, loadMoreFailure: failure }
+  }
+  return { ...current, status: "error", failure, loadingMore: false }
 }
 
 export interface TabbedFeed {
@@ -104,53 +213,20 @@ export function useTabbedFeed(key: string | null, enabled: boolean): TabbedFeed 
   const inFlight = useRef(new Set<string>()).current
 
   const load = useCallback(
-    async (k: string, mode: "replace" | "append", cursor: string | null) => {
+    async (k: string, mode: LoadMode, cursor: string | null) => {
       if (inFlight.has(k)) return
       inFlight.add(k)
 
-      setLists((prev) => ({
-        ...prev,
-        [k]: { ...(prev[k] ?? BLANK), loadingMore: mode === "append" },
-      }))
+      setLists((prev) => ({ ...prev, [k]: startLoading(prev[k] ?? BLANK, mode) }))
 
       try {
         const page = await pageFor(k, mode === "append" ? cursor : null)
-        setLists((prev) => {
-          const current = prev[k] ?? BLANK
-          // The ranker can repeat an item across pages. Deduping by id rather
-          // than trusting the cursor keeps React keys unique, which is
-          // otherwise a silent rendering corruption rather than a visible bug.
-          const seen = new Set(current.items.map((i) => i.id))
-          const items =
-            mode === "replace"
-              ? page.items
-              : [...current.items, ...page.items.filter((i) => !seen.has(i.id))]
-          return {
-            ...prev,
-            [k]: {
-              items,
-              cursor: page.nextCursor,
-              status: "ready",
-              failure: null,
-              loadingMore: false,
-              // No cursor means the page came back short, which on these
-              // endpoints IS the end-of-list signal rather than a missing field.
-              reachedEnd: !page.nextCursor,
-            },
-          }
-        })
+        setLists((prev) => ({ ...prev, [k]: applyPage(prev[k] ?? BLANK, page, mode) }))
       } catch (error: unknown) {
-        setLists((prev) => {
-          const current = prev[k] ?? BLANK
-          // A failed NEXT page keeps the list that is already on screen.
-          // Blanking twenty posts someone is reading because page three failed
-          // is the worst possible response to a transient error.
-          if (mode === "append") return { ...prev, [k]: { ...current, loadingMore: false } }
-          return {
-            ...prev,
-            [k]: { ...current, status: "error", failure: failureOf(error), loadingMore: false },
-          }
-        })
+        setLists((prev) => ({
+          ...prev,
+          [k]: applyFailure(prev[k] ?? BLANK, failureOf(error), mode),
+        }))
       } finally {
         inFlight.delete(k)
       }

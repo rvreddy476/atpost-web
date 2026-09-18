@@ -63,18 +63,27 @@ import { signInHref } from "./zone"
 export function AppHeader({
   basePath,
   displayName,
+  avatarMediaId,
   currentId,
 }: {
   /** The zone this header is drawn in. See ./zone.ts. */
   basePath: string
   displayName?: string | null
+  /** The viewer's avatar asset id, from `/v1/profiles/me`. Not a URL. */
+  avatarMediaId?: string | null
   currentId: string | null
 }) {
   const { signedIn } = useSession()
 
   return (
     <header className="sticky top-0 z-40 border-b border-mo bg-mo-bg">
-      <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-3 px-4">
+      {/* `gap-2` at phone width and `gap-3` once there is room: at 360px the
+          strip, the bell and the account menu are competing for every pixel,
+          and 4px per gap across six gaps is a whole target. `px-4 sm:px-6`
+          matches the frame's gutters below so the lockup lines up with the
+          left edge of the rail and the header does not look inset by a
+          different amount from the page. */}
+      <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-4 sm:gap-3 sm:px-6">
         {/* ── Left: the lockup and search ───────────────────────────────── */}
         {/* A plain <a> and an absolute path, because from the reels zone this
             is a different Next app behind the shell's rewrite table — and
@@ -84,7 +93,15 @@ export function AppHeader({
         <a
           href={HOME_PATH}
           aria-label={`${BRAND.name} home`}
-          className="flex shrink-0 items-center gap-2"
+          // `min-h-[44px]` on the anchor rather than on the mark inside it:
+          // the ember square is a 36px visual and should stay one — it sits
+          // beside a 44px icon strip and a 44px avatar, and growing it would
+          // make the lockup the loudest thing in the bar. The TARGET grows
+          // instead, which is the part a thumb interacts with.
+          // `-ml-1 px-1` is what makes a 36px mark a 44px-wide target without
+          // moving it: the padding grows the hit area outward and the negative
+          // margin puts the mark's left edge back where the gutter wants it.
+          className="-ml-1 flex min-h-[44px] shrink-0 items-center gap-2 px-1"
         >
           {/* The ONE ember surface on this page. The initial is set at 19px
               bold — `text-mo-ember-label` IS that floor, and tokens.css
@@ -138,14 +155,30 @@ export function AppHeader({
               package so the inbox couples to no zone's session plumbing. */}
           <NotificationBell signedIn={signedIn} />
           {signedIn ? (
-            <ProfileMenu basePath={basePath} displayName={displayName} />
+            <ProfileMenu
+              basePath={basePath}
+              displayName={displayName}
+              avatarMediaId={avatarMediaId}
+            />
           ) : (
             <a
               // Back to the zone they were sent away from, not always to
               // /social — somebody who hits Sign in from Reels should land
               // back on Reels.
               href={signInHref(basePath)}
-              className="rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-surface"
+              // --brand-accent, not --mo-cyan: this is the most pressable
+              // thing in the bar and cyan stops meaning "pressable" inside
+              // `.mo-light`, where it is --mo-info. The alias is #06B6D4 in
+              // :root and #0B6B37 there — 8.01 and 6.61 against their own page
+              // ground. Hover is --mo-raised rather than --mo-surface for the
+              // same reason it is everywhere else in this package: a surface
+              // is the page's own white in a light zone, so the hover did not
+              // exist.
+              //
+              // `min-h-[44px]` and a flex box, because `py-2` on 14px text is
+              // 36px and this is the one control a signed-out phone visitor
+              // has to hit.
+              className="inline-flex min-h-[44px] items-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-brand-accent transition-colors duration-150 ease-mo hover:bg-mo-raised"
             >
               Sign in
             </a>

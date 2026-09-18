@@ -21,10 +21,17 @@
  */
 
 import { Hash, Lock, Smartphone } from "lucide-react"
-import { Avatar } from "@momentum/content"
+import { Avatar, avatarSrc } from "@momentum/content"
 import { hashtagLabel, personHandle, personName } from "./contract"
 import type { SearchHashtagRow, SearchUserRow } from "./contract"
 import { HASHTAG_DESTINATION, PERSON_DESTINATION } from "./destinations"
+
+/**
+ * This zone's gateway prefix — see the note on API_BASE in ../feed/HomeFeed.
+ * Only needed for the avatar fallback, when a row carries a media id and the
+ * server could not resolve the URL itself.
+ */
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
 /**
  * The shared note the rows point at.
@@ -68,12 +75,15 @@ function Row({
 /**
  * One person.
  *
- * ── The avatar is initials, and that is the SERVICE's doing here ──────────
- * `Avatar` takes a `src` and would draw a real picture. The people rows in the
- * grouped response have no `avatar_url` on them: results.go hydrates avatars
- * for post AUTHORS and for the older `?type=` branch, and does not for the
- * `users` bucket of the grouped one. So there is no URL to pass, and initials
- * are what is left. (Reported; it is a service-side gap, not a component one.)
+ * ── The avatar is a real picture now ─────────────────────────────────────
+ * What stood here said the grouped response's people rows carried no
+ * `avatar_url` — results.go hydrated post AUTHORS and the older `?type=`
+ * branch and not the `users` bucket — so the one surface whose rows ARE
+ * people was the one drawing faceless ones. That gap has been closed
+ * server-side (`rankedUserItems` merges the same hydration onto the same
+ * maps), and `avatar_media_id` is on the document regardless, so there are
+ * two ways to a face and `avatarSrc` prefers the server's. Initials remain
+ * the fallback for a row with neither.
  *
  * ── The lock is not a filter ──────────────────────────────────────────────
  * `is_private` is a DISPLAY flag. search-service says so explicitly: private
@@ -81,13 +91,26 @@ function Row({
  * draw the lock rather than pretend the account is not there. Drawing it is
  * the whole point of it being sent.
  */
-export function PersonRow({ user, describedBy }: { user: SearchUserRow; describedBy: string }) {
+export function PersonRow({
+  user,
+  describedBy,
+  apiBase,
+}: {
+  user: SearchUserRow
+  describedBy: string
+  /** This zone's gateway prefix, for the `avatar_media_id` fallback. */
+  apiBase?: string
+}) {
   const name = personName(user)
   const handle = personHandle(user)
 
   return (
     <Row describedBy={describedBy}>
-      <Avatar name={name} id={user.user_id} />
+      <Avatar
+        name={name}
+        id={user.user_id}
+        src={avatarSrc({ url: user.avatar_url, mediaId: user.avatar_media_id }, apiBase)}
+      />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="min-w-0 truncate font-semibold text-mo-ink">{name}</span>
@@ -146,7 +169,12 @@ export function PeopleList({ users, noteId }: { users: SearchUserRow[]; noteId: 
     <>
       <ul className="space-y-2">
         {users.map((user) => (
-          <PersonRow key={user.user_id} user={user} describedBy={noteId} />
+          <PersonRow
+            key={user.user_id}
+            user={user}
+            describedBy={noteId}
+            apiBase={API_BASE}
+          />
         ))}
       </ul>
       <UnreachableNote id={noteId} reason={PERSON_DESTINATION.unavailableReason as string} />

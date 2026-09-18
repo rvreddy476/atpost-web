@@ -105,13 +105,26 @@ export type { PostMenuInput, PostMenuRow, PostMenuRowId, ReportReason } from "./
 export { InfiniteFeed } from "./InfiniteFeed"
 export type { InfiniteFeedProps } from "./InfiniteFeed"
 
-export { FeedEmpty, FeedEnd, FeedError, FeedSkeleton } from "./states"
+export { FeedEmpty, FeedEnd, FeedError, FeedSkeleton, StateButton } from "./states"
 
 export { useDwellTracker } from "./useDwellTracker"
 export type { DwellTracker } from "./useDwellTracker"
 
 export { Avatar } from "./Avatar"
 export type { AvatarProps } from "./Avatar"
+
+/**
+ * Where a person's picture is, and what to call them when nobody said.
+ *
+ * Both are pure rules that several zones need and none should re-derive: the
+ * API sends avatars in three different shapes on one feed row (./avatarUrl.ts),
+ * and "Someone" was the string a whole hashtag page rendered twenty times
+ * when one profile lookup failed (./byline.ts).
+ */
+export { AVATAR_VARIANT, avatarMediaPath, avatarSrc } from "./avatarUrl"
+export type { AvatarSource } from "./avatarUrl"
+export { UNNAMED_AUTHOR, authorLabel } from "./byline"
+export type { Byline } from "./byline"
 
 export { BlurhashCanvas } from "./BlurhashCanvas"
 export { blurhashAverageColor, decodeBlurhash, isValidBlurhash } from "./blurhash"

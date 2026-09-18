@@ -280,7 +280,10 @@ export function PostOverflowMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={`More${suffix}`}
-        className="-mr-1 inline-flex h-8 w-8 items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+        // 44px. It was 32 — the smallest control on a feed card, in the corner
+        // of it, and the one that opens report and block. `-mr-2` keeps the
+        // glyph optically where it was while the box grows around it.
+        className="-mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
       >
         <MoreVertical aria-hidden="true" className="h-5 w-5" />
       </button>

@@ -130,11 +130,27 @@ export function MediaFrame({
   )
 }
 
-/** A short line over the blurhash. Body colour: this is small text. */
+/**
+ * A short line over the blurhash.
+ *
+ * On the SCRIM, not on the page ground, and that distinction is why this note
+ * is longer than the component. What stood here was `bg-mo-bg/80` with
+ * `text-mo-body` — the page's own two colours, used to veil media. That is
+ * coherent in one theme at a time and incoherent across two: both tokens flip
+ * with the scope, so in a light zone this became a white wash carrying
+ * dark-green type over an arbitrary photograph. What is under a veil is never
+ * the page. It is a blurhash or a video frame whose brightness nobody in this
+ * repo chose, and the veil exists to make the line legible over it.
+ *
+ * --mo-scrim is dark in BOTH scopes for exactly that reason and carries
+ * --mo-on-scrim. At .80 over the worst ground a veil can have — pure white
+ * media — the pair measures 10.02, and every darker image improves on it.
+ * tokens.css has the table and the reasoning.
+ */
 function Notice({ children }: { children: React.ReactNode }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center p-4">
-      <p className="rounded-mo-sm bg-mo-bg/80 px-3 py-1.5 text-center text-sm text-mo-body backdrop-blur-sm">
+      <p className="rounded-mo-sm bg-mo-scrim/80 px-3 py-1.5 text-center text-sm text-mo-on-scrim backdrop-blur-sm">
         {children}
       </p>
     </div>

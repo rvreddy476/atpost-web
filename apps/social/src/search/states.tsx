@@ -77,6 +77,11 @@ export function SearchPrompt() {
     <Panel>
       {/* Cyan is the interactive colour and this is a non-text mark: 8.01 on
           the ground, 6.75 on this card. */}
+      {/* Cyan as a MARK, which is the job it keeps in both scopes: #06B6D4 on
+          a dark card is 6.74 and #0C6E86 on a white one is 5.84, both far past
+          the 3.0 a glyph needs. It is --mo-info under `.mo-light` rather than
+          the interactive colour, and an icon over an empty search result is
+          informational, so the role survives the repaint unchanged. */}
       <Search aria-hidden="true" className="mx-auto h-8 w-8 text-mo-cyan" />
       <Heading>Search {BRAND.name}</Heading>
       <Body>
@@ -129,7 +134,8 @@ export function SearchBroken({ message, onRetry }: { message: string; onRetry?: 
         <button
           type="button"
           onClick={onRetry}
-          className="mt-5 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
+          // --brand-accent: green under `.mo-light`, cyan on the dark ground.
+          className="mt-5 inline-flex min-h-[44px] items-center rounded-mo-pill border border-mo-strong px-5 text-sm font-semibold text-brand-accent transition-colors duration-150 ease-mo hover:bg-mo-raised"
         >
           Try again
         </button>

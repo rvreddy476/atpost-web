@@ -557,7 +557,7 @@ export function PostCarousel({
                       was page three printed that duration over page one's
                       photograph. */}
                   {duration && (
-                    <span className="pointer-events-none absolute bottom-2 right-2 rounded-mo-sm bg-mo-bg/80 px-1.5 py-0.5 text-xs tabular-nums text-mo-ink">
+                    <span className="pointer-events-none absolute bottom-2 right-2 rounded-mo-sm bg-mo-scrim/80 px-1.5 py-0.5 text-xs tabular-nums text-mo-on-scrim">
                       {duration}
                     </span>
                   )}
@@ -589,25 +589,40 @@ export function PostCarousel({
 
         Both sit on PHOTOGRAPHY, which can be any colour, so neither may rely
         on a theme colour alone — white pips on a white sky are invisible and a
-        themed pill vanishes into half the pictures on the platform. Hence a
-        scrim, and the numbers are the worst case (a pure white photograph),
-        computed the way tokens.css computes its table:
+        themed pill vanishes into half the pictures on the platform.
 
-          --mo-ink on --mo-bg @ .70, over white ....  6.46  AA at any size
-          --mo-ink on --mo-bg @ .70, over mid grey . 11.62
-          --mo-ink on --mo-bg @ .70, over black .... 17.38
-          the current pip on --mo-bg @ .60, over white  4.47  clears 3.0
+        Hence a scrim — and because this package is now mounted in a LIGHT zone
+        too, it is `--mo-scrim` and not `--mo-bg`. That is the correction. Both
+        of the old classes named the PAGE: near-black plate, near-white type in
+        a dark zone, and the instant @momentum/content rendered under
+        `.mo-light` the same two classes produced a white plate with dark-green
+        type. Each is legible in isolation and neither is legible over arbitrary
+        pixels, which is the only ground a veil ever has. --mo-scrim is dark in
+        BOTH scopes and carries --mo-on-scrim; tokens.css has the argument and
+        the table these numbers are read out of.
 
-        The DIM pips are 2.0–3.4 against their own scrim and that is deliberate:
-        "not the current page" is the one thing they say, they say it against
-        the current pip rather than against the picture, and the same fact is
-        in the pill in words. They are decorative and marked as such.
+        Re-measured against the new pair, worst case first:
+
+          --mo-on-scrim on scrim @ .70, over white ....  6.86  AA at any size
+          --mo-on-scrim on scrim @ .70, over mid grey . 12.25
+          --mo-on-scrim on scrim @ .70, over black .... 17.72
+          the current pip on scrim @ .60, over white ..  4.68  clears 3.0
+          the current pip on scrim @ .60, over black .. 17.83
+
+        Every one of those is now the same number in the feed as it is in
+        MShorts, which is the property the token exists to give and the pair it
+        replaced could not have.
+
+        The DIM pips are 2.04–3.38 against their own scrim and that is
+        deliberate: "not the current page" is the one thing they say, they say
+        it against the current pip rather than against the picture, and the
+        same fact is in the pill in words. They are decorative and marked so.
 
         `pointer-events-none` on both, so neither can eat a drag.
       */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute left-3 top-3 rounded-mo-pill bg-mo-bg/70 px-2 py-0.5 text-xs font-medium tabular-nums text-mo-ink backdrop-blur-sm"
+        className="pointer-events-none absolute left-3 top-3 rounded-mo-pill bg-mo-scrim/70 px-2 py-0.5 text-xs font-medium tabular-nums text-mo-on-scrim backdrop-blur-sm"
       >
         {pillLabel(page, count)}
       </span>
@@ -628,10 +643,12 @@ export function PostCarousel({
         returning null is the single definition of "there is nowhere to go",
         shared with the arrow keys, so the two can never disagree.
 
-        Colour is the player's OVERLAY_BUTTON recipe unchanged, because these
-        sit on the same photography its speaker does: `--mo-ink` on `--mo-bg`
-        at .70 measures 6.46 against a pure white frame, 11.62 over mid grey
-        and 17.38 over black. The glyph is non-text and needs 3.0.
+        Colour is the player's OVERLAY_BUTTON recipe with one token swapped,
+        because these sit on the same photography its speaker does:
+        `--mo-on-scrim` on `--mo-scrim` at .70 measures 6.86 against a pure
+        white frame, 12.25 over mid grey and 17.72 over black. The glyph is
+        non-text and needs 3.0. It was `--mo-ink` on `--mo-bg`, which names the
+        PAGE rather than a veil and therefore inverted under `.mo-light`.
       */}
       {(["prev", "next"] as const).map((direction) => {
         if (stepTarget(direction, page, count) === null) return null
@@ -699,7 +716,7 @@ export function PostCarousel({
       */}
       <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
         <div
-          className={`flex items-center gap-0.5 rounded-mo-pill bg-mo-bg/60 px-1 backdrop-blur-sm ${hit} ${fade}`}
+          className={`flex items-center gap-0.5 rounded-mo-pill bg-mo-scrim/60 px-1 backdrop-blur-sm ${hit} ${fade}`}
         >
           {media.map((entry, index) => (
             <button
@@ -720,19 +737,21 @@ export function PostCarousel({
               ].join(" ")}
             >
               {/*
-                The dot itself, unchanged. The current pip is `--mo-ink` on the
-                .60 scrim — 4.47 over a pure white photograph, which clears the
-                3.0 a non-text mark needs. The dim ones are 2.0–3.4 against
-                that same scrim and that is deliberate: "not the current page"
-                is the only thing they say, they say it against the current
-                pip, and the same fact is in the pill in words.
+                The dot itself. The current pip is `--mo-on-scrim` on the .60
+                scrim — 4.68 over a pure white photograph and 17.83 over a
+                black one, either way clear of the 3.0 a non-text mark needs.
+                The dim ones are 2.04–3.38 against that same scrim, and that is
+                deliberate: "not the current page" is the only thing they say,
+                they say it against the current pip, and the same fact is in
+                the pill in words. Both were `--mo-ink`, the page's type
+                colour, which flips to near-black under `.mo-light`.
               */}
               <span
                 aria-hidden="true"
                 className={
                   index === page
-                    ? "h-1.5 w-1.5 rounded-mo-pill bg-mo-ink"
-                    : "h-1 w-1 rounded-mo-pill bg-mo-ink/40"
+                    ? "h-1.5 w-1.5 rounded-mo-pill bg-mo-on-scrim"
+                    : "h-1 w-1 rounded-mo-pill bg-mo-on-scrim/40"
                 }
               />
             </button>
@@ -750,15 +769,17 @@ export function PostCarousel({
  * and copied on purpose rather than imported: that constant is private to the
  * player and a carousel arrow is not a player control, so exporting it would
  * make an internal detail of one package a contract of another. What must not
- * drift is the MEASUREMENT behind it — `--mo-ink` on `--mo-bg` at .70, 6.46
- * against a pure white frame — and that is why the numbers are written out at
- * both sites rather than only here.
+ * drift is the MEASUREMENT behind it — `--mo-on-scrim` on `--mo-scrim` at
+ * .70, 6.86 against a pure white frame — and that is why the numbers are
+ * written out at both sites rather than only here. The player's copy still
+ * names --mo-bg at the time of writing; it is being corrected separately, and
+ * when that lands the two recipes are identical again.
  *
  * It carries no `pointer-events` of its own; that belongs to the caller,
  * because it depends on whether the control is currently on screen. See `hit`.
  */
 const OVERLAY_BUTTON =
   "inline-flex items-center justify-center rounded-mo-pill " +
-  "bg-mo-bg/70 text-mo-ink backdrop-blur-sm transition-colors duration-150 ease-mo " +
-  "hover:bg-mo-bg/85 focus-visible:outline focus-visible:outline-2 " +
+  "bg-mo-scrim/70 text-mo-on-scrim backdrop-blur-sm transition-colors duration-150 ease-mo " +
+  "hover:bg-mo-scrim/85 focus-visible:outline focus-visible:outline-2 " +
   "focus-visible:outline-offset-2 focus-visible:outline-mo"

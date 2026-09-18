@@ -103,7 +103,12 @@ export function FollowButton({
             "border-mo text-mo-body hover:bg-mo-raised"
           : // Cyan is the interactive colour, and this is small text — the one
             // accent in the palette that survives small text on a card (6.75).
-            "border-mo-strong text-mo-cyan hover:bg-mo-raised",
+            // --brand-accent, not --mo-cyan. Follow is the most pressable
+            // thing on a profile row, and cyan is --mo-info inside
+            // `.mo-light` rather than the interactive colour. The alias is
+            // #06B6D4 in :root and #0B6B37 there: 6.74 on a dark card, 6.61
+            // on a white one.
+            "border-mo-strong text-brand-accent hover:bg-mo-raised",
         failed ? "border-mo-bad" : "",
         className ?? "",
       ].join(" ")}

@@ -109,9 +109,12 @@ function SearchForm({ basePath, initialQuery }: { basePath: string; initialQuery
         "focus-within:border-mo-focus focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-mo",
       ].join(" ")}
     >
-      {/* --mo-muted-lg over --mo-sunken, measured on the rendered page at
-          3.68 — over the 3.0 bar this glyph is held to as a non-text mark,
-          and sunken is one of the two grounds tokens.css allows it on. */}
+      {/* --mo-muted-lg over --mo-sunken: 3.68 in the dark scope and 3.33 in
+          the light one, both over the 3.0 bar this glyph is held to as a
+          non-text mark. Sunken is one of the two grounds tokens.css allows the
+          colour on, and it is the better-behaved ground of the two in a light
+          zone — #E9EDEB is 1.18 against the page there, so the well reads as
+          recessed without needing a border at all. */}
       <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-mo-muted-lg" />
       <input
         type="search"

@@ -53,6 +53,8 @@ import { primaryVideo } from "@momentum/player"
 import { ActionBar } from "@momentum/interactions"
 import type { ToggleResult } from "@momentum/interactions"
 import { Avatar } from "./Avatar"
+import { avatarSrc } from "./avatarUrl"
+import { authorLabel } from "./byline"
 import { CommentSheet } from "./CommentSheet"
 import type { CommentApi, CommentRow } from "./comments"
 import { PostCarousel } from "./PostCarousel"
@@ -126,6 +128,20 @@ export interface PostCardProps extends PostCardHandlers {
   /** Playlist url resolution, owned by the zone. Passed to the player. */
   resolveUrl?: (url: string) => string
   /**
+   * The gateway prefix this zone is served under — "/social", "/reels".
+   *
+   * Needed only to put a face on the card. An author arrives with an
+   * `avatar_media_id` and no URL, the URL that serves it is
+   * `/v1/media/{id}/serve/avatar`, and a root-relative path misses a zone
+   * that has a basePath — which is exactly how every product photograph in
+   * the shop came to be a broken image once. It is a PROP and not
+   * `process.env.NEXT_PUBLIC_API_BASE_URL` for the reason @momentum/chrome's
+   * zone.ts sets out at length: a component rendered in four zones has to be
+   * told which one it is in. Absent means root-relative, which is correct for
+   * a zone mounted at "/".
+   */
+  apiBase?: string
+  /**
    * List and create, already pointed at a gateway by the zone.
    *
    * Absent means no comment surface, and the bar's comment control opens
@@ -157,6 +173,7 @@ export function PostCard({
   session,
   onWatchEvent,
   resolveUrl,
+  apiBase,
   onLike,
   onSave,
   onRepost,
@@ -176,8 +193,23 @@ export function PostCard({
 }: PostCardProps) {
   const [commentsOpen, setCommentsOpen] = useState(false)
   const author = item.author
-  const name = item.channel?.name || author?.display_name || "Someone"
-  const handle = item.channel?.handle ? `@${item.channel.handle}` : undefined
+  // The naming rule — including what to say when nothing named them — is in
+  // ./byline.ts, where it can be a table test. It used to be the literal
+  // "Someone" on this line, and on the hashtag tab that was the normal path.
+  const { name, handle } = authorLabel(item)
+  /**
+   * The face. Two shapes on one row, reconciled by `avatarSrc`.
+   *
+   * A channel-published post carries `channel.avatar_url` — absolute, signed,
+   * five minutes — and an author carries `avatar_media_id` and no URL at all.
+   * The channel's is preferred where both exist for the same reason its NAME
+   * is: the post is by the channel. Neither is required, and a card with
+   * neither draws initials exactly as it always has.
+   */
+  const avatar = avatarSrc(
+    { url: item.channel?.avatar_url, mediaId: author?.avatar_media_id },
+    apiBase
+  )
   const video = primaryVideo(item)
   // Position order, so a carousel is shown the way it was uploaded.
   const attachments = [...(item.media ?? [])].sort((a, b) => a.position - b.position)
@@ -192,7 +224,7 @@ export function PostCard({
       aria-labelledby={`post-${item.id}-author`}
     >
       <header className="flex items-start gap-3 p-4 pb-3">
-        <Avatar name={name} id={item.author_id} />
+        <Avatar name={name} id={item.author_id} src={avatar} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span id={`post-${item.id}-author`} className="truncate font-semibold text-mo-ink">
@@ -265,6 +297,13 @@ export function PostCard({
           <p className="whitespace-pre-wrap break-words leading-relaxed text-mo-ink">{item.text}</p>
         )}
 
+        {/* Cyan and NOT --brand-accent, deliberately. A hashtag here is not a
+            link — nothing in this card navigates on one — and --brand-accent is
+            the colour this product uses for things that are. Under `.mo-light`
+            cyan is --mo-info (#0C6E86, 5.84 on a white card; #06B6D4 is 6.74 on
+            a dark one), which is the honest reading: a tag is a fact about the
+            post. The day these become links they take --brand-accent with the
+            anchor. */}
         {item.hashtags && item.hashtags.length > 0 && (
           <ul className="flex flex-wrap gap-2" aria-label="Tags">
             {item.hashtags.map((tag) => (
@@ -315,8 +354,12 @@ export function PostCard({
               onStale={onStale}
               resolveUrl={resolveUrl}
             />
+            {/* On the scrim, not on the page: a duration sits over a video
+                frame, and --mo-bg / --mo-ink both flip with the scope while a
+                photograph does not. --mo-on-scrim on scrim @ .80 is 10.02 over
+                pure white media and better over everything darker. */}
             {duration && (
-              <span className="pointer-events-none absolute bottom-2 right-2 rounded-mo-sm bg-mo-bg/80 px-1.5 py-0.5 text-xs tabular-nums text-mo-ink">
+              <span className="pointer-events-none absolute bottom-2 right-2 rounded-mo-sm bg-mo-scrim/80 px-1.5 py-0.5 text-xs tabular-nums text-mo-on-scrim">
                 {duration}
               </span>
             )}
@@ -418,6 +461,7 @@ export function PostCard({
           postId={item.id}
           label={`${name}'s post`}
           api={comments}
+          apiBase={apiBase}
           viewerId={viewerId}
           onCreated={(row) => onCommentCreated?.(item, row)}
           errorMessage={commentError}

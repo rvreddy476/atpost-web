@@ -127,6 +127,22 @@ export interface SearchPostRow extends PostHit {
  */
 export interface SearchUserRow extends UserHit {
   is_private?: boolean
+  /**
+   * A resolved avatar URL, and it is NEW on this bucket.
+   *
+   * The note on `PersonRow` used to say these rows had no avatar at all:
+   * results.go hydrated avatars for post authors and for the legacy `?type=`
+   * branch, and passed the grouped `users` bucket through as raw OpenSearch
+   * _source maps, so the one surface whose rows ARE people was the one that
+   * got faceless ones. That is fixed server-side — `rankedUserItems` merges
+   * the same hydration onto the same maps — and the field is always present
+   * on the bucket now, explicitly null when media-service could not resolve
+   * it, so its absence never depends on a service being reachable.
+   *
+   * `UserHit`'s `avatar_media_id` is still the fallback: a null here with an
+   * id beside it is an avatar this client can still ask for directly.
+   */
+  avatar_url?: string | null
 }
 
 export type SearchHashtagRow = HashtagHit

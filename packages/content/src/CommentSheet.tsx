@@ -46,6 +46,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Loader2, Send, X } from "lucide-react"
 import { Avatar } from "./Avatar"
+import { avatarSrc } from "./avatarUrl"
 import {
   QUICK_REACTIONS,
   canSend,
@@ -67,6 +68,15 @@ export interface CommentSheetProps {
   /** For the dialog's accessible name. */
   label?: string
   api: CommentApi
+  /**
+   * The gateway prefix this zone is served under — "/social", "/reels".
+   *
+   * Used for one thing: building a commenter's avatar URL out of the
+   * `avatar_media_id` post-service sends on `CommentAuthor`, which is an id
+   * and never a URL. A prop rather than an environment read, for the reason
+   * PostCard's own `apiBase` sets out.
+   */
+  apiBase?: string
   /**
    * Who is reading, when anyone is. Only the zone knows.
    *
@@ -98,6 +108,7 @@ export function CommentSheet({
   postId,
   label,
   api,
+  apiBase,
   viewerId,
   onCreated,
   errorMessage,
@@ -270,7 +281,15 @@ export function CommentSheet({
     <div
       // The scrim. Pressing it closes, which is what a bottom sheet does and
       // what a dialog on the web does.
-      className="fixed inset-0 z-50 flex items-end justify-center bg-mo-bg/60 backdrop-blur-sm sm:items-center"
+      //
+      // `bg-mo-scrim/60` and NOT `bg-mo-bg/60`, which is what stood here. A
+      // backdrop's whole job is to push the page behind it away, and --mo-bg
+      // is the page: in a light zone that was 60% WHITE over a white feed
+      // covered by a white panel, three grounds at 1.00:1 to each other and no
+      // modal boundary anywhere on screen. The scrim token is dark in both
+      // scopes for exactly this; see tokens.css. .60 carries no text, which is
+      // why it may sit below the .70 floor the same token has under type.
+      className="fixed inset-0 z-50 flex items-end justify-center bg-mo-scrim/60 backdrop-blur-sm sm:items-center"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -302,7 +321,11 @@ export function CommentSheet({
             type="button"
             onClick={onClose}
             aria-label="Close comments"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+            // 44px, not 32px. This is the control a thumb reaches for at the
+            // top-right corner of a phone sheet, which is the hardest place on
+            // the screen to hit accurately; the glyph stays 20px and the box
+            // grows around it.
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
           >
             <X aria-hidden="true" className="h-5 w-5" />
           </button>
@@ -319,7 +342,7 @@ export function CommentSheet({
               <button
                 type="button"
                 onClick={() => void load(null, "replace")}
-                className="mt-2 rounded-mo-pill border border-mo px-3 py-1.5 text-sm text-mo-ink hover:bg-mo-raised"
+                className="mt-2 inline-flex min-h-[44px] items-center rounded-mo-pill border border-mo px-4 text-sm font-semibold text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
               >
                 Try again
               </button>
@@ -337,7 +360,7 @@ export function CommentSheet({
             <ul className="space-y-4">
               {rows.map((row) => (
                 <li key={row.id}>
-                  <CommentLine row={row} viewerId={viewerId} />
+                  <CommentLine row={row} viewerId={viewerId} apiBase={apiBase} />
                   {/* The post author's answer, nested. The phone indents it by
                       40dp under its parent; this is the same relationship
                       expressed as a nested list, so a screen reader hears the
@@ -345,7 +368,7 @@ export function CommentSheet({
                   {row.reply && (
                     <ul className="mt-3 pl-11">
                       <li>
-                        <CommentLine row={row.reply} viewerId={viewerId} />
+                        <CommentLine row={row.reply} viewerId={viewerId} apiBase={apiBase} />
                       </li>
                     </ul>
                   )}
@@ -359,7 +382,13 @@ export function CommentSheet({
               type="button"
               onClick={() => void load(cursor, "append")}
               disabled={loadingMore}
-              className="mt-4 w-full rounded-mo-pill border border-mo py-2 text-sm text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:opacity-60"
+              // `disabled:opacity-60` on body-coloured text over a card is
+              // 6.22 x .6 in the dark scope and 7.87 x .6 in the light one —
+              // both slide under 4.5, and a disabled label is exempt from 1.4.3
+              // only when it is genuinely a disabled CONTROL, which this is for
+              // the half-second it is loading. --mo-muted-lg is the colour this
+              // palette has for that job and it is honest at both ends.
+              className="mt-4 min-h-[44px] w-full rounded-mo-pill border border-mo py-2 text-sm font-semibold text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:cursor-wait disabled:text-mo-muted-lg"
             >
               {loadingMore ? "Loading…" : "Load more comments"}
             </button>
@@ -397,7 +426,11 @@ export function CommentSheet({
                   inputRef.current?.focus()
                 }}
                 aria-label={`Add ${emoji} to your comment`}
-                className="rounded-mo-pill px-1 text-xl leading-none transition-transform duration-150 ease-mo hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+                // A 44px box round a 20px glyph. These were `px-1` on a line of
+                // text, which is roughly 24x20 — the smallest targets on the
+                // sheet, sitting in a row of seven where a miss inserts the
+                // wrong emoji into somebody's comment.
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-mo-pill text-xl leading-none transition-transform duration-150 ease-mo hover:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
               >
                 {emoji}
               </button>
@@ -420,7 +453,17 @@ export function CommentSheet({
               rows={1}
               placeholder="Add a comment…"
               aria-label="Add a comment"
-              className="max-h-28 min-h-[38px] flex-1 resize-none rounded-mo-lg border border-mo bg-mo-sunken px-3 py-2 text-sm text-mo-ink placeholder:text-mo-muted-lg focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-mo"
+              // `placeholder:text-mo-body`, not `--mo-muted-lg`, and this was
+              // wrong on the dark theme too rather than only under light. A
+              // placeholder is small text; --mo-muted-lg is 3.57 on the dark
+              // ground and 3.93 on white, large-text-and-non-text only in both
+              // scopes, and its name says so. --mo-body is 6.22 on a dark card
+              // and 7.87 on a white one. SearchBox in @momentum/chrome already
+              // had this right and says why in the same words.
+              //
+              // `min-h-[44px]` rather than 38: the composer is the one control
+              // on this sheet somebody taps on every visit.
+              className="max-h-28 min-h-[44px] flex-1 resize-none rounded-mo-lg border border-mo bg-mo-sunken px-3 py-2.5 text-sm text-mo-ink placeholder:text-mo-body focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-mo"
             />
 
             {/* Appears with the draft, exactly as `showsSend()` does. An always
@@ -432,7 +475,20 @@ export function CommentSheet({
                 onClick={() => void submit()}
                 disabled={sending}
                 aria-label="Post comment"
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-mo-pill bg-mo-ember text-mo-on-primary transition-opacity duration-150 ease-mo hover:bg-mo-ember-hover disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+                // Two changes, and the second is the one that mattered.
+                //
+                // 44px, because this is the send button on a phone composer.
+                //
+                // `disabled:opacity-60` is gone. tokens.css measured exactly
+                // that trick on exactly this fill and rejected it: the ramp
+                // collapses toward the ground while --mo-on-primary — which IS
+                // a ground colour in the dark scope — does not move with it,
+                // leaving 1.92:1. `.mo-btn-primary:disabled` answers it by
+                // dropping the gradient for a flat raised fill with body type,
+                // and this button now does the same. `bg-none` is what turns
+                // the background-IMAGE off; a background-color class alone
+                // leaves the gradient painted over it.
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-mo-pill bg-mo-primary bg-mo-ember text-mo-on-primary transition-colors duration-150 ease-mo hover:bg-mo-ember-hover disabled:cursor-wait disabled:bg-mo-raised disabled:bg-none disabled:text-mo-body focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
               >
                 {sending ? (
                   <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin motion-reduce:animate-none" />
@@ -457,13 +513,26 @@ export function CommentSheet({
  * easy to miss halfway down a list, and both together are what make the
  * rollback legible when it comes: the faint one is the one that vanishes.
  */
-function CommentLine({ row, viewerId }: { row: CommentRow; viewerId?: string }) {
+function CommentLine({
+  row,
+  viewerId,
+  apiBase,
+}: {
+  row: CommentRow
+  viewerId?: string
+  apiBase?: string
+}) {
   const name = commentAuthorName(row, viewerId)
   const pending = isPendingComment(row)
+  // post-service hydrates `author` on the LIST and not on the CREATE, so the
+  // row a person has just written carries no avatar id — the same asymmetry
+  // `commentAuthorName` exists for. Null means initials, which is the right
+  // answer for a row that has not come back from the server yet.
+  const avatar = avatarSrc({ mediaId: row.author?.avatar_media_id }, apiBase)
   return (
     <div className={`flex gap-3 ${pending ? "opacity-60" : ""}`}>
       {/* 32px, which is the phone's `UsAvatarSize.Small` on this row. */}
-      <Avatar name={name} id={row.author_id} size="sm" />
+      <Avatar name={name} id={row.author_id} src={avatar} size="sm" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className="truncate text-sm font-semibold text-mo-ink">{name}</span>

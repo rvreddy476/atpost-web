@@ -16,6 +16,53 @@
 
 import { AlertTriangle, Compass } from "lucide-react"
 
+/**
+ * The one button the empty and the error state share.
+ *
+ * ── Why `text-brand-accent` and not `text-mo-cyan` ────────────────────────
+ * This is the interesting line in the file, so it gets the room. The class
+ * that stood here was `text-mo-cyan`, with a comment saying cyan is the
+ * interactive colour and measures 6.75 on a card. Both halves were true of the
+ * dark theme and exactly one of them survived the light one:
+ *
+ *   · the MEASUREMENT survives. --mo-cyan is retuned to #0C6E86 under
+ *     `.mo-light` and reads 5.84 on a white card, comfortably AA at this size.
+ *   · the ROLE does not. tokens.css moves cyan off interactivity in a light
+ *     zone and gives the job to green: "CYAN is no longer the interactive
+ *     colour — green is, and a page cannot have two." Cyan there means
+ *     --mo-info, a neutral notice. A retry button painted the colour of a
+ *     notice, sitting on a page whose links and primary button are green, is
+ *     legible and says the wrong thing.
+ *
+ * So the class has to name the ROLE and let each scope supply the colour, and
+ * there is already a token that does exactly that without inventing a new one:
+ * --brand-accent is --mo-cyan in :root and --mo-primary (green) under
+ * `.mo-light`. It is the @atpost/ui contract rather than the mo-* vocabulary,
+ * which is the one reason to hesitate — but it is the only variable in the
+ * package that means "interactive in whichever scope this is", it is declared
+ * in both, and tokens.css names that as its purpose in both blocks.
+ *
+ *   dark:  #06B6D4 on #1F1D33 card ... 6.74  AA at any size
+ *   light: #0B6B37 on #FFFFFF card ... 6.61  AA at any size
+ *
+ * Two grounds, two colours, one role, and the two numbers are within 0.13 of
+ * each other — which is a coincidence, but a pleasing one.
+ *
+ * `min-h-[44px]`: this is frequently the ONLY control on the screen, and on a
+ * phone it is the only thing to aim at.
+ */
+export function StateButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-5 inline-flex min-h-[44px] items-center justify-center rounded-mo-pill border border-mo-strong px-5 text-sm font-semibold text-brand-accent transition-colors duration-150 ease-mo hover:bg-mo-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+    >
+      {label}
+    </button>
+  )
+}
+
 export function FeedSkeleton({ count = 3 }: { count?: number }) {
   return (
     <div className="space-y-4" aria-hidden="true">
@@ -54,7 +101,11 @@ export function FeedSkeleton({ count = 3 }: { count?: number }) {
  */
 export function FeedEmpty({ onRefresh }: { onRefresh?: () => void }) {
   return (
-    <div className="rounded-mo border border-mo bg-mo-surface p-8 text-center shadow-mo">
+    <div className="rounded-mo border border-mo bg-mo-surface p-6 text-center shadow-mo sm:p-8">
+      {/* Purple is the PRESENCE hue and this is a non-text mark, which is the
+          only job it has in either scope: #8B5CF6 on a dark card is 3.86 and
+          #6D28D9 on a white one is 7.10, both past the 3.0 a glyph needs.
+          32px on a 360px screen is already generous, so it does not scale. */}
       <Compass aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
       <h2 className="mt-4 font-mo-display text-xl font-semibold tracking-mo-display text-mo-ink">
         Your feed is warming up
@@ -64,15 +115,7 @@ export function FeedEmpty({ onRefresh }: { onRefresh?: () => void }) {
         up first — until then we will keep suggesting things.
       </p>
       {onRefresh && (
-        <button
-          type="button"
-          onClick={onRefresh}
-          // Cyan is the interactive colour and this is small text: the one
-          // accent that holds up at this size on a card (6.75).
-          className="mt-5 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
-        >
-          Check again
-        </button>
+        <StateButton label="Check again" onClick={onRefresh} />
       )}
     </div>
   )
@@ -89,20 +132,18 @@ export function FeedEmpty({ onRefresh }: { onRefresh?: () => void }) {
  */
 export function FeedError({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div role="alert" className="rounded-mo border border-mo bg-mo-surface p-8 text-center shadow-mo">
+    <div role="alert" className="rounded-mo border border-mo bg-mo-surface p-6 text-center shadow-mo sm:p-8">
+      {/* --mo-warn is #FCD376 on the dark card (11.48) and #7A5C00 on the white
+          one (6.25) — a pale butter and a dark olive-gold, which is what it
+          takes for "pending" to exist on both grounds. Either way it is far
+          past the 3.0 bar a glyph is held to. */}
       <AlertTriangle aria-hidden="true" className="mx-auto h-8 w-8 text-mo-warn" />
       <h2 className="mt-4 font-mo-display text-xl font-semibold tracking-mo-display text-mo-ink">
         We could not load your feed
       </h2>
       <p className="mx-auto mt-2 max-w-sm text-mo-body">{message}</p>
       {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-5 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
-        >
-          Try again
-        </button>
+        <StateButton label="Try again" onClick={onRetry} />
       )}
     </div>
   )

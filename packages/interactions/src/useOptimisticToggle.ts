@@ -21,6 +21,26 @@
  * ±1 is a guess made to fill 200ms; when the truth arrives it replaces the
  * guess rather than being reconciled with it.
  *
+ * ── A guess that is never corrected is the bug this used to have ──────────
+ * Two halves, and only one of them was here.
+ *
+ * The first is the `count ?? ±1` below. It is the LAST resort and not a
+ * design: a handler whose route cannot report a number (the repost DELETE
+ * answers 204 with no body at all) should read the authoritative one back and
+ * answer with it, which is the zone's business because the zone owns the
+ * URLs. See `setRepost` in apps/social/src/feed/api.ts, which now does.
+ *
+ * The second is that the read-back had nowhere to land. This state was seeded
+ * from `initial` ONCE — `useState(initial)` ignores every later prop — so a
+ * zone that fetched the true count and wrote it back onto the item was
+ * talking to a component that had stopped listening, and the card kept the
+ * guess for as long as it stayed mounted. A NEW `initial` is now adopted, on
+ * the one condition that nothing is in flight: a value arriving from above
+ * mid-request is a render behind the request's own answer, and the answer is
+ * the newer truth. This is React's own "adjusting state when a prop changes"
+ * — a set during render of this same component, not an effect, so there is no
+ * frame where the card shows a number it has already been told is wrong.
+ *
  * ── Why it is not a toggle race ───────────────────────────────────────────
  * Tapping like four times quickly must not send four requests whose responses
  * arrive out of order and leave the UI showing whichever landed last. While a
@@ -36,10 +56,22 @@ export interface ToggleState {
   count: number
 }
 
-/** What a handler must answer with. The server's truth, not a boolean. */
+/**
+ * What a handler must answer with. The server's truth, not a boolean.
+ *
+ * `count` is optional because some routes cannot report one, NOT because it
+ * is optional to know. A handler that omits it leaves the control on an
+ * uncorrected local guess for the life of the mount; if the write itself
+ * answers no number, read it back and put it here.
+ */
 export interface ToggleResult {
   on: boolean
   count?: number
+}
+
+/** Whether two seeds are the same value — a prop change worth adopting. */
+function sameState(a: ToggleState, b: ToggleState): boolean {
+  return a.on === b.on && a.count === b.count
 }
 
 export interface OptimisticToggle extends ToggleState {
@@ -59,6 +91,15 @@ export function useOptimisticToggle(
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
+
+  // The last seed this control accepted. See "A guess that is never
+  // corrected" above: without this, a count the zone read back from the
+  // server and wrote onto the item never reaches the number on screen.
+  const seed = useRef(initial)
+  if (!inFlight.current && !sameState(seed.current, initial)) {
+    seed.current = initial
+    setState(initial)
+  }
 
   const toggle = useCallback(() => {
     if (inFlight.current) return
@@ -80,14 +121,22 @@ export function useOptimisticToggle(
 
     perform(next)
       .then((result) => {
-        setState({
+        const settled = {
           on: result.on,
-          // A handler that cannot report a count (a plain 204) keeps the
-          // optimistic one rather than resetting it to zero.
+          // The last resort, and it is exactly that — see the header. A
+          // handler that cannot report a count keeps the optimistic one
+          // rather than resetting a real number to zero, but it leaves this
+          // control holding a guess nothing will correct.
           count: result.count ?? Math.max(0, restore.count + (result.on ? 1 : -1)),
-        })
+        }
+        // The answer becomes the seed too. Otherwise the very next render
+        // would see `initial` still differing from it and adopt the stale
+        // prop back over the number the server just gave us.
+        seed.current = settled
+        setState(settled)
       })
       .catch(() => {
+        seed.current = restore
         setState(restore)
         setError(options.errorMessage ?? "That did not save. Try again.")
       })

@@ -421,7 +421,10 @@ function Tabs({ query, current }: { query: string; current: Tab }) {
               active
                 ? // Cyan is the interactive colour and the only mark here that
                   // means "this one" — 8.01 on the ground.
-                  "border-mo-focus text-mo-cyan"
+                  // --brand-accent: a selected filter is pressable, and
+                  // pressable is green under `.mo-light` and cyan on the dark
+                  // ground. `border-mo-focus` already tracks the scope.
+                  "border-mo-focus text-brand-accent"
                 : "border-transparent text-mo-body hover:text-mo-ink",
             ].join(" ")}
           >
@@ -615,7 +618,9 @@ function Section({
         {seeAll && (
           <Link
             href={seeAll}
-            className="shrink-0 text-sm font-semibold text-mo-cyan hover:underline"
+            // A link. --brand-accent so it is the scope’s own link colour: cyan
+            // on the dark ground (6.74) and green under `.mo-light` (6.61).
+            className="shrink-0 text-sm font-semibold text-brand-accent hover:underline"
           >
             {seeAllLabel}
           </Link>

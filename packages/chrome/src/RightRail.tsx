@@ -25,17 +25,28 @@
  *
  * Two properties of that payload shape this component:
  *
- *   · `explain_text` arrives as a finished sentence, so the reason line is the
- *     server's own words rather than something reconstructed from
- *     `reason_codes`. It currently reads "Popular on atpost" — the OLD product
- *     name, written by suggestion-service. That is a server-side string this
- *     client may not silently rewrite (rewriting it would hide the drift and
- *     make it permanent), so it is rendered as sent and reported instead.
+ *   · `explain_text` arrives as a finished sentence, and this rail used to
+ *     render it verbatim — including "Popular on atpost", the OLD product
+ *     name, written by suggestion-service and printed in the chrome of a
+ *     product called Momentum. The note that stood here said the client "may
+ *     not silently rewrite" it and so rendered it as sent. That reasoning was
+ *     half right: rewriting a server string WOULD hide the drift. Printing a
+ *     dead brand to every reader in order to preserve the evidence is worse.
+ *
+ *     ./suggestions.ts resolves it the way suggestion-service's own brand.go
+ *     says it should be resolved — from `reason_codes`, with this product's
+ *     word coming from @momentum/brand — while still printing the server's
+ *     sentence whenever it names no product, because a scored row's prose
+ *     carries facts ("Both in Weekend Cyclists") no client could reconstruct.
  *
  *   · `score` is 0 on every row and `mutual_friend_count` is 0, because the
- *     only bucket with candidates in it today is `trending`. A "3 mutual
- *     friends" line would therefore be false for everyone, so mutuals are
- *     shown only when the number is actually above zero.
+ *     only bucket with candidates in it today is `trending` — and on that
+ *     path both are Go zero values rather than computed numbers, so a zero is
+ *     indistinguishable from a real one. `score` is drawn nowhere, and the
+ *     mutuals line is drawn only above zero.
+ *
+ *   · `avatar_media_id` is on every row and is an ID, never a URL. It is a
+ *     picture now; see `avatarSrc` and the note in @momentum/content.
  *
  * ── The action is a friend request, not a follow ──────────────────────────
  * And NOT because follow is unavailable — that claim stood here, and in ./api,
@@ -54,16 +65,23 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { UserPlus } from "lucide-react"
-import { Avatar } from "@momentum/content"
+import { Avatar, avatarSrc } from "@momentum/content"
 import { useSession } from "@atpost/api-client/session"
 import { fetchSuggestions, sendConnectionRequest, type Suggestion } from "./api"
+import { suggestionReason } from "./suggestions"
 
 type Status = "loading" | "ready" | "error"
 
 /** Per-row state. Only ever moved by an answer from the server. */
 type RowState = "idle" | "sending" | "requested" | "failed"
 
-function SuggestionRow({ suggestion }: { suggestion: Suggestion }) {
+function SuggestionRow({
+  suggestion,
+  basePath,
+}: {
+  suggestion: Suggestion
+  basePath: string
+}) {
   const [state, setState] = useState<RowState>("idle")
 
   const ask = useCallback(() => {
@@ -78,18 +96,19 @@ function SuggestionRow({ suggestion }: { suggestion: Suggestion }) {
       .catch(() => setState("failed"))
   }, [state, suggestion.candidate_user_id])
 
-  const mutuals = suggestion.mutual_friend_count ?? 0
-
   return (
     <li className="flex items-center gap-3 py-2.5">
-      <Avatar name={suggestion.display_name} id={suggestion.candidate_user_id} size="sm" />
+      <Avatar
+        name={suggestion.display_name}
+        id={suggestion.candidate_user_id}
+        src={avatarSrc({ mediaId: suggestion.avatar_media_id }, basePath)}
+        size="sm"
+      />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-mo-ink">{suggestion.display_name}</p>
-        <p className="truncate text-xs text-mo-body">
-          {mutuals > 0
-            ? `${mutuals} mutual ${mutuals === 1 ? "friend" : "friends"}`
-            : suggestion.explain_text || "Suggested for you"}
-        </p>
+        {/* One line, decided in ./suggestions.ts so the rule is a table test
+            rather than a ternary nobody can check. */}
+        <p className="truncate text-xs text-mo-body">{suggestionReason(suggestion)}</p>
       </div>
       <button
         type="button"
@@ -101,15 +120,25 @@ function SuggestionRow({ suggestion }: { suggestion: Suggestion }) {
             : `Add ${suggestion.display_name} as a friend`
         }
         className={[
-          "shrink-0 rounded-mo-pill border px-3 py-1 text-xs font-semibold transition-colors duration-150 ease-mo",
+          // 44px tall: this is a real request being sent to a real person and
+          // it was a 24px target.
+          "inline-flex min-h-[44px] shrink-0 items-center rounded-mo-pill border px-3 text-xs font-semibold transition-colors duration-150 ease-mo",
           state === "requested"
             ? // A settled state recedes; it is not an invitation any more.
               "cursor-default border-mo text-mo-body"
             : state === "failed"
-              ? "border-mo-bad text-mo-bad hover:bg-mo-raised"
-              : // Cyan is the interactive colour and this is small text — the
-                // one accent that holds up at this size on a card (6.75).
-                "border-mo-strong text-mo-cyan hover:bg-mo-raised disabled:cursor-wait",
+              ? // --mo-bad is #FCA5A5 on the dark card (8.63) and #B91C1C on
+                // the white one (6.47). Both AAA/AA as small text, which a
+                // "Try again" label is.
+                "border-mo-bad text-mo-bad hover:bg-mo-raised"
+              : // --brand-accent, not --mo-cyan. The measurement was never the
+                // problem — cyan is 6.74 on a dark card and 5.84 on a white
+                // one — the ROLE was: tokens.css moves interactivity onto
+                // green inside `.mo-light` and leaves cyan as --mo-info, so a
+                // cyan "Add" would be a notice-coloured button on a page whose
+                // every other pressable thing is green. The alias is #06B6D4
+                // in :root and #0B6B37 there: 6.74 and 6.61 on their own card.
+                "border-mo-strong text-brand-accent hover:bg-mo-raised disabled:cursor-wait",
         ].join(" ")}
       >
         {state === "requested"
@@ -124,7 +153,7 @@ function SuggestionRow({ suggestion }: { suggestion: Suggestion }) {
   )
 }
 
-export function RightRail() {
+export function RightRail({ basePath }: { basePath: string }) {
   const { signedIn, status: sessionStatus } = useSession()
   const [items, setItems] = useState<Suggestion[]>([])
   const [status, setStatus] = useState<Status>("loading")
@@ -197,7 +226,11 @@ export function RightRail() {
         {status === "ready" && items.length > 0 && (
           <ul className="mt-1 divide-y divide-mo">
             {items.map((suggestion) => (
-              <SuggestionRow key={suggestion.candidate_user_id} suggestion={suggestion} />
+              <SuggestionRow
+                key={suggestion.candidate_user_id}
+                suggestion={suggestion}
+                basePath={basePath}
+              />
             ))}
           </ul>
         )}

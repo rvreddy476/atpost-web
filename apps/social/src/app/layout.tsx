@@ -57,9 +57,32 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" className={`${outfit.variable} ${figtree.variable}`}>
-      {/* mo-root is the whole theme: ground, ink, font, the one focus ring,
-          and color-scheme: dark so native controls and the scrollbar follow. */}
-      <body className="mo-root">
+      {/*
+        Two classes, on ONE element, in this order — the first of the three
+        orders tokens.css documents, and the one it calls the usual case.
+
+        `mo-root` is the theme's machinery: ground, ink, font, the one focus
+        treatment, and `color-scheme`. `mo-light` is the vocabulary those
+        resolve through — a white page, GREEN for anything pressable, ORANGE
+        for unread marks, "new"/"live" pills, count bubbles and the active
+        tab's rule.
+
+        Both on the same element matters for one declaration that is NOT a
+        custom property. `.mo-root` sets `color-scheme: dark` literally, and a
+        literal does not follow the tokens: without `mo-light` here this zone
+        would render a perfect white page and then hand the reader a black
+        scrollbar, black autofill and a black date picker. tokens.css's
+        `.mo-root.mo-light` selector is 0-2-0 and beats `.mo-root` from
+        anywhere in the file, which is what makes this order safe.
+
+        It is a SCOPE, not a mode. :root is untouched and the package has no
+        prefers-color-scheme query anywhere, so MShorts, MTube, Kwit and the
+        shell keep the violet-black ground because they do not carry this
+        class. The consequence for everything under it: @momentum/chrome,
+        /content, /interactions and /player are rendered in BOTH themes on the
+        same day and may not assume either one.
+      */}
+      <body className="mo-root mo-light">
         <SessionProvider initialSignedIn={signedIn}>
           <AppFrame basePath="/social">{children}</AppFrame>
         </SessionProvider>

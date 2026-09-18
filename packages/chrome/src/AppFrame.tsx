@@ -43,6 +43,33 @@
  *                                 sticky and why it holds the full icon strip
  *                                 rather than a hamburger.
  *
+ * ── Why there is no bottom bar, having looked at adding one ───────────────
+ * The obvious phone pattern, and it was measured rather than dismissed. The
+ * strip in the header IS the bottom bar's content: the same seven
+ * destinations, the same glyphs, the same active mark, already sticky and
+ * already the thing every zone mounting this frame shares. Adding a second
+ * navigation below 1024 would put those seven entries on screen TWICE — once
+ * in a bar that does not scroll away and once in a bar pinned to the other
+ * edge — and it would do it in apps/reels and apps/kwit as well, since both
+ * mount this component and neither asked for it.
+ *
+ * What the phone case actually needed was not a second bar but for the one
+ * that exists to be usable: 44px targets that do not compress (./NavItem, and
+ * its `shrink-0` note is the older half of the same fix), a strip that scrolls
+ * rather than squeezes, and a wordmark that gets out of the way under md. That
+ * is what changed. If the destination list ever grows past what a 360px strip
+ * can scroll comfortably, the answer is fewer destinations in the chrome, not
+ * a third place to put them.
+ *
+ * ── The centre column keeps its measure at every width ────────────────────
+ * `max-w-[600px]` with `mx-auto` on `main`, under a grid track that is already
+ * `minmax(0, 600px)`. Belt and braces on purpose: the track caps it in the two
+ * and three column layouts, and the `max-w` caps it in the ONE column layout,
+ * where the track is `1fr` and would otherwise let a post's text run the full
+ * width of a 1023px tablet at about 140 characters a line — twice the measure
+ * prose is comfortable at, and the exact failure a single-column breakpoint
+ * usually ships with.
+ *
  * The centre is `minmax(0, 600px)` and not `600px` in every one of them.
  * `minmax(0, …)` is what lets a grid ITEM shrink below its content's
  * intrinsic width — without it a wide element inside a card (a long unbroken
@@ -126,11 +153,15 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
       <AppHeader
         basePath={basePath}
         displayName={profile?.display_name}
+        avatarMediaId={profile?.avatar_media_id}
         currentId={currentId}
       />
       <div
         className={[
-          "mx-auto grid w-full max-w-[1600px] justify-center gap-x-6 px-4",
+          // 16px gutters on a phone, 24px once there is room for them. The
+          // narrower one is what keeps a 600px card readable at 360px rather
+          // than 328px of it.
+          "mx-auto grid w-full max-w-[1600px] justify-center gap-x-6 px-4 sm:px-6",
           "grid-cols-1",
           "lg:grid-cols-[268px_minmax(0,600px)]",
           "xl:grid-cols-[268px_minmax(0,600px)_300px]",
@@ -140,8 +171,12 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
         {/* `min-w-0` for the same reason `minmax(0, …)` is on the track: a
             grid item's default `min-width: auto` refuses to shrink below its
             content, and one wide child would push the rails off screen. */}
-        <main className="mx-auto w-full min-w-0 max-w-[600px] pb-16 pt-5">{children}</main>
-        <RightRail />
+        {/* `pb-24` rather than `pb-16`: the last card in a feed wants clear
+            air under it on a phone, where the browser's own bottom chrome
+            appears and disappears as the page scrolls and a 64px tail can put
+            "You are all caught up" underneath it. */}
+        <main className="mx-auto w-full min-w-0 max-w-[600px] pb-24 pt-4 sm:pt-5">{children}</main>
+        <RightRail basePath={basePath} />
       </div>
     </>
   )

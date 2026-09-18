@@ -27,7 +27,7 @@
 import { Smartphone } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
-import { Avatar } from "@momentum/content"
+import { Avatar, avatarSrc } from "@momentum/content"
 import { APP_ONLY_REASON, DESTINATIONS, isActionable } from "./destinations"
 import { RailNavItem } from "./NavItem"
 import { signInHref } from "./zone"
@@ -78,7 +78,16 @@ export function LeftRail({
       {signedIn ? (
         <section className="rounded-mo border border-mo bg-mo-surface p-4 shadow-mo">
           <div className="flex items-center gap-3">
-            <Avatar name={profile?.display_name} id={user?.id} />
+            {/* The viewer's own face. `/v1/profiles/me` sends
+                `avatar_media_id` and — alone among the profile routes — no
+                `avatar_url`, because that handler serialises the raw store
+                row rather than the public DTO. So the URL is built from the
+                id, through the same one rule every other surface uses. */}
+            <Avatar
+              name={profile?.display_name}
+              id={user?.id}
+              src={avatarSrc({ mediaId: profile?.avatar_media_id }, basePath)}
+            />
             <div className="min-w-0">
               <p className="truncate font-semibold text-mo-ink">
                 {/* The email is not a placeholder for the name, it is the other
@@ -109,7 +118,11 @@ export function LeftRail({
           </p>
           <a
             href={signInHref(basePath)}
-            className="mt-3 inline-block rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
+            // --brand-accent: the interactive colour of whichever scope this
+            // is, cyan on the dark ground and green under `.mo-light`, where
+            // cyan has been reassigned to --mo-info. On a card that is 6.74
+            // dark and 6.61 light. 44px because it is a real control.
+            className="mt-3 inline-flex min-h-[44px] items-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-brand-accent transition-colors duration-150 ease-mo hover:bg-mo-raised"
           >
             Sign in
           </a>

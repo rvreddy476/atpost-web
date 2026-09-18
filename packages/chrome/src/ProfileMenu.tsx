@@ -46,29 +46,50 @@
  * `aria-disabled`, and honest about why.
  *
  * ── Why they are NOT --mo-muted-lg, unlike the rail's disabled rows ───────
- * This panel sits on --mo-overlay, and #6B658A on #332F55 measures 2.30 on
- * the rendered page — worse than the 2.61 that tokens.css already rules out
- * on --mo-raised. That colour's whole contract is "large text and non-text,
- * on --mo-bg", and a popover is not --mo-bg. WCAG 1.4.3 does exempt the label
- * of a disabled control, but the exemption is a licence, not an instruction,
- * and 2.30 is unreadable rather than merely quiet.
+ * This panel sits on --mo-overlay, and in the DARK scope that is #332F55,
+ * where #6B658A measures 2.30 — worse than the 2.61 tokens.css already rules
+ * out on --mo-raised. That colour's whole contract is "large text and
+ * non-text, on --mo-bg", and a popover is not --mo-bg. WCAG 1.4.3 does exempt
+ * the label of a disabled control, but the exemption is a licence rather than
+ * an instruction, and 2.30 is unreadable rather than merely quiet.
+ *
+ * Under `.mo-light` the same argument reaches the same answer by a different
+ * route. --mo-overlay is #FFFFFF there, so --mo-muted-lg would be 3.93 — not
+ * unreadable, and still not 4.5 at any size. One rule for both scopes, and it
+ * is the stricter one, because a component in this package is rendered in both
+ * on the same day.
  *
  * So the recession is carried by WEIGHT and by the reason underneath rather
- * than by a colour that cannot survive this ground: --mo-body is 4.75 here,
- * which clears AA for normal text, and the live "Sign out" row keeps --mo-ink
- * at 10.92 so the difference between them is still obvious at a glance.
+ * than by a colour that cannot survive the ground:
+ *
+ *   dark   --mo-body #A19CB9 on #332F55 overlay ...  4.74  AA
+ *          --mo-ink  #F1EEF8 on #332F55 overlay ... 10.91  AAA
+ *   light  --mo-body #46554D on #FFFFFF overlay ...  7.87  AAA
+ *          --mo-ink  #0F1A14 on #FFFFFF overlay ... 17.82  AAA
+ *
+ * The live "Sign out" row keeps --mo-ink in both, so the difference between a
+ * row that works and a row that does not is obvious at a glance either way.
+ * (The old note said 4.75 and 10.92 for the dark pair; the figures above came
+ * out of the same script that produced tokens.css, which truncates.)
+ *
+ * ── The panel needs its border in a light zone, not merely likes it ───────
+ * `bg-mo-overlay` is #FFFFFF under `.mo-light` and so is the page behind it.
+ * The `border border-mo` and `shadow-mo-lift` on the panel below are what make
+ * it a popover rather than a column of text floating over the header; the rule
+ * is tokens.css's, and this is one of the places it bites.
  */
 
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { CircleUser, LogOut, Settings } from "lucide-react"
 import { useSession } from "@atpost/api-client/session"
-import { Avatar } from "@momentum/content"
+import { Avatar, avatarSrc } from "@momentum/content"
 import { APP_ONLY_REASON } from "./destinations"
 import { signInHref } from "./zone"
 
 export function ProfileMenu({
   basePath,
   displayName,
+  avatarMediaId,
 }: {
   /**
    * The zone this menu is drawn in.
@@ -80,6 +101,8 @@ export function ProfileMenu({
    */
   basePath: string
   displayName?: string | null
+  /** The viewer's avatar asset id, from `/v1/profiles/me`. Not a URL. */
+  avatarMediaId?: string | null
 }) {
   const { user, signOut } = useSession()
   const baseId = useId()
@@ -135,7 +158,7 @@ export function ProfileMenu({
 
   const name = displayName || user?.email || "Your account"
   const row =
-    "flex w-full items-center gap-3 rounded-mo-sm px-3 py-2.5 text-left text-sm transition-colors duration-150 ease-mo"
+    "flex min-h-[44px] w-full items-center gap-3 rounded-mo-sm px-3 py-2.5 text-left text-sm transition-colors duration-150 ease-mo"
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -157,12 +180,24 @@ export function ProfileMenu({
             close(true)
           }
         }}
-        className="grid h-10 w-10 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-surface hover:text-mo-ink"
+        // `hover:bg-mo-raised`, not `--mo-surface`: a surface is the page's own
+        // white inside `.mo-light`, so the hover state did not exist there.
+        // --mo-raised is 1.36 against the dark ground and 1.10 against the
+        // white one — faint on purpose, and present in both.
+        //
+        // 44px, because this is the account menu's only trigger.
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink"
       >
-        {/* Initials on a token surface — the same Avatar the cards use, and
-            for the same reason: `avatar_media_id` is not a URL, and the one
-            that could be derived from it is unsigned and answers 403. */}
-        <Avatar name={displayName ?? undefined} id={user?.id} size="sm" />
+        {/* The same Avatar the cards use, and now the same picture. The note
+            that stood here said `avatar_media_id` could not become a usable
+            URL; `/v1/media/{id}/serve/avatar` is the one it missed. Initials
+            remain the fallback for an account with no photograph. */}
+        <Avatar
+          name={displayName ?? undefined}
+          id={user?.id}
+          src={avatarSrc({ mediaId: avatarMediaId }, basePath)}
+          size="sm"
+        />
       </button>
 
       {/* Closed with `hidden` rather than unmounted: out of the a11y tree, out

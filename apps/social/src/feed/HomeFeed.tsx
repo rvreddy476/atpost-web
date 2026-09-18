@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "@atpost/api-client/session"
+import { BRAND } from "@momentum/brand"
 import type { FeedItem } from "@atpost/types/feed"
 import {
   FeedEmpty,
@@ -42,8 +43,10 @@ import {
   commentFailureMessage,
   createComment,
   fetchComments,
+  fetchPostCounts,
   fileReport,
   pollFailureMessage,
+  recordShare,
   sendFeedback,
   setBookmark,
   setRepost,
@@ -51,7 +54,8 @@ import {
 } from "./api"
 import { FeedTabs, panelId, tabId } from "./FeedTabs"
 import type { Notice } from "./outcomes"
-import { SectionEmpty, SectionError } from "./TabStates"
+import { SignedOutInvite } from "./SignedOutInvite"
+import { AuthorsUnresolved, NextPageError, SectionEmpty, SectionError } from "./TabStates"
 import { listKey, type FeedTabId } from "./tabs"
 import { TrendingTags } from "./TrendingTags"
 import { useFeedAnalytics } from "./useFeedAnalytics"
@@ -73,6 +77,23 @@ import { useTabbedFeed, useTrendingTags } from "./useTabbedFeed"
  * gone rather than kept alongside.
  */
 const STARTS_MUTED = true
+
+/**
+ * Where this zone is mounted, and therefore where its gateway is.
+ *
+ * The same value `resolveUrl` below puts on a playlist path, the same value
+ * axios uses as its baseURL, and now also the prefix on an avatar's
+ * `/v1/media/{id}/serve/avatar`. One answer to "where is the gateway" per
+ * deployment rather than three that can disagree — and the reason it matters
+ * for a picture is the bug apps/commerce hit first: a root-relative
+ * `/v1/media/…` misses a zone that has a basePath entirely, and every image
+ * in the shop rendered broken.
+ *
+ * Read here rather than inside @momentum/content because a package rendered
+ * in four zones must be TOLD which one it is in; see the PostCard prop and
+ * @momentum/chrome's zone.ts.
+ */
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
 export function HomeFeed() {
   /**
@@ -330,12 +351,24 @@ export function HomeFeed() {
     [patch, analytics, positionOf]
   )
 
+  /**
+   * Repost, or undo — and then find out what the number actually is.
+   *
+   * This used to write `(item.repost_count ?? 0) ± 1` and stop. Neither
+   * repost route reports a count (the create answers 201 with the repost row,
+   * the delete answers a bare 204), so that arithmetic was the only number
+   * the card ever had and nothing corrected it: a post other people were also
+   * reposting drifted further from the truth the longer it stayed on screen.
+   * `setRepost` reads the authoritative count back now and `result.count` is
+   * it. Undefined only when the read-back itself failed, in which case the
+   * optimistic figure stands rather than the count being blanked to zero.
+   */
   const onRepost = useCallback(
     async (item: FeedItem, next: boolean) => {
       const result = await setRepost(item.id, next)
       patch(item.id, {
         has_reposted: result.on,
-        repost_count: Math.max(0, (item.repost_count ?? 0) + (result.on ? 1 : -1)),
+        ...(result.count === undefined ? {} : { repost_count: result.count }),
       })
       // Reported as `share`. The contract has thirteen types and no `repost`,
       // and a repost is the platform's own form of sharing — so it goes in the
@@ -374,10 +407,31 @@ export function HomeFeed() {
    */
   const onCommentCreated = useCallback(
     (item: FeedItem, _row: CommentRow) => {
+      // The optimistic paint. The sheet is open and the count under it has to
+      // move on the same frame the comment appears.
       patch(item.id, {
         counts: { ...item.counts, comments: (item.counts?.comments ?? 0) + 1 },
       })
       analytics.recordEngagement("comment_create", item, positionOf(item))
+      /*
+        And then the truth. The create answers 201 with the new COMMENT and
+        says nothing about the post's totals, so +1 was all this card had —
+        and it was wrong the moment anybody else commented, for as long as the
+        card lived. `GET /v1/posts/{id}` is the authority for every count the
+        bar draws, so the likes are reconciled here too: the sheet may have
+        been open for minutes.
+
+        Not awaited and not surfaced. The comment is already accepted; a
+        failed read-back is a number that stays optimistic, not an error worth
+        a sentence.
+      */
+      void fetchPostCounts(item.id).then((counts) => {
+        if (!counts) return
+        patch(item.id, {
+          counts: { likes: counts.likes, comments: counts.comments },
+          repost_count: counts.repostCount,
+        })
+      })
     },
     [patch, analytics, positionOf]
   )
@@ -407,7 +461,7 @@ export function HomeFeed() {
     [patch]
   )
 
-  /* ── Steering the feed ────────────────────────────────────────────────── */
+  /* ── What the feed last had to say ────────────────────────────────────── */
 
   /**
    * The one line of feedback the overflow menu leaves behind.
@@ -423,6 +477,69 @@ export function HomeFeed() {
     const id = window.setTimeout(() => setNotice(null), 5_000)
     return () => window.clearTimeout(id)
   }, [notice])
+
+  /* ── Sharing ──────────────────────────────────────────────────────────── */
+
+  /**
+   * The share control, which until now did nothing at all.
+   *
+   * `ActionBar` drew the glyph and `PostCard` wired `onShare` only if the
+   * zone supplied one — and this zone did not. So it was focusable,
+   * pressable, announced as "Share", and inert on every press. (The bar drops
+   * the control entirely when no handler is given now, which is the same
+   * absent-not-disabled rule the comment control follows; this is what stops
+   * it being dropped.)
+   *
+   * ── The behaviour is MTube's watch page, deliberately ────────────────────
+   * `navigator.share` where the browser has it, the clipboard where it does
+   * not, and nothing invented when neither works — the control says it could
+   * not rather than pretending. apps/tube's `WatchScreen` and apps/reels'
+   * `ReelsViewer` both do exactly this and a third dialect of "share" on the
+   * third surface of one product is how a product stops feeling like one.
+   *
+   * ── What the link points AT, and why that is a compromise ────────────────
+   * This zone has no post-detail route — which is also why the overflow
+   * menu's "Copy link" row is absent, and the note on `permalink` says so.
+   * The honest link is therefore the feed itself, which is a real page that
+   * really exists and really shows this post today. It is not a permalink and
+   * is not pretending to be one; when this zone grows `/social/p/{id}`, this
+   * is the one line that changes.
+   *
+   * ── The count is only sent once the link has actually LEFT ───────────────
+   * `navigator.share` rejects with an AbortError when somebody opens the
+   * sheet and changes their mind, and the clipboard write can be refused by
+   * permissions. Recording on the press would count both as shares — in the
+   * ranker, and in the number a creator is shown. So `POST
+   * /v1/posts/{id}/share` and the analytics event are both on the resolve
+   * path, never the call path.
+   */
+  const onShare = useCallback(
+    (item: FeedItem) => {
+      const url = `${window.location.origin}${API_BASE}/`
+      const shared = () => {
+        analytics.recordEngagement("share", item, positionOf(item))
+        void recordShare(item.id)
+      }
+      if (navigator.share) {
+        navigator
+          .share({ url, title: `A post on ${BRAND.name}` })
+          .then(shared)
+          // An abort is somebody changing their mind, not a failure.
+          .catch(() => undefined)
+        return
+      }
+      navigator.clipboard
+        ?.writeText(url)
+        .then(() => {
+          setNotice({ tone: "good", text: "Link copied." })
+          shared()
+        })
+        .catch(() => setNotice({ tone: "bad", text: "We could not copy the link." }))
+    },
+    [analytics, positionOf]
+  )
+
+  /* ── Steering the feed ────────────────────────────────────────────────── */
 
   /**
    * "Interested", "Not interested", "Don't recommend this account".
@@ -526,11 +643,17 @@ export function HomeFeed() {
    * The tabs are three ways of asking a question that needs a session; showing
    * them over a sign-in message would be three controls that all do the same
    * nothing. This is the one branch that renders no `tablist` at all.
+   *
+   * What it used to render was `FeedError` — a `role="alert"` under a warning
+   * triangle reading "We could not load your feed", for the one state on this
+   * page where nothing has gone wrong — with no sign-in control anywhere in
+   * it. See ./SignedOutInvite.tsx, which also carries why the rail's own link
+   * did not cover this.
    */
   if (sessionStatus !== "unknown" && !signedIn) {
     return (
       <Shell notice={notice}>
-        <FeedError message="Sign in to see your feed." />
+        <SignedOutInvite basePath={API_BASE || "/"} />
       </Shell>
     )
   }
@@ -591,9 +714,16 @@ export function HomeFeed() {
                       session ? (event) => analytics.recordWatch(item, session, event) : undefined
                     }
                     resolveUrl={resolveUrl}
+                    /*
+                      What turns an author's `avatar_media_id` into a face.
+                      See API_BASE at the top of this file, and the note on
+                      the prop in @momentum/content.
+                    */
+                    apiBase={API_BASE}
                     onLike={onLike}
                     onSave={onSave}
                     onRepost={onRepost}
+                    onShare={onShare}
                     onStale={handleStale}
                     /*
                       The comment surface. `comments` is what makes the bar's
@@ -667,6 +797,13 @@ function FeedBody({
   render: (item: FeedItem, index: number) => React.ReactNode
 }) {
   const { list, loadMore, reload } = feed
+  /*
+    The next page failed. Everything above it is still true, so the list
+    stays, the pager's sentinel is disarmed (otherwise the observer re-arms
+    and retries a dead connection on a loop), and the reader's own press is
+    what tries again. `TabStates.NextPageError` carries the argument.
+  */
+  const nextPageFailed = Boolean(list.loadMoreFailure)
 
   if (list.status === "loading") return <FeedSkeleton />
 
@@ -730,19 +867,37 @@ function FeedBody({
   }
 
   return (
-    <InfiniteFeed
-      hasMore={!list.reachedEnd}
-      loading={list.loadingMore}
-      onLoadMore={loadMore}
-      loadingIndicator={
-        <div className="pt-4">
-          <FeedSkeleton count={1} />
-        </div>
-      }
-      endIndicator={<FeedEnd />}
-    >
-      {list.items.map(render)}
-    </InfiniteFeed>
+    <>
+      {/* The posts loaded; the names did not. Only the hashtag lists can set
+          this — see `hydrateAuthors` in ./tabApi.ts. */}
+      {list.authorsUnresolved && <AuthorsUnresolved onRetry={reload} />}
+      <InfiniteFeed
+        hasMore={!list.reachedEnd && !nextPageFailed}
+        loading={list.loadingMore}
+        onLoadMore={loadMore}
+        loadingIndicator={
+          <div className="pt-4">
+            <FeedSkeleton count={1} />
+          </div>
+        }
+        /* "You are all caught up" is only true at the real end of the list.
+           A next page that FAILED has not reached one, and saying so would
+           turn a broken connection into a claim that there is no more. */
+        endIndicator={list.reachedEnd ? <FeedEnd /> : null}
+      >
+        {list.items.map(render)}
+      </InfiniteFeed>
+      {nextPageFailed && (
+        <NextPageError
+          detail={
+            list.loadMoreFailure?.status === 401
+              ? "Your session has expired. Sign in again to see the rest."
+              : "The next page did not answer. Everything above is still here."
+          }
+          onRetry={loadMore}
+        />
+      )}
+    </>
   )
 }
 

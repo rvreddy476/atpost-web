@@ -29,6 +29,23 @@
 import api from "@atpost/api-client"
 import type { FeedAuthor, FeedItem, FeedPage } from "@atpost/types/feed"
 
+/**
+ * A page, plus whether the names on it are real.
+ *
+ * `FeedPage` lives in @atpost/types and is the server's wire shape; this is
+ * not — it is one fact about how the FETCH went, and it belongs to the zone
+ * that made the second request. Hence a local extension rather than a field
+ * on the shared type.
+ */
+export interface LoadedPage extends FeedPage {
+  /**
+   * True when `POST /v1/profiles/batch` was needed and did not answer, so
+   * some cards on this page have no name to draw. Absent means either that
+   * every row arrived hydrated or that the hydration succeeded.
+   */
+  authorsUnresolved?: boolean
+}
+
 /** The same page size `./api.ts` uses, and for the same reason. */
 const PAGE_SIZE = 20
 
@@ -99,7 +116,7 @@ export function homeFeedParams(
 export async function fetchHomePage(
   section: HomeSection,
   cursor?: string | null
-): Promise<FeedPage> {
+): Promise<LoadedPage> {
   const res = await api.get<Envelope<FeedItem[]>>("/v1/feed/home", {
     params: homeFeedParams(section, cursor),
   })
@@ -185,52 +202,89 @@ export function hashtagParams(cursor?: string | null): Record<string, string | n
   }
 }
 
-export async function fetchHashtagPage(tag: string, cursor?: string | null): Promise<FeedPage> {
+export async function fetchHashtagPage(tag: string, cursor?: string | null): Promise<LoadedPage> {
   const res = await api.get<Envelope<FeedItem[]>>(hashtagPath(tag), {
     params: hashtagParams(cursor),
   })
-  const items = res.data?.data ?? []
+  const hydrated = await hydrateAuthors(res.data?.data ?? [])
   return {
-    items: await hydrateAuthors(items),
+    items: hydrated.items,
     nextCursor: res.data?.meta?.next_cursor || null,
+    authorsUnresolved: hydrated.unresolved,
   }
 }
 
+/** What `POST /v1/profiles/batch` sends back, in the fields a card reads. */
+interface BatchProfile {
+  display_name?: string
+  username?: string
+  /** The asset id. Present here AND on the feed's own author block. */
+  avatar_media_id?: string
+  /**
+   * `/v1/media/{id}/serve/avatar`, root-relative and non-expiring.
+   *
+   * profile-service derives this at marshal time from `avatar_media_id` and
+   * omits BOTH together when the owner's photo privacy excludes the viewer.
+   * Only the id is carried forward: the card builds the URL from it through
+   * @momentum/content's one rule, which is what every other surface has to do
+   * anyway — feed-service decodes this same route into a struct with no
+   * `avatar_url` field at all, so a home-feed row never sees one. Two ways of
+   * saying where a face is, on rows that sit in the same list, is the thing
+   * worth not having.
+   */
+  avatar_url?: string
+}
+
+interface Hydration {
+  items: FeedItem[]
+  /** True when the lookup was needed and failed. See `LoadedPage`. */
+  unresolved: boolean
+}
+
 /**
- * Put a name on posts that arrived without one.
+ * Put a name and a face on posts that arrived without one.
  *
- * `PostCard` reads `item.author?.display_name` and falls back to the string
- * "Someone". feed-service hydrates `author` for every row it serves;
- * post-service's posts-by-tag route does not, so without this every card in a
- * tag's feed is written by Someone — twenty identical strangers, which reads
- * as a rendering bug rather than as missing data. Android hit the same wall
- * and solved it the same way (`HashtagPostHydrator`).
+ * feed-service hydrates `author` for every row it serves; post-service's
+ * posts-by-tag route does not, so without this every card in a tag's feed is
+ * anonymous — twenty identical strangers, which reads as a rendering bug
+ * rather than as missing data. Android hit the same wall and solved it the
+ * same way (`HashtagPostHydrator`).
  *
- * One request per page, for the distinct authors on it, and it is allowed to
- * fail: a page of posts with no names on it is still a page of posts, and
- * throwing away twenty real posts because a profile lookup timed out would be
- * the wrong trade. The failure is silent for the same reason — there is
- * nothing the reader could do about it and nothing they need to decide.
+ * One request per page, for the distinct authors on it, and it is still
+ * allowed to fail: a page of posts with no names on it is still a page of
+ * posts, and throwing away twenty real posts because a profile lookup timed
+ * out would be the wrong trade.
+ *
+ * ── What is NOT allowed any more is failing SILENTLY ──────────────────────
+ * The note that stood here said the failure needed no announcement because
+ * "there is nothing the reader could do about it". There is: try again. And
+ * the cost of not saying so was the whole point — every card on the page
+ * falls through to the card's last-resort label at the same moment, so the
+ * normal appearance of a broken profile lookup was twenty identically
+ * unnamed posts with nothing anywhere to tell it apart from a product that
+ * had lost everybody's name. The outcome is reported now and the zone offers
+ * the retry.
  *
  * ── The response has no envelope ──────────────────────────────────────────
  * Every other gateway route answers `{data, error, meta}`. This one answers
- * the map directly, keyed by user id. Verified live; `res.data.data` is
- * undefined here and reading it would silently hydrate nothing, which is the
- * failure mode this note exists to prevent someone re-introducing.
+ * the map directly, keyed by user id — it is the one profile route built on
+ * gin's `c.JSON` rather than the shared `api.JSON` helper. Verified live;
+ * `res.data.data` is undefined here and reading it would silently hydrate
+ * nothing, which is the failure mode this note exists to prevent someone
+ * re-introducing.
  */
-async function hydrateAuthors(items: FeedItem[]): Promise<FeedItem[]> {
+async function hydrateAuthors(items: FeedItem[]): Promise<Hydration> {
   const missing = Array.from(
     new Set(items.filter((i) => !i.author?.display_name && i.author_id).map((i) => i.author_id))
   )
-  if (missing.length === 0) return items
+  if (missing.length === 0) return { items, unresolved: false }
 
   try {
-    const res = await api.post<Record<string, { display_name?: string; username?: string }>>(
-      "/v1/profiles/batch",
-      { user_ids: missing }
-    )
+    const res = await api.post<Record<string, BatchProfile>>("/v1/profiles/batch", {
+      user_ids: missing,
+    })
     const profiles = res.data ?? {}
-    return items.map((item) => {
+    const hydrated = items.map((item) => {
       const profile = profiles[item.author_id]
       if (!profile) return item
       const author: FeedAuthor = {
@@ -238,10 +292,16 @@ async function hydrateAuthors(items: FeedItem[]): Promise<FeedItem[]> {
         id: item.author_id,
         ...(profile.display_name ? { display_name: profile.display_name } : {}),
         ...(profile.username ? { username: profile.username } : {}),
+        ...(profile.avatar_media_id ? { avatar_media_id: profile.avatar_media_id } : {}),
       }
       return { ...item, author }
     })
+    // A 200 that omitted some of the ids is NOT a failure: profile-service
+    // drops blocked and lifecycle-hidden accounts from the map deliberately,
+    // so that a caller cannot find them by bisection. Those rows keep the
+    // card's last-resort label, which is the truth about them.
+    return { items: hydrated, unresolved: false }
   } catch {
-    return items
+    return { items, unresolved: true }
   }
 }

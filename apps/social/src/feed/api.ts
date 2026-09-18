@@ -15,11 +15,13 @@
  *
  * ── Routes verified against the running gateway, not guessed ──────────────
  *   GET    /v1/feed/home            ?limit&cursor&feed_mode
+ *   GET    /v1/posts/{id}                             -> the post AND its counts
  *   POST   /v1/posts/{id}/like      no body, TOGGLES  -> {liked, count}
  *   POST   /v1/posts/{id}/bookmark  no body, SETS     -> {bookmarked:true}
  *   DELETE /v1/posts/{id}/bookmark                    -> {bookmarked:false}
- *   POST   /v1/posts/{id}/repost    {type:"plain"}    -> 201
+ *   POST   /v1/posts/{id}/repost    {type:"plain"}    -> 201, NO COUNT
  *   DELETE /v1/posts/{id}/repost                      -> 204, EMPTY BODY
+ *   POST   /v1/posts/{id}/share     {share_type:…}    -> {shared:true, count}
  *   GET    /v1/posts/{id}/comments  ?cursor&limit     -> [Comment], next_cursor
  *   POST   /v1/posts/{id}/comments  {text:…}          -> 201, the new comment
  *   POST   /v1/feed/feedback   {post_id|author_id, signal}  -> 200
@@ -145,20 +147,112 @@ export async function setBookmark(postId: string, saved: boolean): Promise<{ on:
 }
 
 /**
- * Repost, or undo.
+ * The counts as the server has them right now.
  *
- * `type` is required on the create — a bare `{}` is a 422. The DELETE answers
- * **204 with no body at all**, so there is nothing to read and nothing to
- * parse; the state is inferred from the fact that it did not throw.
+ * ── Why this exists: two writes that report no number ─────────────────────
+ * `GET /v1/posts/{id}` returns post-service's `PostDetail`, which carries
+ * `counts.{likes,comments}`, `repost_count` and `has_reposted` — the same
+ * fields a feed row does. It is the authority for every count the card draws,
+ * and it is the only way to learn two of them after a write:
+ *
+ *   · the repost DELETE answers **204 with no body at all**, and the repost
+ *     CREATE answers 201 with the repost row and no count on it either;
+ *   · the comment create answers 201 with the new comment and nothing about
+ *     the POST's totals.
+ *
+ * Both used to be filled in by client arithmetic that was never corrected —
+ * `Math.max(0, (item.repost_count ?? 0) + 1)` and `comments + 1` — so a card
+ * that somebody else had also reposted drifted from the truth for as long as
+ * it stayed on screen, and nothing ever pulled it back.
+ *
+ * One request per write, and only for the writes that report nothing. `like`
+ * answers with its own count and is not read back.
  */
-export async function setRepost(postId: string, reposted: boolean): Promise<{ on: boolean }> {
+export interface PostCounts {
+  likes: number
+  comments: number
+  repostCount: number
+  hasReposted: boolean
+}
+
+interface PostDetailWire {
+  counts?: { likes?: number; comments?: number }
+  repost_count?: number
+  has_reposted?: boolean
+}
+
+export async function fetchPostCounts(postId: string): Promise<PostCounts | null> {
+  try {
+    const res = await api.get<Envelope<PostDetailWire>>(`/v1/posts/${postId}`)
+    const body = res.data?.data
+    if (!body) return null
+    return {
+      likes: body.counts?.likes ?? 0,
+      comments: body.counts?.comments ?? 0,
+      repostCount: body.repost_count ?? 0,
+      hasReposted: Boolean(body.has_reposted),
+    }
+  } catch {
+    // Null, not a throw. This is a RECONCILIATION: the write it follows has
+    // already succeeded, and turning a failed read-back into a failed repost
+    // would roll a control back over an action the server actually performed.
+    // The optimistic number stands until something else corrects it.
+    return null
+  }
+}
+
+/**
+ * Repost, or undo — answering with the count, which neither route sends.
+ *
+ * `type` is required on the create; a bare `{}` is a 422. The DELETE answers
+ * 204 with an empty body, so the state is inferred from the fact that it did
+ * not throw. Neither carries a number, so the number is read back — see
+ * `fetchPostCounts` for why that is worth a second request and why its
+ * failure is not this function's failure.
+ */
+export async function setRepost(
+  postId: string,
+  reposted: boolean
+): Promise<{ on: boolean; count?: number }> {
   const path = `/v1/posts/${postId}/repost`
   if (reposted) {
     await api.post(path, { type: "plain" })
-    return { on: true }
+  } else {
+    await api.delete(path)
   }
-  await api.delete(path)
-  return { on: false }
+  const counts = await fetchPostCounts(postId)
+  return { on: reposted, count: counts?.repostCount }
+}
+
+/**
+ * Record that a post left this browser as a link.
+ *
+ * ── `share_type`, and why "external" ──────────────────────────────────────
+ * post-service binds `oneof=repost quote external` and 400s anything else. A
+ * repost is the platform's own share and already has its own route above; a
+ * quote is a repost with text. What the share CONTROL does — hand the URL to
+ * the operating system's share sheet, or put it on the clipboard — is the
+ * third thing: the post leaving this product entirely. `external` is also the
+ * one of the three the server allows for a `followers`-visibility post, which
+ * is the right permission for it.
+ *
+ * ── Called only after the link has actually left ──────────────────────────
+ * Not on the press. `navigator.share` resolves when the sheet completes and
+ * rejects with an AbortError when the person changes their mind, and a share
+ * counted on the press would count every dismissed sheet. Same for the
+ * clipboard: the write can be refused by permissions.
+ *
+ * Failures are swallowed. The link is already shared by the time this runs;
+ * telling somebody their share failed when it plainly did not would be worse
+ * than an uncounted share. 429 RATE_LIMITED is a normal answer here — the
+ * route allows a bounded number of shares an hour.
+ */
+export async function recordShare(postId: string): Promise<void> {
+  try {
+    await api.post(`/v1/posts/${postId}/share`, { share_type: "external" })
+  } catch {
+    // See above: nothing a reader could do, and nothing they need to decide.
+  }
 }
 
 /* ── Comments ───────────────────────────────────────────────────────────── */
