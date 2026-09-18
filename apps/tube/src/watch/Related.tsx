@@ -54,6 +54,16 @@ export interface RelatedProps {
   onRetry: () => void
   /** Rendered as the rail's heading. */
   headingId: string
+  /**
+   * These rows came from the PUBLIC SHELF, not the related endpoint.
+   *
+   * A signed-out viewer cannot have recommendations — `/v1/feed/videos/{id}/
+   * related` ranks against a viewer and 401s without one — so the rail falls
+   * back to `GET /v1/posts/recent`. The heading changes, because "Next videos"
+   * over a list that has never heard of the video being watched is a claim the
+   * data does not support. See ./useRelated.ts.
+   */
+  unranked?: boolean
 }
 
 export function Related({
@@ -65,6 +75,7 @@ export function Related({
   onLoadMore,
   onRetry,
   headingId,
+  unranked = false,
 }: RelatedProps) {
   return (
     <section aria-labelledby={headingId}>
@@ -72,8 +83,13 @@ export function Related({
         id={headingId}
         className="font-mo-display text-sm font-semibold tracking-mo-display text-mo-ink"
       >
-        Next videos
+        {unranked ? "Recent videos" : "Next videos"}
       </h2>
+      {unranked && (
+        <p className="mt-1 text-xs text-mo-body">
+          Sign in for videos picked for you.
+        </p>
+      )}
 
       {loading && items.length === 0 && <RelatedSkeleton />}
 

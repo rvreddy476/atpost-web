@@ -19,10 +19,26 @@
  * `503 FEED_UNAVAILABLE` is hydration failing, and it is the one worth offering
  * a retry for: feed-service refuses to answer with un-hydrated ids, so a
  * transient dependency outage looks exactly like this and clears on its own.
+ *
+ * ── And for a viewer with no session, a different list entirely ───────────
+ * `GET /v1/feed/videos/{id}/related` is 401 without one — it ranks against a
+ * viewer, and there is no anonymous ranking — so a signed-out watch page
+ * cannot have recommendations in the strict sense. What it can have, and what
+ * `anonymous` switches to, is the same public shelf the signed-out home grid
+ * reads: `GET /v1/posts/recent?content_type=long_video`, unranked and
+ * unpersonalised, with this video filtered out of it.
+ *
+ * That is a REDUCTION and it is named as one: these are recent videos, not
+ * videos related to this one. It is still the right rail to draw, because the
+ * alternative for a stranger is an empty column beside a playing video and no
+ * way onward — which is the same dead end at the bottom of the page that
+ * letting them watch at all was meant to remove. ./Related.tsx says which list
+ * it is showing.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { FeedItem } from "@atpost/types/feed"
+import { fetchVideosPage } from "@/tube/api"
 import { fetchRelatedVideos } from "./api"
 
 export interface Related {
@@ -44,7 +60,17 @@ function messageFor(error: unknown): string {
   return "Related videos could not be loaded."
 }
 
-export function useRelated(postId: string, enabled = true): Related {
+export interface RelatedOptions {
+  /** No session: the public shelf instead of the ranked related list. */
+  anonymous?: boolean
+}
+
+export function useRelated(
+  postId: string,
+  enabled = true,
+  options: RelatedOptions = {}
+): Related {
+  const anonymous = Boolean(options.anonymous)
   const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -76,8 +102,15 @@ export function useRelated(postId: string, enabled = true): Related {
     else setLoadingMore(true)
 
     try {
-      const page = await fetchRelatedVideos(postId, cursor.current)
-      const fresh = page.items.filter((item) => !seen.current.has(item.id))
+      const page = anonymous
+        ? await fetchVideosPage(cursor.current, { anonymous: true })
+        : await fetchRelatedVideos(postId, cursor.current)
+      const fresh = page.items.filter(
+        // The seed is filtered out of the public shelf, which — unlike the
+        // related endpoint — has never heard of it and will happily return the
+        // video somebody is already watching as the first thing to watch next.
+        (item) => item.id !== postId && !seen.current.has(item.id)
+      )
       for (const item of fresh) seen.current.add(item.id)
       if (fresh.length > 0) setItems((prev) => [...prev, ...fresh])
       cursor.current = page.nextCursor
@@ -95,7 +128,7 @@ export function useRelated(postId: string, enabled = true): Related {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [enabled, ended, postId])
+  }, [anonymous, enabled, ended, postId])
 
   useEffect(() => {
     if (!enabled) return

@@ -39,7 +39,9 @@
 import Link from "next/link"
 import type { FeedItem } from "@atpost/types/feed"
 import { Avatar } from "@momentum/content"
+import { signInHref } from "@momentum/chrome"
 import { SubscribeControls } from "@/channel/SubscribeControls"
+import { ZONE } from "@/zone"
 import { itemChannelHref, subscribersLabel } from "@/tube/channels"
 import type { SubscriptionEdge } from "@/tube/useSubscription"
 import { creatorHandle, creatorName } from "@/tube/video"
@@ -47,9 +49,20 @@ import { creatorHandle, creatorName } from "@/tube/video"
 export interface ChannelRowProps {
   item: FeedItem
   subscription: SubscriptionEdge
+  /**
+   * Nobody is signed in.
+   *
+   * `SubscribeControls` already renders nothing in that case — the edge stays
+   * `undefined` because `useSubscription` never fetches without a viewer — and
+   * nothing is the wrong answer here. A channel row whose right-hand side is
+   * simply empty reads as a page that forgot a button, where the truth is that
+   * subscribing needs an account. So the control's SPACE keeps a link, and the
+   * link goes where it is useful.
+   */
+  signedOut?: boolean
 }
 
-export function ChannelRow({ item, subscription }: ChannelRowProps) {
+export function ChannelRow({ item, subscription, signedOut = false }: ChannelRowProps) {
   const name = creatorName(item)
   const handle = creatorHandle(item)
   const href = itemChannelHref(item)
@@ -86,7 +99,16 @@ export function ChannelRow({ item, subscription }: ChannelRowProps) {
         </p>
       </div>
 
-      <SubscribeControls edge={subscription} name={name} className="shrink-0" />
+      {signedOut ? (
+        <a
+          href={signInHref(ZONE)}
+          className="shrink-0 rounded-mo-pill border border-mo-strong px-4 py-1.5 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
+        >
+          Sign in to subscribe
+        </a>
+      ) : (
+        <SubscribeControls edge={subscription} name={name} className="shrink-0" />
+      )}
     </div>
   )
 }

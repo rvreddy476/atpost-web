@@ -133,6 +133,45 @@ export function WatchMissing() {
   )
 }
 
+/**
+ * The ROUTE said no, before the page ever ran.
+ *
+ * Distinct from `WatchMissing` above, and the distinction is the same one the
+ * rest of this file keeps. `WatchMissing` is the client's answer after it has
+ * looked through the videos ranked for THIS ACCOUNT and not found the one that
+ * was asked for — it is careful not to claim the video does not exist, because
+ * from inside one account that cannot be known.
+ *
+ * This is the answer to a request nobody could have been served: an id that is
+ * not a UUID, or a well-formed id that no stranger may read, reached by a
+ * visitor who is not signed in. It renders under a real HTTP 404, which is the
+ * point of it — the page it replaces was a "Sign in to watch" shell that a
+ * crawler would index and a cache would keep. See the head of
+ * app/[postId]/page.tsx.
+ *
+ * It offers sign-in as well as the way back, because one of the two ways to
+ * arrive here is being signed out, and the video may be perfectly visible to
+ * the account this person already has.
+ */
+export function WatchNotFound() {
+  return (
+    <Card>
+      <Search aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
+      <Title>There is no video at this link</Title>
+      <Body>
+        The link may be wrong, the video may have been taken down, or it may be private. If you
+        have an account, signing in may show it.
+      </Body>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <a href={signInHref(ZONE)} className={ACTION}>
+          Sign in
+        </a>
+        <BackToTube />
+      </div>
+    </Card>
+  )
+}
+
 export function WatchSignedOut() {
   return (
     <Card>

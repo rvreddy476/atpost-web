@@ -64,6 +64,9 @@
 
 import api from "@atpost/api-client"
 import type { FeedItem } from "@atpost/types/feed"
+import type { ReportReason } from "@momentum/content"
+import type { SubtitleTrack } from "./captions"
+import { parsePublicPost, watchableByAnyone } from "./publicPost"
 
 interface Envelope<T> {
   data?: T
@@ -409,6 +412,101 @@ export async function fetchPostSeries(postId: string): Promise<PostSeries | null
       `/v1/posts/${encodeURIComponent(postId)}/series`
     )
     return parsePostSeries(res.data?.data)
+  } catch (error) {
+    if (isNotFound(error)) return null
+    throw error
+  }
+}
+
+/* ── Captions ───────────────────────────────────────────────────────────── */
+
+/**
+ * The caption tracks on this video's media asset.
+ *
+ * Keyed on the MEDIA id, not the post id: captions belong to the asset, which
+ * is why the route is `/v1/subtitles` on media-service rather than another
+ * `/v1/posts/{id}/…` on post-service. `primaryVideo(item).media_id` is the one
+ * this page asks about.
+ *
+ * The envelope is `{"data":{"subtitles":[…]}}` — an OBJECT with one key, unlike
+ * every other endpoint in this file, which answer a bare array under `data`.
+ * That is media-service's `gin.H{"subtitles": subs}` and it is transcribed
+ * rather than smoothed over, because a reader who assumes the array shape gets
+ * `undefined` and a video with no caption button for no visible reason.
+ *
+ * A failure is an empty list and never a page error. The gate is the media
+ * gate, so a 403 here means this viewer may not read the transcript of a video
+ * they can watch — which is a thing the server is entitled to say and is not
+ * something to put an error box on a playing video for. No tracks means the
+ * player's CC button is simply absent, which it already handles.
+ */
+export async function fetchSubtitleTracks(mediaId: string): Promise<SubtitleTrack[]> {
+  const res = await api.get<Envelope<{ subtitles?: SubtitleTrack[] }>>(
+    `/v1/subtitles/${encodeURIComponent(mediaId)}`
+  )
+  return res.data?.data?.subtitles ?? []
+}
+
+/* ── Reporting the video ────────────────────────────────────────────────── */
+
+/**
+ * File a report against the video being watched.
+ *
+ * `/v1/reports` is trust-safety-service, NOT post-service — the gateway routes
+ * that prefix away — so the body is `{entity_type, entity_id, reason, details}`
+ * and `reason` comes from @momentum/content's `REPORT_REASONS`, which mirrors
+ * that service's own allowlist. The same call ../tube/discoverApi.ts makes for
+ * the card menu, repeated here rather than imported because this module owns
+ * the watch page's network and that one owns the grid's.
+ *
+ * 200 rather than 201 on success, and **409 ACTIVE_REPORT_EXISTS** when this
+ * person has already reported this video — their report is open in the
+ * moderation queue, which is the state they were trying to reach, so it is
+ * reported back as success.
+ */
+export async function reportVideo(
+  postId: string,
+  reason: ReportReason,
+  details: string
+): Promise<boolean> {
+  try {
+    await api.post("/v1/reports", {
+      entity_type: "post",
+      entity_id: postId,
+      reason,
+      details,
+    })
+    return true
+  } catch (error) {
+    return (error as { response?: { status?: number } }).response?.status === 409
+  }
+}
+
+/* ── The anonymous viewer's row ─────────────────────────────────────────── */
+
+/**
+ * One post, as a browser with no session may read it.
+ *
+ * `GET /v1/posts/{postId}` is optional-auth: post-service parses `X-User-Id`
+ * when there is one and passes `nil` otherwise, and `viewerMayViewPost` then
+ * admits `public` and `unlisted` to a stranger and answers 404 for everything
+ * else — private, followers-only, a private account's, not-yet-approved,
+ * still-processing, scheduled, deleted. One answer for all of them,
+ * deliberately, so the endpoint cannot be used to probe for posts.
+ *
+ * So the refusal IS the gate, and null is what it looks like from here. The
+ * caller draws the not-found state for it rather than an error, because
+ * nothing failed.
+ *
+ * Signed-in viewers never come through here — they get the hydrated feed row.
+ * The header of ./publicPost.ts lists what this row does not carry and why
+ * none of it is synthesised.
+ */
+export async function fetchPublicWatchPost(postId: string): Promise<FeedItem | null> {
+  try {
+    const res = await api.get<Envelope<unknown>>(`/v1/posts/${encodeURIComponent(postId)}`)
+    const item = parsePublicPost(res.data?.data)
+    return item && watchableByAnyone(item) ? item : null
   } catch (error) {
     if (isNotFound(error)) return null
     throw error

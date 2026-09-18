@@ -61,12 +61,10 @@
  * somebody who uses both clients is not learning two layouts for one screen.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Maximize2, Minimize2 } from "lucide-react"
 import { useSession } from "@atpost/api-client/session"
 import type { FeedItem } from "@atpost/types/feed"
-import { BRAND } from "@momentum/brand"
 import { absoluteTime, relativeTime } from "@momentum/content"
 import { ActionBar } from "@momentum/interactions"
 import {
@@ -85,12 +83,21 @@ import { useSubscription } from "@/tube/useSubscription"
 import { useTubeAnalytics } from "@/tube/useTubeAnalytics"
 import { useTubeFeed } from "@/tube/useTubeFeed"
 import { creatorName, noPictureReason, videoTitle, viewsLabel } from "@/tube/video"
+import { CommentThread } from "@/comments/CommentThread"
+import { ReportControl } from "@/comments/ReportControl"
+import { focusCommentId } from "@/comments/thread"
+import { useComments } from "@/comments/useComments"
+import { reportVideo } from "./api"
 import { readAutoplayNext, writeAutoplayNext } from "./autoplayPreference"
 import { Chapters } from "./Chapters"
 import { ChannelRow } from "./ChannelRow"
 import { COLUMN_GAP_PX, gridTemplateColumns } from "./columns"
+import { Description } from "./Description"
 import { EndScreen } from "./EndScreen"
-import { expandAriaLabel, expandLabel, frameClass, isExpanded } from "./expand"
+import { frameClass, isExpanded } from "./expand"
+import { SignedOutActions } from "./SignedOutActions"
+import { useCaptions } from "./useCaptions"
+import { usePublicWatch } from "./usePublicWatch"
 import { nextEpisode, previousEpisode, watchHref } from "./links"
 import { NextEpisodeCountdown } from "./NextEpisodeCountdown"
 import { CardPrompt, EndScreenOverlay } from "./Overlays"
@@ -116,9 +123,18 @@ import {
   BackToTube,
   WatchError,
   WatchMissing,
-  WatchSignedOut,
+  WatchNotFound,
   WatchSkeleton,
 } from "./states"
+
+/**
+ * The comment thread's heading, named once.
+ *
+ * The action row's comment control scrolls to it and moves focus there, and the
+ * thread renders it — so the string is shared rather than typed twice, because
+ * the failure of a mismatch is silent: the button simply does nothing.
+ */
+const COMMENTS_HEADING_ID = "tube-comments"
 
 /**
  * The one place this page decides where a video's row comes from.
@@ -129,20 +145,87 @@ import {
  * behind one named function means the replacement is here, once, rather than in
  * a component that also owns a player, a rail and three overlays.
  *
- * `enabled` is `!signedOut` rather than `signedIn`: `signedIn` is false while
- * the status is still "unknown", and a page that waited for certainty before
- * its first fetch would add a round trip to every visit.
+ * `enabled` is `signedIn`, and that is a change: it used to be `!signedOut`, so
+ * that the first fetch went out while the session was still "unknown" rather
+ * than costing a round trip. That was right while a signed-out visitor got
+ * nothing from this page — the optimism was free. It is wrong now that they get
+ * a DIFFERENT source: starting the ranked walk on "unknown" means every
+ * anonymous visit begins with a guaranteed 401 and a failed token refresh
+ * behind it, before the public read it actually needed. The skeleton covers the
+ * one render this costs, and the layout seeds the session from the request's
+ * own cookie, so in practice there is no gap at all.
  */
 function useWatchVideo(postId: string, enabled: boolean) {
   return useTubeFeed(postId, enabled)
 }
 
+/**
+ * Which of the two sources this visitor gets, and the four ways it can fail.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THIS PAGE USED TO REFUSE A SIGNED-OUT VISITOR OUTRIGHT
+ *
+ * It answered `WatchSignedOut` — "Videos are ranked for your account" — which
+ * was a true sentence about `GET /v1/feed/videos` and the wrong thing to do
+ * with it. The home grid works signed out (it falls back to the public shelf),
+ * so a stranger is now shown a wall of real videos and clicks one: a sign-in
+ * card on that first click is the worst of both, because they have already
+ * been shown the thing they are then told they cannot have.
+ *
+ * `GET /v1/posts/{postId}` is optional-auth and answers for a stranger on a
+ * public or unlisted video, so an anonymous viewer WATCHES. What they do not
+ * get is only what genuinely needs an account, and each of those is named at
+ * its own call site below rather than being switched off in one place here.
+ *
+ * ── The refusal is still the server's ─────────────────────────────────────
+ * Anything not public 404s to a nil viewer, and that arrives as `missing` and
+ * draws `WatchNotFound`. The route in app/[postId]/page.tsx already turns the
+ * same refusal into a real HTTP 404 for a signed-out request, so this is the
+ * client-side half of one gate rather than a second opinion.
+ */
 export function WatchScreen({ postId }: { postId: string }) {
   const session = useSession()
-  const feed = useWatchVideo(postId, !session.signedOut)
-  const item = feed.item
 
-  if (session.signedOut) return <WatchSignedOut />
+  /**
+   * `signedOut` is a settled NO, not "we have not looked yet".
+   *
+   * `useSession` reports three states and the middle one matters here: while
+   * the answer is unknown, neither source should be started — the ranked feed
+   * because it 401s for a stranger, the public read because it would fetch a
+   * second, thinner row for somebody who is about to get the hydrated one. The
+   * skeleton covers that gap, which is one render in practice because the
+   * layout seeds the provider from this request's own cookie.
+   */
+  const anonymous = Boolean(session.signedOut)
+  const known = Boolean(session.signedIn) || anonymous
+
+  const feed = useWatchVideo(postId, Boolean(session.signedIn))
+  const publicWatch = usePublicWatch(postId, anonymous)
+
+  if (!known) return <WatchSkeleton />
+
+  if (anonymous) {
+    if (publicWatch.loading && !publicWatch.item) return <WatchSkeleton />
+    if (publicWatch.error && !publicWatch.item) {
+      return <WatchError message={publicWatch.error} onRetry={publicWatch.retry} />
+    }
+    // The server will not show this to a stranger. Not `WatchMissing`, whose
+    // wording is about "the videos ranked for your account" and means nothing
+    // to somebody who has no account: `WatchNotFound` says the link may be
+    // wrong, private or taken down, and offers sign-in as the one thing that
+    // might change the answer.
+    if (publicWatch.missing || !publicWatch.item) return <WatchNotFound />
+    return (
+      <Watch
+        key={publicWatch.item.id}
+        item={publicWatch.item}
+        position={0}
+        patch={publicWatch.patch}
+      />
+    )
+  }
+
+  const item = feed.item
   if (feed.loading && !item) return <WatchSkeleton />
   if (feed.error && !item) return <WatchError message={feed.error} onRetry={feed.retry} />
   if (feed.deepLinkMissing) return <WatchMissing />
@@ -216,6 +299,17 @@ function Watch({
   const media = primaryVideo(item)
   const missing = noPictureReason(item)
 
+  /**
+   * The caption tracks, for the player's own CC menu.
+   *
+   * Keyed on the MEDIA id — captions belong to the asset, which is why the
+   * route is `/v1/subtitles/{mediaId}` on media-service rather than another
+   * `/v1/posts/{id}/…`. No tracks means the player draws no CC button, which
+   * it already handles; ./useCaptions.ts says why the URL has to be
+   * same-origin and what it does when it is not.
+   */
+  const captions = useCaptions(media?.media_id)
+
   /* ── The two elements this page has to measure ────────────────────────── */
 
   /**
@@ -255,8 +349,36 @@ function Watch({
   /* ── Everything the video links to ────────────────────────────────────── */
 
   const links = useWatchLinks(item.id, true)
-  const related = useRelated(item.id, true)
+  /**
+   * The rail. Ranked for a viewer, the public shelf for a stranger.
+   *
+   * `/v1/feed/videos/{id}/related` is 401 without a session, so a signed-out
+   * page cannot have recommendations — and an empty column beside a playing
+   * video is the same dead end that letting a stranger watch was meant to
+   * remove. ./useRelated.ts swaps in `GET /v1/posts/recent` and ./Related.tsx
+   * renames the heading, because "Next videos" over a list that has never heard
+   * of this video is a claim the data does not support.
+   */
+  const related = useRelated(item.id, true, { anonymous: !signedIn })
   const chapters = useMemo(() => orderedChapters(links.chapters), [links.chapters])
+
+  /**
+   * The same chapters, in the player's vocabulary.
+   *
+   * @momentum/player takes `{ startMs, title }` and deliberately not the wire
+   * row — see the header of its chapters.ts. The mapping is here because this
+   * is the side that knows what `start_ms` is called; moving the wire type into
+   * the package would drag the tube API's names into a package the feed also
+   * mounts. Titleless rows are dropped: a tick with no name is a mark nobody
+   * can act on and it would still take a slot in the scrubber.
+   */
+  const playerChapters = useMemo(
+    () =>
+      chapters
+        .filter((chapter) => chapter.title.trim().length > 0)
+        .map((chapter) => ({ startMs: chapter.start_ms, title: chapter.title })),
+    [chapters]
+  )
 
   /**
    * The episode either side of this one, from the same rows the rail draws.
@@ -469,18 +591,101 @@ function Watch({
       .catch(() => setNotice("Could not copy the link."))
   }, [analytics, item, position])
 
+  /* ── Comments ─────────────────────────────────────────────────────────── */
+
   /**
-   * Comments are not built on this surface yet, and the control says so.
+   * The comment a notification linked to, read from the address bar ONCE.
    *
-   * `@momentum/content` ships a `CommentSheet` and apps/social has it wired
-   * against the real endpoints, so this is a composition away rather than a
-   * missing capability. It is not built here because a comment sheet over a
-   * playing long video has its own decisions about pausing and focus, and half
-   * of one is worse than an honest note.
+   * `window.location.search` in an effect rather than `useSearchParams()`, and
+   * the reason is a build-time one: a client component that calls
+   * `useSearchParams` must sit under a Suspense boundary or Next refuses to
+   * render the route statically — and wrapping this whole screen in Suspense to
+   * read one optional query parameter would put a loading boundary around a
+   * player for the benefit of a deep link almost nobody arrives by. Read after
+   * mount, it is the same value with no boundary and no bail-out.
+   *
+   * `focusCommentId` validates it as a UUID before it becomes a path segment.
+   */
+  const [focusComment, setFocusComment] = useState<string | null>(null)
+  useEffect(() => {
+    setFocusComment(focusCommentId(window.location.search))
+  }, [])
+
+  /**
+   * The count the thread starts from, frozen at mount.
+   *
+   * A ref and not `item.counts.comments`, because the effect below writes the
+   * thread's count BACK into the feed row so the action bar above agrees with
+   * the heading below. Read live, that write would become the new base, the
+   * thread's own delta would be added to it a second time, and one comment
+   * would read as two. Frozen, the arithmetic has exactly one input.
+   *
+   * It is per video for free: `Watch` is keyed on the post.
+   */
+  const baseComments = useRef(item.counts?.comments ?? 0)
+
+  const comments = useComments({
+    postId: item.id,
+    viewerId,
+    baseCount: baseComments.current,
+    disabled: Boolean(item.no_comments),
+    focusId: focusComment,
+  })
+
+  /**
+   * One number, in two places, from one source.
+   *
+   * The action row draws `item.counts.comments` and the thread draws its own
+   * count; a comment posted at the bottom of the page that did not move the
+   * number at the top would read as a comment that did not save. The feed patch
+   * keeps them equal for as long as this page is open — the same mechanism
+   * `onLike` and `onSave` already use for likes and bookmarks.
+   */
+  const commentCountNow = comments.count
+  useEffect(() => {
+    if ((item.counts?.comments ?? 0) === commentCountNow) return
+    patch(item.id, {
+      counts: { likes: item.counts?.likes ?? 0, comments: commentCountNow },
+    })
+  }, [commentCountNow, item.counts, item.id, patch])
+
+  /**
+   * The action bar's comment control now goes TO the thread rather than
+   * apologising for its absence.
+   *
+   * It used to say "Comments open in the {app} for now", which was honest and
+   * is no longer true. Scrolling rather than opening a sheet: a sheet over a
+   * playing long video has to decide whether to pause, and the answer people
+   * actually want — keep watching while you read — is what a page that simply
+   * scrolls gives for free.
    */
   const onComment = useCallback(() => {
-    setNotice(`Comments open in the ${BRAND.mobileApp} for now.`)
+    const heading = document.getElementById(COMMENTS_HEADING_ID)
+    heading?.scrollIntoView({ behavior: "smooth", block: "start" })
+    // Focus follows the scroll, or a keyboard user is moved nowhere at all.
+    // `preventScroll` because the smooth scroll above is already doing it.
+    heading?.focus?.({ preventScroll: true })
   }, [])
+
+  /**
+   * Report the video.
+   *
+   * `ActionBar` has no report slot — it is likes, comments, save, repost and
+   * share — and adding one to a package three zones mount is a change to make
+   * from the package, not from a page. So the control sits beside the bar,
+   * using the same two-step picker every comment row uses, against
+   * trust-safety-service's own reason list.
+   */
+  const [videoReported, setVideoReported] = useState(false)
+  const onReportVideo = useCallback(
+    async (reason: Parameters<typeof reportVideo>[1], details: string) => {
+      const filed = await reportVideo(item.id, reason, details)
+      if (filed) setVideoReported(true)
+      else setNotice("That report could not be filed. Try again in a moment.")
+      return filed
+    },
+    [item.id]
+  )
 
   const title = videoTitle(item)
   const expanded = isExpanded(expand.mode)
@@ -513,118 +718,152 @@ function Watch({
     >
       {/* ── The player column ──────────────────────────────────────────── */}
       <div className="min-w-0">
-        {/* The player's box. `attachBox` goes HERE and not on the <video>: the
-            transport, the speaker, the expand control and both overlays are all
-            absolutely placed inside this element, and fullscreening the bare
-            video element would take the picture full screen and leave every
-            control behind in the page. */}
-        <div ref={attachBox} className={frameClass(expand.mode)}>
-          {missing || !media ? (
-            <NoPicture reason={missing ?? "missing"} />
-          ) : (
-            <MomentumVideo
-              source={{
-                // `playback_url` first, `hls_url` as the fallback: they are the
-                // same string today, but playback_url is the one that also
-                // carries `playback_kind: "original"` — a progressive MP4
-                // served while the transcode is still running.
-                hlsUrl: media.playback_url || media.hls_url,
-                progressiveUrl: pickProgressive(media),
-                durationMs: media.duration_ms,
-                width: media.width,
-                height: media.height,
-              }}
-              active={active}
-              /**
-               * Sound ON by default, which is the opposite of the feed and of
-               * reels, and is correct here. A feed video is something you
-               * scrolled past; a long video is something you navigated to and
-               * pressed. Read the header of soundPreference.ts before changing
-               * it.
-               */
-              muted={false}
-              className="absolute inset-0"
-              ariaLabel={media.alt_text || title}
-              session={watch}
-              onWatchEvent={onWatchEvent}
-              /* The OS media controls describe what is playing. The skip
-                 buttons are `undefined` outside a series; see `onNextTrack`
-                 above for why a rail must never supply them. */
-              mediaSession={metadataForPost(item, media)}
-              onNextTrack={onNextTrack}
-              onPreviousTrack={onPreviousTrack}
-              resolveUrl={resolveUrl}
-            />
-          )}
+        {/* The hole the player leaves behind when it expands.
 
-          {/* The countdown to the next episode, centred, while it runs. */}
-          {!missing && media && autoplay.state.kind === "counting" && (
-            <NextEpisodeCountdown
-              target={autoplay.state.target}
-              secondsLeft={autoplay.state.secondsLeft}
-              autoplayNext={autoplayNext}
-              onAutoplayNextChange={onAutoplayNextChange}
-              onPlayNow={autoplay.playNow}
-              onCancel={autoplay.cancel}
-            />
-          )}
+            `frameClass` turns the box `fixed` in theatre mode — inset 0, the
+            whole viewport — which takes it OUT OF THE FLOW. Without something
+            holding its place, the title, the channel row and everything under
+            them jump up by the height of a 16:9 player at the moment of
+            expansion and drop back at the moment of collapse, so leaving
+            fullscreen returns somebody to a page that has moved under them.
 
-          {/* The end screen: once the video has ended and nothing is counting
-              down. Not while `fired`, which is a navigation in flight, and
-              not while counting, because two overlays offering "next" at
-              once is one too many. */}
-          {!missing &&
-            media &&
-            playhead.ended &&
-            (autoplay.state.kind === "idle" || autoplay.state.kind === "cancelled") && (
-              <EndScreen related={related.items} next={seriesNext} onReplay={playhead.replay} />
+            `contents` while collapsed, so this element does not exist as far as
+            layout is concerned and the normal case is unchanged to the pixel.
+            A 16:9 block while expanded, which is exactly what left. */}
+        <div className={expanded ? "aspect-video w-full rounded-mo bg-mo-sunken" : "contents"}>
+          {/* The player's box. `attachBox` goes HERE and not on the <video>: the
+              transport, the speaker, the expand control and both overlays are all
+              absolutely placed inside this element, and fullscreening the bare
+              video element would take the picture full screen and leave every
+              control behind in the page. */}
+          <div ref={attachBox} className={frameClass(expand.mode)}>
+            {missing || !media ? (
+              <NoPicture reason={missing ?? "missing"} />
+            ) : (
+              <MomentumVideo
+                source={{
+                  // `playback_url` first, `hls_url` as the fallback: they are the
+                  // same string today, but playback_url is the one that also
+                  // carries `playback_kind: "original"` — a progressive MP4
+                  // served while the transcode is still running.
+                  hlsUrl: media.playback_url || media.hls_url,
+                  progressiveUrl: pickProgressive(media),
+                  durationMs: media.duration_ms,
+                  width: media.width,
+                  height: media.height,
+                }}
+                active={active}
+                /**
+                 * Sound ON by default, which is the opposite of the feed and of
+                 * reels, and is correct here. A feed video is something you
+                 * scrolled past; a long video is something you navigated to and
+                 * pressed. Read the header of soundPreference.ts before changing
+                 * it.
+                 */
+                muted={false}
+                /*
+                  The long-video chrome: speed, quality, captions, a volume
+                  slider, picture-in-picture, buffered ranges, a scrub tooltip,
+                  chapter ticks and the gear that hosts the first three. Off by
+                  default in @momentum/player, because the feed and reels want the
+                  small transport; this is the page that wants all of it.
+                */
+                chrome="full"
+                /*
+                  Fullscreen is the player's BUTTON and this page's BEHAVIOUR.
+
+                  ./expand.ts already owns the expansion: it chose the Fullscreen
+                  API over a theatre route (a route unmounts hls.js and splits one
+                  view into two for analytics), it carries the fixed-overlay
+                  fallback for browsers that refuse the API, and it owns the
+                  document scroll lock. Two owners for one expansion is a player
+                  that enters fullscreen and immediately leaves it — so the player
+                  draws the control, in the transport row where every long-video
+                  player puts it, and every press comes straight back here. `f`
+                  reaches the same toggle.
+                */
+                onToggleFullscreen={expand.toggle}
+                isFullscreen={expanded}
+                /* Speed, quality, caption language and volume are remembered per
+                   viewer. Signed out is the shared anonymous key. */
+                viewerId={viewerId}
+                /* The chapters this page already fetched, mapped to the player's
+                   two fields — @momentum/player must not learn the tube API's
+                   wire vocabulary. */
+                chapters={playerChapters}
+                /* The caption tracks, as `<track>` children. Empty until the
+                   list lands and empty for ever on a video with none — the CC
+                   button is then absent rather than disabled, which is the same
+                   absent-not-disabled rule the action row follows. */
+                captions={captions.tracks}
+                className="absolute inset-0"
+                ariaLabel={media.alt_text || title}
+                session={watch}
+                onWatchEvent={onWatchEvent}
+                /* The OS media controls describe what is playing. The skip
+                   buttons are `undefined` outside a series; see `onNextTrack`
+                   above for why a rail must never supply them. */
+                mediaSession={metadataForPost(item, media)}
+                onNextTrack={onNextTrack}
+                onPreviousTrack={onPreviousTrack}
+                resolveUrl={resolveUrl}
+              />
             )}
 
-          {/* The in-video card, at its timestamp. Top-left — the one corner
-              nothing else on this player wants. */}
-          {!missing && media && card && <CardPrompt card={card} onDismiss={dismissCard} />}
+            {/* The countdown to the next episode, centred, while it runs. */}
+            {!missing && media && autoplay.state.kind === "counting" && (
+              <NextEpisodeCountdown
+                target={autoplay.state.target}
+                secondsLeft={autoplay.state.secondsLeft}
+                autoplayNext={autoplayNext}
+                onAutoplayNextChange={onAutoplayNextChange}
+                onPlayNow={autoplay.playNow}
+                onCancel={autoplay.cancel}
+              />
+            )}
 
-          {/* The end screen, in its window and near the end. Never over the
-              bottom of the frame; ./Overlays.tsx says why. */}
-          {!missing && media && endScreens.length > 0 && (
-            <EndScreenOverlay
-              screens={endScreens}
-              channelName={creatorName(item)}
-              subscribe={subscribeControl ?? undefined}
-            />
-          )}
-
-          {/* "Full video" — the founder's control.
-
-              Bottom-RIGHT, which is the one corner of a player nothing else
-              wants: @momentum/player puts the speaker top-right and the
-              play/pause and seek bar bottom-left, and it is also where every
-              long-video player on the web puts this.
-
-              Always visible, and NOT revealed on hover like the player's own
-              transport. A hover-revealed control is invisible on every touch
-              device. When the player is expanded it is also the only way back
-              that this page draws, so hiding it would be a trap. */}
-          {!missing && media && (
-            <button
-              type="button"
-              onClick={expand.toggle}
-              aria-label={expandAriaLabel(expand.mode)}
-              className={[
-                "absolute bottom-3 right-3 z-30 inline-flex items-center gap-1.5",
-                "rounded-mo-pill bg-black/60 px-3 py-1.5 text-[12px] font-semibold text-white",
-                "transition-colors duration-150 ease-mo hover:bg-black/80",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-white",
-              ].join(" ")}
-            >
-              {expanded ? (
-                <Minimize2 aria-hidden className="h-3.5 w-3.5" />
-              ) : (
-                <Maximize2 aria-hidden className="h-3.5 w-3.5" />
+            {/* The end screen: once the video has ended and nothing is counting
+                down. Not while `fired`, which is a navigation in flight, and
+                not while counting, because two overlays offering "next" at
+                once is one too many. */}
+            {!missing &&
+              media &&
+              playhead.ended &&
+              (autoplay.state.kind === "idle" || autoplay.state.kind === "cancelled") && (
+                <EndScreen related={related.items} next={seriesNext} onReplay={playhead.replay} />
               )}
-              {expandLabel(expand.mode)}
-            </button>
-          )}
+
+            {/* The in-video card, at its timestamp. Top-left — the one corner
+                nothing else on this player wants. */}
+            {!missing && media && card && <CardPrompt card={card} onDismiss={dismissCard} />}
+
+            {/* The end screen, in its window and near the end. Never over the
+                bottom of the frame; ./Overlays.tsx says why. */}
+            {!missing && media && endScreens.length > 0 && (
+              <EndScreenOverlay
+                screens={endScreens}
+                channelName={creatorName(item)}
+                subscribe={subscribeControl ?? undefined}
+              />
+            )}
+
+            {/* "Full video" — the founder's control, now drawn by the player.
+
+                It used to be a labelled pill here at bottom-right, on the grounds
+                that this was "the one corner of a player nothing else wants".
+                That stopped being true: @momentum/player's full chrome puts
+                captions, the gear and picture-in-picture along the right end of
+                its transport row, and a pill pinned over them is a control
+                sitting on three other controls.
+
+                So the BUTTON moved into the transport, beside the others, where
+                every long-video player on the web has it — and the BEHAVIOUR did
+                not move at all. `onToggleFullscreen={expand.toggle}` above means
+                every press still lands in ./useExpand.ts, which keeps the
+                Fullscreen API, the fixed-overlay fallback, the Escape handling
+                and the document scroll lock exactly where they were. The way back
+                out is still three: the control, Escape, and the browser's own. */}
+          </div>
         </div>
 
         {/* Everything below is hidden while the player is expanded. Not for
@@ -656,30 +895,70 @@ function Watch({
             )}
           </p>
 
-          <ChannelRow item={item} subscription={subscription} />
+          {/* The channel, and — for a stranger — a link where the Subscribe
+              button would be. `useSubscription` never fetches without a viewer,
+              so the control would otherwise render as nothing at all, which
+              reads as a page that forgot a button. */}
+          <ChannelRow item={item} subscription={subscription} signedOut={!signedIn} />
 
           {/* The action row, horizontally, which is what @momentum/interactions'
               ActionBar already IS. apps/reels draws its own vertical rail over
-              a 9:16 frame and says why; this page has no such constraint. */}
+              a 9:16 frame and says why; this page has no such constraint.
+
+              Signed out it is a DIFFERENT component rather than this one with
+              its buttons disabled. Every control on `ActionBar` is a write the
+              gateway answers 401 to, and `useOptimisticToggle` would fill the
+              heart, bump the count, and then put both back with an error — a
+              worse answer than no button, because it teaches somebody the site
+              is broken rather than that they need an account.
+              ./SignedOutActions.tsx keeps the counts, keeps Share (which needs
+              no session at all) and offers the one thing that helps. */}
           <div className="mt-4">
-            <ActionBar
-              likes={item.counts?.likes ?? 0}
-              comments={item.counts?.comments ?? 0}
-              hasLiked={Boolean(item.has_reacted)}
-              isSaved={Boolean(item.is_bookmarked)}
-              noComments={item.no_comments}
-              hideShare={item.hide_share}
-              // Reposting a long video is a real capability on the server, and
-              // there is no repost flow anywhere on the web yet. Passing no
-              // handler is what removes the control; a control that opened
-              // nothing would be worse than its absence.
-              isRepostable={false}
-              onLike={onLike}
-              onSave={onSave}
-              onComment={onComment}
-              onShare={onShare}
-              label={title}
-            />
+            {signedIn ? (
+              <ActionBar
+                likes={item.counts?.likes ?? 0}
+                comments={item.counts?.comments ?? 0}
+                hasLiked={Boolean(item.has_reacted)}
+                isSaved={Boolean(item.is_bookmarked)}
+                noComments={item.no_comments}
+                hideShare={item.hide_share}
+                // Reposting a long video is a real capability on the server, and
+                // there is no repost flow anywhere on the web yet. Passing no
+                // handler is what removes the control; a control that opened
+                // nothing would be worse than its absence.
+                isRepostable={false}
+                onLike={onLike}
+                onSave={onSave}
+                onComment={onComment}
+                onShare={onShare}
+                label={title}
+              />
+            ) : (
+              <SignedOutActions
+                likes={item.counts?.likes ?? 0}
+                comments={item.counts?.comments ?? 0}
+                noComments={item.no_comments}
+                hideShare={item.hide_share}
+                onComment={onComment}
+                onShare={onShare}
+              />
+            )}
+
+            {/* Report, beside the bar rather than in it.
+
+                `ActionBar` is likes, comments, save, repost and share — it has
+                no report slot, and widening a package three zones mount is a
+                change to make from the package. The control is the same
+                two-step picker every comment row uses, so a person learns the
+                flow once. `hide_share` does not hide it: an author may switch
+                sharing off, and nobody may switch off being reported. */}
+            {signedIn && (
+              <ReportControl
+                label={`Report this video, ${title}`}
+                reported={videoReported}
+                onReport={onReportVideo}
+              />
+            )}
           </div>
 
           {/* Somebody who was moved is told so, and told where to. A player
@@ -701,8 +980,20 @@ function Watch({
           {/* The description. Collapsed to four lines with a control to open
               it — a long video's description is genuinely long, and pushing
               everything under it off the page by default is how the rest of the
-              page stops being found. */}
-          {item.text?.trim() && <Description text={item.text.trim()} />}
+              page stops being found.
+
+              It now LINKIFIES: a `1:23` in the text seeks the player, a #tag
+              searches, an @handle goes to the channel. ./linkify.ts carries
+              the rules, and the one that matters is which numbers are NOT
+              timestamps. `playhead.durationMs` rather than the post's, because
+              the element's duration is the one a seek will honour. */}
+          {item.text?.trim() && (
+            <Description
+              text={item.text.trim()}
+              durationMs={playhead.durationMs}
+              onSeek={playhead.seek}
+            />
+          )}
 
           <Chapters
             chapters={chapters}
@@ -713,13 +1004,19 @@ function Watch({
             isPreview={links.isPreview}
           />
 
-          <SeriesNext
-            episodes={links.seriesEpisodes}
-            postId={item.id}
-            seriesTitle={links.seriesTitle ?? undefined}
-            isPreview={links.isPreview}
-            autoplayNext={autoplayNext}
-            onAutoplayNextChange={onAutoplayNextChange}
+          {/* ── The thread ──────────────────────────────────────────────
+              Under the video and above "All videos", which is where a watch
+              page puts it and where the action row's comment control scrolls
+              to. It is inside the `inert` block, so an expanded player takes
+              the whole thread out of the tab order with everything else. */}
+          <CommentThread
+            state={comments}
+            viewerId={viewerId}
+            postAuthorId={item.author_id ?? null}
+            disabled={Boolean(item.no_comments)}
+            durationMs={playhead.durationMs}
+            onSeek={playhead.seek}
+            headingId={COMMENTS_HEADING_ID}
           />
 
           <div className="mt-8 border-t border-mo pt-5">
@@ -728,12 +1025,30 @@ function Watch({
         </div>
       </div>
 
-      {/* ── The recommendations rail ───────────────────────────────────────
-          A grid item, so in one column it falls under the description and in
-          two it sits beside the player — with no duplicate markup and no second
-          copy of the list to keep in step. `inert` for the same reason the
-          metadata is: it is behind a fixed overlay in theatre mode. */}
+      {/* ── The rails ──────────────────────────────────────────────────────
+          Both of them, in one grid item: in two columns they sit beside the
+          player, in one they fall below the whole left column — with no
+          duplicate markup and no second copy of either list to keep in step.
+
+          The series rail MOVED here from under the description. It belongs
+          beside the recommendations because they answer the same question —
+          "what do I watch after this" — and a queue that is a screen and a half
+          below the thing that plays next is a queue nobody uses. Ordered series
+          first: it is an ORDER the creator made, where the rail below it is a
+          set of suggestions, and the one with a promise behind it goes first.
+
+          `inert` for the same reason the metadata is: they are behind a fixed
+          overlay in theatre mode. */}
       <aside inert={expanded} className="min-w-0">
+        <SeriesNext
+          episodes={links.seriesEpisodes}
+          postId={item.id}
+          seriesTitle={links.seriesTitle ?? undefined}
+          isPreview={links.isPreview}
+          autoplayNext={autoplayNext}
+          onAutoplayNextChange={onAutoplayNextChange}
+        />
+
         <Related
           items={related.items}
           loading={related.loading}
@@ -743,43 +1058,9 @@ function Watch({
           onLoadMore={related.loadMore}
           onRetry={related.retry}
           headingId="tube-related"
+          unranked={!signedIn}
         />
       </aside>
     </article>
-  )
-}
-
-/**
- * The description, clamped, with a real button to expand it.
- *
- * `whitespace-pre-wrap` because an author's paragraph breaks are content: a
- * description written as a list of chapters collapses into one run-on
- * paragraph without it.
- *
- * The control is a `<button>` and not a click handler on the paragraph.
- * Clicking text that does not look like a control is undiscoverable, and it is
- * unreachable by keyboard — which on the one part of this page that can be
- * several paragraphs long is not a small thing.
- */
-function Description({ text }: { text: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="mt-5 rounded-mo bg-mo-surface p-4">
-      <p
-        className={`whitespace-pre-wrap text-sm leading-relaxed text-mo-body ${
-          open ? "" : "line-clamp-4"
-        }`}
-      >
-        {text}
-      </p>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="mt-2 text-sm font-semibold text-mo-cyan underline underline-offset-2"
-      >
-        {open ? "Show less" : "Show more"}
-      </button>
-    </div>
   )
 }
