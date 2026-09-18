@@ -52,10 +52,14 @@ export type Visibility = "public" | "followers" | "private" | "unlisted"
  * no phone string to copy.
  */
 export const VISIBILITY_OPTIONS: { value: Visibility; label: string; hint: string }[] = [
-  { value: "public", label: "Public", hint: "Anyone on Momentum" },
-  { value: "unlisted", label: "Unlisted", hint: "Anyone with the link" },
-  { value: "followers", label: "Followers", hint: "People who follow you" },
-  { value: "private", label: "Private", hint: "Only you" },
+  { value: "public", label: "Public", hint: "Anyone can find and watch it." },
+  {
+    value: "unlisted",
+    label: "Unlisted",
+    hint: "Only people with the link. It stays off search and off your channel's grid.",
+  },
+  { value: "followers", label: "Followers", hint: "Only people who follow you." },
+  { value: "private", label: "Private", hint: "Only you." },
 ]
 
 /* ── Category ─────────────────────────────────────────────────────────────── */
@@ -99,43 +103,112 @@ export const FALLBACK_CATEGORIES: { id: string; label: string }[] = [
   { id: "other", label: "Other" },
 ]
 
+/**
+ * The server's own rule for what `posts.category` may hold, reimplemented.
+ *
+ * post-service `NormalizeCategory` (internal/service/categories.go), read
+ * 2026-09-18: `strings.ToLower(strings.TrimSpace(raw))`, then every internal
+ * run of whitespace collapsed to a single `-`. Empty in, empty out. It runs on
+ * EVERY write path — create, the draft PATCH, migration 047 for the rows
+ * already stored.
+ *
+ * ── Why the browser repeats a rule the server will apply anyway ───────────
+ * Because the studio offers a free-text category and the founder asked to see
+ * "what is the category type of video". A combobox that accepts "Home Repair"
+ * and silently stores `home-repair` is a form that lies about its own value,
+ * and the person only finds out when the chip rail on the home grid shows a
+ * word they did not type. Normalising as they type means the field shows the
+ * stored value, and the two can never drift.
+ *
+ * Long videos are NOT held to the taxonomy — `resolveCreateCategory` only
+ * enforces it for `content_type: "flick"` — which is why a custom value is
+ * allowed here at all. The list is still offered first, for the reason
+ * FALLBACK_CATEGORIES gives.
+ */
+export function normaliseCategory(raw: string): string {
+  const id = raw.trim().toLowerCase()
+  if (!id) return ""
+  return id.replace(/\s+/g, "-")
+}
+
 /* ── The smaller enumerations ─────────────────────────────────────────────── */
 
 /**
- * Only values that were seen accepted are offered.
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THE VOCABULARY IS THE `reel_drafts` CHECK CONSTRAINTS, NOT A GUESS.
  *
- * `remix_setting`, `comment_moderation` and `comment_access` are plain
- * strings in the create struct, not `oneof`s, so the server takes anything and
- * a client can invent a value that no reader ever matches. Two of each were
- * confirmed on the wire — the server's own default, and one alternative that
- * read back unchanged — and that is the entire menu. Guessing a third
- * ("subscribers", "hold_links", "allow_with_credit" all look plausible) would
- * be shipping a control whose effect nobody has observed.
+ * `remix_setting`, `comment_moderation`, `comment_access` and `license` are
+ * plain strings in `CreatePostRequest`, and the `posts` columns migration 006
+ * adds carry NO check constraint — so `POST /v1/posts` accepts literally
+ * anything and echoes it back. "It read back unchanged" is therefore evidence
+ * of nothing at all, and an earlier pass of this file drew exactly that wrong
+ * conclusion from it.
  *
- * The probe that would settle the rest is a create per value, and
- * `POST /v1/posts` is capped at 20 an hour. That is the honest reason the
- * list is short.
+ * The server DOES declare a vocabulary, in the one place it had to: migration
+ * 006's `reel_drafts` table, read 2026-09-18.
+ *
+ *     license             CHECK (license IN ('standard', 'creative_commons'))
+ *     remix_setting       CHECK (remix_setting IN ('allow', 'allow_audio_only',
+ *                                                  'disallow'))
+ *     comment_moderation  CHECK (comment_moderation IN ('none', 'basic',
+ *                                                       'strict', 'hold_all'))
+ *     comment_access      CHECK (comment_access IN ('everyone', 'followers',
+ *                                                   'nobody'))
+ *
+ * Those are the only values any part of this server has ever named. The
+ * previous menu here offered `remix_setting: "deny"` and `license: "cc-by"`,
+ * neither of which appears anywhere in post-service: they would sit in the
+ * column unread by every consumer, and — since ./draftPayload.ts now writes
+ * drafts — a `"deny"` would fail the CHECK outright.
+ *
+ * So the studio speaks the constrained vocabulary, which both tables accept.
  */
 export const REMIX_OPTIONS = [
-  { value: "allow", label: "Allow remix", hint: "Other people can build on this video" },
-  { value: "deny", label: "No remixing", hint: "Nobody can build on this video" },
+  { value: "allow", label: "Allow remixing", hint: "Other people can build on this video." },
+  {
+    value: "allow_audio_only",
+    label: "Audio only",
+    hint: "People may reuse the sound, not the picture.",
+  },
+  { value: "disallow", label: "No remixing", hint: "Nobody can build on this video." },
 ] as const
 
-export const COMMENT_MODERATION_OPTIONS = [
-  { value: "none", label: "Publish immediately", hint: "Comments appear as they are written" },
-  { value: "hold_all", label: "Hold for review", hint: "Nothing appears until you approve it" },
-] as const
+/**
+ * Comments, as one question instead of three switches.
+ *
+ * The founder's screen has one row for comments and the server has three
+ * columns, so the mapping lives in `commentWire` below and is asserted field
+ * by field. `basic` and `strict` are real values the drafts table names, and
+ * they are deliberately NOT offered: nothing in post-service reads
+ * `comment_moderation` at all yet, so the two that describe a filter nobody
+ * has written would be controls that do nothing. `hold_all` is offered
+ * because "nothing appears until you approve it" is a promise the column at
+ * least records honestly.
+ */
+export type CommentsMode = "on" | "review" | "off"
 
+export const COMMENTS_MODE_OPTIONS = [
+  { value: "on", label: "Comments on", hint: "Comments appear as they are written." },
+  {
+    value: "review",
+    label: "Comments on, with approval",
+    hint: "Nothing appears under the video until you approve it.",
+  },
+  { value: "off", label: "Comments off", hint: "Nobody can comment on this video." },
+] as const satisfies readonly { value: CommentsMode; label: string; hint: string }[]
+
+/** `nobody` is a legal `comment_access` and is not offered: "nobody may
+ *  comment" is what "Comments off" above already says, and two controls that
+ *  can contradict each other is how a video ends up with comments on and an
+ *  audience of no one. */
 export const COMMENT_ACCESS_OPTIONS = [
-  { value: "everyone", label: "Everyone", hint: "" },
-  { value: "followers", label: "Followers", hint: "People who follow you" },
+  { value: "everyone", label: "Everyone", hint: "Anyone who can watch it." },
+  { value: "followers", label: "Followers", hint: "Only people who follow you." },
 ] as const
 
-/** `license` is free text; "standard" is the server's default and "cc-by" was
- *  stored verbatim. */
 export const LICENSE_OPTIONS = [
   { value: "standard", label: "Standard Momentum licence" },
-  { value: "cc-by", label: "Creative Commons — Attribution (CC BY)" },
+  { value: "creative_commons", label: "Creative Commons — Attribution" },
 ] as const
 
 /** A short list rather than every ISO code. The phone hardcodes `"en"`. */
@@ -161,6 +234,32 @@ export const TAGS_MAX = 20
 export const TAG_MAX_LENGTH = 50
 export const SCHEDULE_MIN_MS = 5 * 60 * 1000
 export const SCHEDULE_MAX_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * Hashtags and mentions are their own fields, with their own ceilings.
+ *
+ * post-service `explicit_tags.go` (`NormalizeExplicitHashtags` /
+ * `NormalizeExplicitMentions`), read 2026-09-18. Every one of these is a HARD
+ * 400 on the whole create, not a dropped entry:
+ *
+ *   · hashtags — at most 30, each 1–50 RUNES, `^[\p{L}\p{M}\p{N}_]+$` after a
+ *     leading `#` is stripped, lowercased for the index, deduped.
+ *   · mentions — at most 20, each 1–30 characters of `^[A-Za-z0-9_.]+$` after
+ *     a leading `@`, case KEPT (user-service owns username case), deduped
+ *     case-insensitively.
+ *
+ * They are merged server-side with whatever the description's own parser
+ * finds, so a `#tag` typed into the description arrives anyway — these fields
+ * are the studio's way of adding one without cluttering the text.
+ */
+export const HASHTAGS_MAX = 30
+export const HASHTAG_MAX_LENGTH = 50
+export const MENTIONS_MAX = 20
+export const MENTION_MAX_LENGTH = 30
+
+/** The server's alphabets, as the two regexes it actually compiles. */
+export const HASHTAG_PATTERN = /^[\p{L}\p{M}\p{N}_]+$/u
+export const MENTION_PATTERN = /^[A-Za-z0-9_.]+$/
 
 /**
  * The title's length in the units the server counts.
@@ -202,9 +301,14 @@ export interface VideoDraft {
   seoTitle: string
   description: string
   visibility: Visibility
+  /** Already slug-normalised — see `normaliseCategory`. The box shows this. */
   category: string
   language: string
   tags: string[]
+  /** `#` stripped, lowercased, ready for the wire. */
+  hashtags: string[]
+  /** `@` stripped, case kept. */
+  mentions: string[]
 
   /**
    * The made-for-kids declaration. `null` means "not answered yet".
@@ -223,12 +327,28 @@ export interface VideoDraft {
   license: string
 
   allowEmbedding: boolean
-  publishToFeed: boolean
+  /**
+   * "Show in the main feed" and "Tell my subscribers".
+   *
+   * ── Two switches, one typed object, and one legacy column ─────────────
+   * `distribution` (migration 025, `service/distribution.go`) is the typed,
+   * versioned policy: `{version:1, main_feed, notify_subscribers,
+   * create_reel_preview}`. When it is present it is AUTHORITATIVE and the
+   * legacy `publish_to_feed` column is not consulted at all
+   * (`ResolveDistributionWithLegacy`). The studio sends both, agreeing, so
+   * that a consumer reading either one gets the same answer.
+   *
+   * `create_reel_preview` is NOT here, and that is the server's decision:
+   * `ParseDistributionPolicy` answers 400 UNSUPPORTED_DISTRIBUTION for
+   * `create_reel_preview: true`, in as many words — "not yet supported". A
+   * switch for it would be a switch that fails the publish.
+   */
+  mainFeed: boolean
+  notifySubscribers: boolean
   remixSetting: string
-  commentModeration: string
+  /** One question. `commentWire` turns it into the three columns. */
+  commentsMode: CommentsMode
   commentAccess: string
-  /** The phone's "Allow comments", inverted on the wire into `no_comments`. */
-  allowComments: boolean
   allowLikes: boolean
   /** The phone's "Hide share button", sent as-is. */
   hideShare: boolean
@@ -284,6 +404,8 @@ export function emptyDraft(): VideoDraft {
     category: "",
     language: "en",
     tags: [],
+    hashtags: [],
+    mentions: [],
 
     madeForKids: null,
     paidPromotion: false,
@@ -291,11 +413,11 @@ export function emptyDraft(): VideoDraft {
     license: "standard",
 
     allowEmbedding: true,
-    publishToFeed: true,
+    mainFeed: true,
+    notifySubscribers: true,
     remixSetting: "allow",
-    commentModeration: "none",
+    commentsMode: "on",
     commentAccess: "everyone",
-    allowComments: true,
     allowLikes: true,
     hideShare: false,
     allowDownload: true,
@@ -452,6 +574,41 @@ export function validateDraft(
     })
   }
 
+  // Every one of these is a 400 on the WHOLE create, not a dropped entry —
+  // `NormalizeExplicitHashtags` returns an error and `CreatePost` never runs.
+  // So they are caught here, where a 429 is not the price of finding out.
+  if (draft.hashtags.length > HASHTAGS_MAX) {
+    issues.push({
+      field: "hashtags",
+      step: "details",
+      message: `${draft.hashtags.length} hashtags. The limit is ${HASHTAGS_MAX}.`,
+    })
+  }
+  const badHashtag = draft.hashtags.find((tag) => normaliseHashtag(tag) === null)
+  if (badHashtag !== undefined) {
+    issues.push({
+      field: "hashtags",
+      step: "details",
+      message: `"${badHashtag.slice(0, 20)}" is not a hashtag the server accepts. Letters, digits and underscores only, up to ${HASHTAG_MAX_LENGTH} characters.`,
+    })
+  }
+
+  if (draft.mentions.length > MENTIONS_MAX) {
+    issues.push({
+      field: "mentions",
+      step: "details",
+      message: `${draft.mentions.length} mentions. The limit is ${MENTIONS_MAX}.`,
+    })
+  }
+  const badMention = draft.mentions.find((name) => normaliseMention(name) === null)
+  if (badMention !== undefined) {
+    issues.push({
+      field: "mentions",
+      step: "details",
+      message: `"${badMention.slice(0, 20)}" is not a username the server accepts. Letters, digits, dots and underscores only, up to ${MENTION_MAX_LENGTH} characters.`,
+    })
+  }
+
   const seriesProblem = seriesIssue(draft, series)
   if (seriesProblem) {
     issues.push({ field: "series", step: "details", message: seriesProblem })
@@ -543,9 +700,23 @@ export type PublishAction =
  * rather than a required step. It is kept for the `public + now` case because
  * that is the case where it is both harmless and what the route exists for.
  */
-export function publishAction(draft: VideoDraft): PublishAction {
+/**
+ * @param assetReady the transcode has finished AND moderation has passed. When
+ *   it has not — the "publish while it is still processing" path, which the
+ *   server added on 2026-09-04 and which ../studio/machine.ts's `publishGate`
+ *   decides — the `publish` call is DROPPED rather than attempted:
+ *   `POST /v1/videos/{id}/publish` is gated on `video_metadata.upload_status`
+ *   being `ready` and answers 409 NOT_READY until the transcode consumer flips
+ *   it. The post is created anyway (`mediaConfirmed` accepts `uploaded` /
+ *   `processing` / `ready`), held author-only by `hiddenWhileProcessing`, and
+ *   released to everyone the moment the media row goes ready+passed. That is
+ *   the same end state the publish call would have produced, reached without a
+ *   409 in the middle of it.
+ */
+export function publishAction(draft: VideoDraft, assetReady = true): PublishAction {
   if (draft.scheduleMode === "at") return "schedule"
-  return draft.visibility === "public" ? "publish" : "create"
+  if (draft.visibility !== "public") return "create"
+  return assetReady ? "publish" : "create"
 }
 
 /** The Post button's word. The phone's: "Post", or "Schedule" when a time is set. */
@@ -572,11 +743,39 @@ export function publishButtonLabel(draft: VideoDraft): string {
  * The column is a plain tag list, and `#howto` and `howto` sitting in it as
  * two different tags is a search index with a hole in it.
  */
+/**
+ * One question on screen, three columns on the wire.
+ *
+ * `no_comments` is the switch the phone has and the only one anything
+ * currently reads. `comment_moderation` and `comment_access` are recorded
+ * alongside it so that the day something does read them, the answer is the one
+ * the creator gave rather than a default.
+ *
+ * "Off" sends `comment_moderation: "none"` and NOT `"hold_all"`: with comments
+ * closed there is nothing to hold, and a row that says "hold every comment for
+ * approval" on a video that accepts none would read, to anything inspecting
+ * it later, as a moderation queue that exists.
+ */
+export function commentWire(mode: CommentsMode): {
+  no_comments: boolean
+  comment_moderation: string
+} {
+  switch (mode) {
+    case "on":
+      return { no_comments: false, comment_moderation: "none" }
+    case "review":
+      return { no_comments: false, comment_moderation: "hold_all" }
+    case "off":
+      return { no_comments: true, comment_moderation: "none" }
+  }
+}
+
 export function toCreateRequest(
   draft: VideoDraft,
   mediaId: string,
   coverMediaId?: string | null
 ): CreateLongVideoRequest {
+  const comments = commentWire(draft.commentsMode)
   const body: CreateLongVideoRequest = {
     content_type: "long_video",
     visibility: draft.visibility,
@@ -594,14 +793,26 @@ export function toCreateRequest(
     license: draft.license,
 
     allow_embedding: draft.allowEmbedding,
-    publish_to_feed: draft.publishToFeed,
     remix_setting: draft.remixSetting,
-    comment_moderation: draft.commentModeration,
+    comment_moderation: comments.comment_moderation,
     comment_access: draft.commentAccess,
-    no_comments: !draft.allowComments,
+    no_comments: comments.no_comments,
     no_likes: !draft.allowLikes,
     hide_share: draft.hideShare,
     allow_download: draft.allowDownload,
+
+    // Both, agreeing. The typed policy wins wherever it is read
+    // (`ResolveDistributionWithLegacy`); `publish_to_feed` is the column an
+    // older consumer still reads, and leaving it at its default while the
+    // policy said `main_feed: false` would give two readers two answers.
+    // `create_reel_preview` is never sent — `true` is 400
+    // UNSUPPORTED_DISTRIBUTION and `false` says nothing.
+    publish_to_feed: draft.mainFeed,
+    distribution: {
+      version: 1,
+      main_feed: draft.mainFeed,
+      notify_subscribers: draft.notifySubscribers,
+    },
   }
 
   const seoTitle = draft.seoTitle.trim()
@@ -610,11 +821,27 @@ export function toCreateRequest(
   const text = draft.description.trim()
   if (text) body.text = text
 
-  const category = draft.category.trim()
+  // Normalised again rather than trusted: `NormalizeCategory` runs on the
+  // server whatever arrives, so sending the un-normalised spelling would mean
+  // the studio showed one value and the column held another.
+  const category = normaliseCategory(draft.category)
   if (category) body.category = category
 
   const tags = normaliseTags(draft.tags)
   if (tags.length) body.tags = tags
+
+  // Already normalised by the chip inputs, and normalised again here so the
+  // wire is right whatever put the values in the draft — a restored server
+  // draft, for one, which has been through a different machine's form.
+  const hashtags = dedupeFold(
+    draft.hashtags.map(normaliseHashtag).filter((t): t is string => t !== null)
+  )
+  if (hashtags.length) body.hashtags = hashtags
+
+  const mentions = dedupeFold(
+    draft.mentions.map(normaliseMention).filter((m): m is string => m !== null)
+  )
+  if (mentions.length) body.mentions = mentions
 
   if (draft.recordingDate) body.recording_date = draft.recordingDate
   const location = draft.recordingLocation.trim()
@@ -633,6 +860,53 @@ export function toCreateRequest(
   }
 
   return body
+}
+
+/**
+ * A hashtag, as `NormalizeExplicitHashtags` would store it, or null if the
+ * server would refuse it.
+ *
+ * Null rather than "cleaned up": the server does not drop a bad entry, it
+ * refuses the whole create with 400 INVALID_HASHTAG. Silently stripping the
+ * characters it dislikes would put a tag the person did not write on their
+ * video; refusing it at the chip input tells them while they can still fix it.
+ */
+export function normaliseHashtag(raw: string): string | null {
+  const tag = raw.trim().replace(/^#/, "")
+  if (!tag) return null
+  if (runeLength(tag) > HASHTAG_MAX_LENGTH) return null
+  if (!HASHTAG_PATTERN.test(tag)) return null
+  return tag.toLowerCase()
+}
+
+/**
+ * A mention, likewise. Case is KEPT — `NormalizeExplicitMentions` keeps it
+ * because user-service owns username case — but the de-duplication that
+ * follows is case-insensitive, exactly as the server's is.
+ *
+ * The length bound is `.length` and not `runeLength`, because the server's is
+ * `len(name)` on a string whose alphabet is `[A-Za-z0-9_.]`: every legal
+ * character is one byte, one rune and one UTF-16 unit, so all three agree.
+ */
+export function normaliseMention(raw: string): string | null {
+  const name = raw.trim().replace(/^@/, "")
+  if (!name) return null
+  if (name.length > MENTION_MAX_LENGTH) return null
+  if (!MENTION_PATTERN.test(name)) return null
+  return name
+}
+
+/** De-duplicate case-insensitively, keeping the first spelling. */
+export function dedupeFold(values: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const value of values) {
+    const key = value.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(value)
+  }
+  return out
 }
 
 /** Trim, drop a leading `#`, drop blanks, de-duplicate case-insensitively. */
@@ -657,7 +931,11 @@ export function normaliseTags(tags: string[]): string[] {
  * the last chance to notice a mistake is the moment before it becomes one.
  */
 export function publishSummary(draft: VideoDraft): string {
-  const action = publishAction(draft)
+  // `assetReady: true` deliberately: this sentence is about the CHOICE, and
+  // the choice does not change while a transcode runs. Whether the extra
+  // publish call is made is an implementation detail of that same choice —
+  // `publishChecklist` is where the processing wait gets its own line.
+  const action = publishAction(draft, true)
   const audience =
     VISIBILITY_OPTIONS.find((o) => o.value === draft.visibility)?.label ?? draft.visibility
 
@@ -676,4 +954,138 @@ export function publishSummary(draft: VideoDraft): string {
   }
   if (action === "publish") return "Published now, visible to anyone on Momentum."
   return `Posted now, visible to ${audience.toLowerCase()}. It will not be made public.`
+}
+
+/* ── The checklist ────────────────────────────────────────────────────────── */
+
+/**
+ * What pressing the button will do, as a list of sentences.
+ *
+ * ── Why a list and not the one summary sentence above ─────────────────────
+ * `publishSummary` answers "when and to whom", which was enough while the
+ * studio sent nine fields. It now sends twenty-odd, and three of them are
+ * things a creator would be upset to get wrong in a direction no sentence
+ * mentions: a video that quietly notified forty thousand subscribers, a video
+ * that never reached the main feed, a video whose comments are closed. Each
+ * gets its own line, in the order somebody worries about them, and each line
+ * says what WILL happen rather than what was configured.
+ *
+ * Pure, and returned as data rather than JSX, so ./fields.test.ts can assert
+ * the sentences without rendering anything.
+ */
+export interface PublishStep {
+  /** Stable key, for React and for the test. */
+  id: string
+  label: string
+  /** True when this is a thing that will happen, false when it will not.
+   *  The review step marks both with a WORD as well as an icon. */
+  on: boolean
+}
+
+export function publishChecklist(draft: VideoDraft, assetReady = true): PublishStep[] {
+  const action = publishAction(draft, assetReady)
+
+  /**
+   * The audience line is the RADIO ROW'S OWN SENTENCE, not a restatement.
+   *
+   * It said "Visible to followers" first, and that was wrong in a way worth
+   * recording: `followers` and `unlisted` are the COLUMN's words, and the
+   * whole reason the four visibility rows carry a sentence each is that those
+   * words mean nothing to somebody meeting them for the first time. A
+   * checklist that describes the choice differently from the control that made
+   * it is two vocabularies for one decision — the same failure the phone/web
+   * wording notes at the top of this file exist to prevent.
+   *
+   * So it reuses `VISIBILITY_OPTIONS[].hint` verbatim. Each hint is already a
+   * complete sentence about who can see the video ("Only people who follow
+   * you."), which is exactly what this list is for, and the two can no longer
+   * drift because there is only one string.
+   */
+  const audience =
+    VISIBILITY_OPTIONS.find((o) => o.value === draft.visibility)?.hint ?? draft.visibility
+
+  const steps: PublishStep[] = []
+
+  if (action === "schedule") {
+    const at = parseLocalDateTime(draft.scheduleAt)
+    steps.push({
+      id: "when",
+      label: at
+        ? `It goes live on ${new Date(at).toLocaleString(undefined, {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}, your time.`
+        : "It goes live at the time you picked.",
+      on: true,
+    })
+  } else {
+    steps.push({ id: "when", label: "It goes live as soon as you press the button.", on: true })
+  }
+
+  // The hint is a finished sentence and carries its own full stop, so nothing
+  // is appended to it — "Only you.." is the kind of detail that makes a
+  // careful screen look careless.
+  steps.push({ id: "audience", label: `Who can see it: ${audience}`, on: true })
+
+  if (!assetReady) {
+    // The honest version of "publish now while it processes": the post exists
+    // immediately and only its author can see it until the encode finishes.
+    steps.push({
+      id: "processing",
+      label: "Until processing finishes, only you can see it. It appears for everyone else by itself.",
+      on: true,
+    })
+  }
+
+  steps.push({
+    id: "subscribers",
+    label: draft.notifySubscribers
+      ? "Your subscribers are told about it."
+      : "Your subscribers are not told about it.",
+    on: draft.notifySubscribers,
+  })
+
+  steps.push({
+    id: "feed",
+    label: draft.mainFeed
+      ? "It can appear in the main feed."
+      : "It stays on your channel and out of the main feed.",
+    on: draft.mainFeed,
+  })
+
+  steps.push({
+    id: "comments",
+    label:
+      draft.commentsMode === "off"
+        ? "Comments are closed."
+        : draft.commentsMode === "review"
+          ? "Comments are held until you approve them."
+          : `Comments are open to ${
+              COMMENT_ACCESS_OPTIONS.find((o) => o.value === draft.commentAccess)?.label.toLowerCase() ??
+              draft.commentAccess
+            }.`,
+    on: draft.commentsMode !== "off",
+  })
+
+  if (draft.madeForKids !== null) {
+    steps.push({
+      id: "kids",
+      label: draft.madeForKids
+        ? "Declared as made for children."
+        : "Declared as not made for children.",
+      on: true,
+    })
+  }
+
+  if (draft.paidPromotion) {
+    steps.push({ id: "paid", label: "Declared as containing paid promotion.", on: true })
+  }
+  if (draft.alteredContent) {
+    steps.push({ id: "altered", label: "Declared as altered or synthetic.", on: true })
+  }
+
+  return steps
 }

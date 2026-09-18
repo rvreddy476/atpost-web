@@ -23,8 +23,16 @@
  * them, and it is set from the classification rather than from the phase.
  */
 
+import { useEffect, useState } from "react"
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, X } from "lucide-react"
-import { phaseLabel, ringShape, type UploadState } from "./machine"
+import {
+  formatBytes,
+  formatRemaining,
+  phaseLabel,
+  ringShape,
+  transferStats,
+  type UploadState,
+} from "./machine"
 import type { MediaFacts } from "./poll"
 
 interface Props {
@@ -32,16 +40,45 @@ interface Props {
   facts: MediaFacts | null
   statusNote: string | null
   fileName: string | null
+  /** True when the retry will pick up where the transfer stopped rather than
+   *  start it again. Chunked sessions only — see ./useVideoUpload.ts. */
+  resumable?: boolean
   onRetry: () => void
   onCancel: () => void
 }
 
-export function UploadStatus({ state, facts, statusNote, fileName, onRetry, onCancel }: Props) {
+export function UploadStatus({
+  state,
+  facts,
+  statusNote,
+  fileName,
+  resumable = false,
+  onRetry,
+  onCancel,
+}: Props) {
+  /*
+    ── A clock that only runs while bytes are moving ────────────────────────
+    "About 6 minutes left" is computed from elapsed time, so it has to be
+    recomputed even when no progress event has arrived — otherwise a stalled
+    transfer shows the same cheerful estimate for a minute. One tick a second,
+    started and stopped with the phase, so a finished upload is not holding an
+    interval open behind a form somebody is still filling in.
+  */
+  const [now, setNow] = useState(() => Date.now())
+  const moving = state.phase === "uploading"
+  useEffect(() => {
+    if (!moving) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [moving])
+
   if (state.phase === "idle") return null
 
   const ring = ringShape(state)
   const failed = state.phase === "failed"
   const done = state.phase === "ready" || state.phase === "published"
+  const stats = transferStats(state, now)
 
   return (
     <div
@@ -95,6 +132,24 @@ export function UploadStatus({ state, facts, statusNote, fileName, onRetry, onCa
             </div>
           ) : null}
 
+          {/*
+            The bytes, and an estimate.
+
+            Not in the `aria-live` label above: this line changes every second
+            and a screen reader reading "eight hundred and twenty megabytes of
+            two gigabytes" over and over would drown out everything else on the
+            page. The percentage IS announced, through `phaseLabel`, which is
+            the number somebody actually needs spoken.
+          */}
+          {state.phase === "uploading" && stats.total > 0 ? (
+            <p className="mt-1.5 text-xs tabular-nums text-mo-body">
+              {formatBytes(stats.loaded)} of {formatBytes(stats.total)}
+              {stats.secondsRemaining !== null
+                ? ` · ${formatRemaining(stats.secondsRemaining)}`
+                : null}
+            </p>
+          ) : null}
+
           {/* An indeterminate stripe rather than a bar at some invented value. */}
           {ring.kind === "indeterminate" ? (
             <div
@@ -132,7 +187,15 @@ export function UploadStatus({ state, facts, statusNote, fileName, onRetry, onCa
                   className="inline-flex items-center gap-2 rounded-mo-pill border border-mo-strong px-4 py-1.5 text-sm text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-raised"
                 >
                   <RotateCcw aria-hidden className="h-3.5 w-3.5" />
-                  Try again
+                  {/*
+                    The word is the truth about what will happen. A chunked
+                    session keeps its parts for 24 hours and the retry asks
+                    the server which ones it already has, so at 1.6 GB of 2 GB
+                    the retry sends 0.4 GB. The simple path has no such thing
+                    and starts over, and saying "Resume" there would be a
+                    promise the transport cannot keep.
+                  */}
+                  {resumable ? "Resume upload" : "Try again"}
                 </button>
               ) : (
                 // Not retryable: the same file gives the same answer, and

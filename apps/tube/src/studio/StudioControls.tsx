@@ -20,7 +20,8 @@
  * package rather than here.
  */
 
-import { useId } from "react"
+import { useCallback, useId, useState } from "react"
+import { X } from "lucide-react"
 
 /* ── One labelled control ─────────────────────────────────────────────────── */
 
@@ -196,6 +197,158 @@ export function StudioRadioGroup<T extends string>({
         </p>
       ) : null}
     </fieldset>
+  )
+}
+
+/* ── A chip input ─────────────────────────────────────────────────────────── */
+
+/**
+ * A list of short values, entered one at a time. Tags, hashtags, mentions.
+ *
+ * ── Enter, comma, and blur all commit ─────────────────────────────────────
+ * People separate a list with commas because that is what a list looks like,
+ * and they walk away from a half-typed entry because they think they have
+ * finished. Committing on blur is the one that matters: a tag left in the box
+ * when somebody clicks Continue is a tag they meant to add, and dropping it is
+ * a loss nobody notices until the video has no tags.
+ *
+ * ── `normalise` returns null for "the server would refuse this" ───────────
+ * Not "clean it up". For hashtags and mentions the server refuses the WHOLE
+ * create over one bad entry, so quietly stripping the characters it dislikes
+ * would put a word on somebody's video that they did not write. A rejected
+ * entry stays in the box, with `rejection` under it, where it can be fixed.
+ *
+ * ── The chips are a real list and the removes are real buttons ────────────
+ * A `<ul>` so a screen reader says how many there are, and a labelled button
+ * per chip so each one can be removed from a keyboard. The counter is in the
+ * field's own hint, which `StudioField` ties to the input with
+ * `aria-describedby`.
+ */
+export function StudioChipInput({
+  label,
+  description,
+  placeholder,
+  values,
+  max,
+  onChange,
+  normalise,
+  rejection,
+  error,
+  prefix,
+}: {
+  label: string
+  description?: string
+  placeholder?: string
+  values: string[]
+  max: number
+  onChange: (next: string[]) => void
+  /** The stored form, or null when the server would not take it. */
+  normalise: (raw: string) => string | null
+  /** What to say about an entry `normalise` refused. */
+  rejection: string
+  error?: string | null
+  /** Drawn on the chip, not stored — the `#` and `@` people expect to see. */
+  prefix?: string
+}) {
+  const [entry, setEntry] = useState("")
+  const [refused, setRefused] = useState(false)
+  const full = values.length >= max
+
+  const commit = useCallback(
+    (raw: string): boolean => {
+      const trimmed = raw.trim()
+      if (!trimmed) return true
+      if (full) return false
+      const value = normalise(trimmed)
+      if (value === null) return false
+      if (values.some((v) => v.toLowerCase() === value.toLowerCase())) return true
+      onChange([...values, value])
+      return true
+    },
+    [full, normalise, onChange, values]
+  )
+
+  const commitAndClear = useCallback(
+    (raw: string) => {
+      if (commit(raw)) {
+        setEntry("")
+        setRefused(false)
+      } else {
+        setRefused(true)
+      }
+    },
+    [commit]
+  )
+
+  return (
+    <StudioField
+      label={label}
+      hint={`${values.length}/${max}`}
+      error={error ?? (refused ? rejection : null)}
+      description={description}
+    >
+      {({ id, describedBy }) => (
+        <div>
+          {values.length > 0 ? (
+            <ul className="mb-2 flex flex-wrap gap-2">
+              {values.map((value) => (
+                <li key={value}>
+                  <span className="inline-flex items-center gap-1.5 rounded-mo-pill border border-mo bg-mo-raised py-1 pl-3 pr-1.5 text-xs text-mo-ink">
+                    {prefix ? <span aria-hidden className="text-mo-body">{prefix}</span> : null}
+                    {value}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${prefix ?? ""}${value}`}
+                      className="rounded-mo-pill p-0.5 text-mo-body transition-colors duration-150 ease-mo hover:text-mo-ink"
+                      onClick={() => onChange(values.filter((v) => v !== value))}
+                    >
+                      <X aria-hidden className="h-3 w-3" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <input
+            id={id}
+            aria-describedby={describedBy}
+            aria-invalid={refused || Boolean(error) ? true : undefined}
+            className={studioInputClass}
+            value={entry}
+            disabled={full}
+            placeholder={full ? "That's the limit" : placeholder}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value.includes(",")) {
+                let ok = true
+                let leftover = ""
+                for (const part of value.split(",")) {
+                  if (!part.trim()) continue
+                  if (!commit(part)) {
+                    ok = false
+                    leftover = part.trim()
+                  }
+                }
+                setEntry(leftover)
+                setRefused(!ok)
+                return
+              }
+              setEntry(value)
+              setRefused(false)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                commitAndClear(entry)
+              } else if (e.key === "Backspace" && entry === "" && values.length > 0) {
+                onChange(values.slice(0, -1))
+              }
+            }}
+            onBlur={() => commitAndClear(entry)}
+          />
+        </div>
+      )}
+    </StudioField>
   )
 }
 

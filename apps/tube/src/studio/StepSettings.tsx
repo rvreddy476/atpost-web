@@ -26,13 +26,14 @@
  * would rely on it and a fourteen-year-old would watch the video.
  */
 
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, Eye } from "lucide-react"
 import {
   COMMENT_ACCESS_OPTIONS,
-  COMMENT_MODERATION_OPTIONS,
+  COMMENTS_MODE_OPTIONS,
   LICENSE_OPTIONS,
   REMIX_OPTIONS,
   VISIBILITY_OPTIONS,
+  type CommentsMode,
   type DraftIssue,
   type ScheduleMode,
   type VideoDraft,
@@ -66,28 +67,53 @@ export function StepSettings({ draft, patch, issues }: Props) {
         </p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <StudioCard title="Audience">
+      {/*
+        ── The audience is its own full-width card, above everything ─────────
+        The founder named this control specifically — "who can see, who cannot"
+        — and on a two-column grid it was one of eight cards competing for a
+        glance. It is out of the grid, first, and its four rows carry a
+        sentence each, because "Unlisted" means nothing to somebody who has
+        not met the word before.
+      */}
+      <section
+        className="rounded-mo border border-mo-strong bg-mo-surface p-5 shadow-mo"
+        aria-labelledby="audience-heading"
+      >
+        <div className="flex items-center gap-2">
+          <Eye aria-hidden className="h-4 w-4 text-mo-body" />
+          <h3
+            id="audience-heading"
+            className="font-mo-display text-sm uppercase tracking-mo-eyebrow text-mo-body"
+          >
+            Who can see this
+          </h3>
+        </div>
+        <p className="mt-1 text-xs text-mo-body">
+          The one setting on this page that decides who the video is for.
+        </p>
+        <div className="mt-4">
           <StudioRadioGroup<Visibility>
-            legend="Who can watch this"
+            legend="Who can watch this video"
             options={VISIBILITY_OPTIONS}
             value={draft.visibility}
             onChange={(visibility) => patch({ visibility })}
           />
-          {/*
-            The publish call is `UPDATE posts SET visibility='public'`. If
-            somebody picks a narrower audience the studio does NOT call it —
-            see `publishAction` — and this is where that is stated, next to
-            the choice it affects, rather than left as a surprise on the
-            review step.
-          */}
-          {draft.visibility !== "public" && draft.scheduleMode === "now" ? (
-            <p className="mt-3 text-xs text-mo-body">
-              This video will be posted at this audience and will not be made public.
-            </p>
-          ) : null}
-        </StudioCard>
+        </div>
+        {/*
+          The publish call is `UPDATE posts SET visibility='public'`. If
+          somebody picks a narrower audience the studio does NOT call it —
+          see `publishAction` — and this is where that is stated, next to
+          the choice it affects, rather than left as a surprise on the
+          review step.
+        */}
+        {draft.visibility !== "public" && draft.scheduleMode === "now" ? (
+          <p className="mt-3 text-xs text-mo-body">
+            This video will be posted at this audience and will not be made public.
+          </p>
+        ) : null}
+      </section>
 
+      <div className="grid gap-5 lg:grid-cols-2">
         <StudioCard
           title="Declarations"
           description="Momentum and the law both need these answered honestly."
@@ -139,51 +165,37 @@ export function StepSettings({ draft, patch, issues }: Props) {
           </div>
         </StudioCard>
 
-        <StudioCard title="Interaction">
-          <div className="divide-y divide-mo">
-            {/* The four the phone has, in the phone's words. */}
-            <StudioSwitch
-              label="Allow comments"
-              checked={draft.allowComments}
-              onChange={(allowComments) => patch({ allowComments })}
-            />
-            <StudioSwitch
-              label="Allow likes"
-              checked={draft.allowLikes}
-              onChange={(allowLikes) => patch({ allowLikes })}
-            />
-            <StudioSwitch
-              label="Hide share button"
-              checked={draft.hideShare}
-              onChange={(hideShare) => patch({ hideShare })}
-            />
-            <StudioSwitch
-              label="Allow download"
-              checked={draft.allowDownload}
-              onChange={(allowDownload) => patch({ allowDownload })}
-            />
-            <StudioSwitch
-              label="Allow embedding"
-              description="Let this video play on other sites."
-              checked={draft.allowEmbedding}
-              onChange={(allowEmbedding) => patch({ allowEmbedding })}
-            />
-            <StudioSwitch
-              label="Show in the main feed"
-              description="Off keeps it on your channel and out of the home timeline."
-              checked={draft.publishToFeed}
-              onChange={(publishToFeed) => patch({ publishToFeed })}
-            />
-          </div>
-
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <StudioField label="Who can comment">
-              {({ id }) => (
+        <StudioCard title="Comments">
+          {/*
+            One question where there used to be three switches. The three
+            columns are still written — `commentWire` in ./fields.ts does the
+            mapping and ./fields.test.ts asserts it — but "Allow comments" and
+            "Comment moderation: hold for review" as two independent controls
+            let somebody build the state "comments off, everything held for
+            approval", which describes a queue that cannot exist.
+          */}
+          <StudioRadioGroup<CommentsMode>
+            legend="Comments on this video"
+            options={COMMENTS_MODE_OPTIONS}
+            value={draft.commentsMode}
+            onChange={(commentsMode) => patch({ commentsMode })}
+          />
+          <div className="mt-4">
+            <StudioField
+              label="Who can comment"
+              description={
+                draft.commentsMode === "off"
+                  ? "Not used while comments are off."
+                  : undefined
+              }
+            >
+              {({ id, describedBy }) => (
                 <select
                   id={id}
+                  aria-describedby={describedBy}
                   className={studioInputClass}
                   value={draft.commentAccess}
-                  disabled={!draft.allowComments}
+                  disabled={draft.commentsMode === "off"}
                   onChange={(e) => patch({ commentAccess: e.target.value })}
                 >
                   {COMMENT_ACCESS_OPTIONS.map((option) => (
@@ -194,27 +206,50 @@ export function StepSettings({ draft, patch, issues }: Props) {
                 </select>
               )}
             </StudioField>
-            <StudioField label="Comment moderation">
-              {({ id }) => (
+          </div>
+          <div className="mt-4 border-t border-mo pt-1">
+            <StudioSwitch
+              label="Allow likes"
+              checked={draft.allowLikes}
+              onChange={(allowLikes) => patch({ allowLikes })}
+            />
+          </div>
+        </StudioCard>
+
+        <StudioCard
+          title="Sharing and reuse"
+          description="What other people may do with this video once it is up."
+        >
+          <div className="divide-y divide-mo">
+            {/* The phone's wording, verbatim, for the three it also has. */}
+            <StudioSwitch
+              label="Allow download"
+              description="Let people save a copy to watch offline."
+              checked={draft.allowDownload}
+              onChange={(allowDownload) => patch({ allowDownload })}
+            />
+            <StudioSwitch
+              label="Allow embedding"
+              description="Let this video play on other sites."
+              checked={draft.allowEmbedding}
+              onChange={(allowEmbedding) => patch({ allowEmbedding })}
+            />
+            <StudioSwitch
+              label="Hide share button"
+              description="The link still works. The button stops being offered."
+              checked={draft.hideShare}
+              onChange={(hideShare) => patch({ hideShare })}
+            />
+          </div>
+          <div className="mt-4">
+            <StudioField
+              label="Remixing"
+              description="Whether other people may build something new on top of this."
+            >
+              {({ id, describedBy }) => (
                 <select
                   id={id}
-                  className={studioInputClass}
-                  value={draft.commentModeration}
-                  disabled={!draft.allowComments}
-                  onChange={(e) => patch({ commentModeration: e.target.value })}
-                >
-                  {COMMENT_MODERATION_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </StudioField>
-            <StudioField label="Remixing">
-              {({ id }) => (
-                <select
-                  id={id}
+                  aria-describedby={describedBy}
                   className={studioInputClass}
                   value={draft.remixSetting}
                   onChange={(e) => patch({ remixSetting: e.target.value })}
@@ -227,6 +262,42 @@ export function StepSettings({ draft, patch, issues }: Props) {
                 </select>
               )}
             </StudioField>
+          </div>
+        </StudioCard>
+
+        <StudioCard
+          title="Where it goes"
+          description="Publishing puts it on your channel. These decide where else it turns up."
+        >
+          <div className="divide-y divide-mo">
+            <StudioSwitch
+              label="Tell my subscribers"
+              description="Send the notification that goes out when you post."
+              checked={draft.notifySubscribers}
+              onChange={(notifySubscribers) => patch({ notifySubscribers })}
+            />
+            <StudioSwitch
+              label="Show in the main feed"
+              description="Off keeps it on your channel and out of the home timeline."
+              checked={draft.mainFeed}
+              onChange={(mainFeed) => patch({ mainFeed })}
+            />
+            {/*
+              ── A control that is drawn and cannot be switched on ───────────
+              `ParseDistributionPolicy` answers 400 UNSUPPORTED_DISTRIBUTION
+              for `create_reel_preview: true`, in those words: the field is in
+              the schema and the behaviour behind it is not built. It is shown,
+              off and disabled, rather than hidden, because the founder asked
+              for it by name and "it is coming" is a more useful answer than
+              silence. ./fields.ts never puts the key on the wire.
+            */}
+            <StudioSwitch
+              label="Also make a short preview"
+              description="Not available yet — the server refuses this one, so the studio does not send it."
+              checked={false}
+              disabled
+              onChange={() => {}}
+            />
           </div>
         </StudioCard>
 

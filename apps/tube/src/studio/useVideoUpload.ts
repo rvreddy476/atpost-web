@@ -22,6 +22,7 @@ import {
   completeResumable,
   confirmMedia,
   fetchMediaStatus,
+  fetchResumableStatus,
   initMedia,
   initResumable,
   isPermanentFileError,
@@ -57,8 +58,31 @@ export interface VideoUpload {
   start: (file: File) => void
   /** Abort and forget. */
   cancel: () => void
-  /** Start the same file over from `/v1/media/init`. */
+  /**
+   * Try the same file again.
+   *
+   * On the chunked path this RESUMES: the open session is asked which parts
+   * it already has and only the missing ones are sent. On the simple path
+   * there is nothing to resume from and it starts over. `resumable` says
+   * which, so the button can use the honest word.
+   */
   retry: () => void
+  /** True when `retry` will resume rather than restart. */
+  resumable: boolean
+  /**
+   * Take over an asset this tab never uploaded.
+   *
+   * A restored draft names a media id whose bytes went up in another session
+   * — possibly on another machine, possibly yesterday. There is no `File` and
+   * nothing to transfer, but the machine still has to reach `ready` before
+   * Publish will unlock, and the poll loop is already the thing that decides
+   * that. So the phases are walked to `processing` and the same poll is
+   * started: within a second or two the status read says `ready`/`passed` and
+   * the studio behaves exactly as it would have if the upload had just
+   * finished here. `retry` is a no-op afterwards, because there is no file to
+   * retry with.
+   */
+  adopt: (mediaId: string) => void
   /** Tell the machine the post is being written. Publish calls this. */
   markPosting: () => void
   markPublished: (postId: string, scheduled: boolean) => void
@@ -106,6 +130,32 @@ export function useVideoUpload(): VideoUpload {
   const abort = useRef<AbortController | null>(null)
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileRef = useRef<File | null>(null)
+  /**
+   * The chunked session, while one is open.
+   *
+   * ═══════════════════════════════════════════════════════════════════════
+   * THIS REF IS THE WHOLE OF "A NETWORK DROP RESUMES RATHER THAN RESTARTS".
+   *
+   * A resumable session on this stack lives 24 HOURS (the simple path's
+   * signed URL lives fifteen minutes), and media-service will tell anyone
+   * who owns it which parts have landed:
+   * `GET /v1/media/upload/resumable/{uploadId}` → `uploaded_parts: [1,2,…]`.
+   * So the recovery from a dropped connection at 1.6 GB of 2 GB is to ask
+   * that question and send the four hundred megabytes that are missing —
+   * not to start a forty-minute upload again, which is what every previous
+   * version of this hook did.
+   *
+   * Cleared by `start` and `cancel`, because those mean a different file or
+   * no file, and resuming into a session opened for other bytes would
+   * assemble a video out of two.
+   */
+  const session = useRef<{
+    uploadId: string
+    mediaId: string
+    chunkSize: number
+    totalParts: number
+  } | null>(null)
+  const [resumable, setResumable] = useState(false)
   /** Bumped on every start/cancel so a stale async chain can tell it is stale. */
   const run = useRef(0)
 
@@ -201,20 +251,62 @@ export function useVideoUpload(): VideoUpload {
 
         if (file.size > RESUMABLE_THRESHOLD_BYTES) {
           /* The chunked path. */
-          const session = await initResumable({
-            fileName: file.name || "video.mp4",
-            mimeType: file.type || "video/mp4",
-            totalBytes: file.size,
-          })
-          if (token !== run.current) return
-          dispatch({ type: "reserved", mediaId: session.media_id, chunked: true })
 
-          const { chunk_size: chunkSize, total_parts: totalParts } = session
+          // An open session from a previous attempt is REUSED. Opening a new
+          // one would throw away every part already in the object store and
+          // is the difference between a forty-minute recovery and a
+          // four-minute one.
+          let open = session.current
+          let alreadyIn = new Set<number>()
+          if (open) {
+            const live = await fetchResumableStatus(open.uploadId)
+            if (token !== run.current) return
+            if (live && live.status !== "completed") {
+              alreadyIn = new Set(live.uploaded_parts ?? [])
+            } else {
+              // Expired, or somebody else's, or already assembled. Either
+              // way there is nothing to resume into.
+              open = null
+              session.current = null
+            }
+          }
+
+          if (!open) {
+            const started = await initResumable({
+              fileName: file.name || "video.mp4",
+              mimeType: file.type || "video/mp4",
+              totalBytes: file.size,
+            })
+            if (token !== run.current) return
+            open = {
+              uploadId: started.upload_id,
+              mediaId: started.media_id,
+              chunkSize: started.chunk_size,
+              totalParts: started.total_parts,
+            }
+            session.current = open
+            setResumable(true)
+          }
+
+          dispatch({
+            type: "reserved",
+            mediaId: open.mediaId,
+            chunked: true,
+            at: Date.now(),
+          })
+
+          const { chunkSize, totalParts, uploadId } = open
           for (let part = 1; part <= totalParts; part++) {
             if (token !== run.current) return
             const from = (part - 1) * chunkSize
             const slice = file.slice(from, Math.min(from + chunkSize, file.size))
-            await putChunk(session.upload_id, part, slice, {
+            if (alreadyIn.has(part)) {
+              // Counted, not sent. The bar starts where the last attempt
+              // stopped instead of sweeping up from zero a second time.
+              dispatch({ type: "progress", loaded: from + slice.size, total: file.size })
+              continue
+            }
+            await putChunk(uploadId, part, slice, {
               signal: controller.signal,
               // Whole-file progress: everything already acknowledged, plus
               // this part's own bytes. The reducer's monotonic clamp is what
@@ -228,10 +320,15 @@ export function useVideoUpload(): VideoUpload {
           if (token !== run.current) return
           // `complete` runs the confirm/processing flow itself — verified.
           // Calling confirmMedia after it would be a second, pointless enqueue.
-          await completeResumable(session.upload_id)
+          await completeResumable(uploadId)
           if (token !== run.current) return
+          // The session is spent: a completed upload cannot be resumed into,
+          // and leaving the ref set would make a later retry ask about parts
+          // for bytes that are already an assembled asset.
+          session.current = null
+          setResumable(false)
           dispatch({ type: "bytes_in" })
-          poll(session.media_id, token)
+          poll(open.mediaId, token)
           return
         }
 
@@ -242,7 +339,7 @@ export function useVideoUpload(): VideoUpload {
           fileSizeBytes: file.size,
         })
         if (token !== run.current) return
-        dispatch({ type: "reserved", mediaId: slot.media_id, chunked: false })
+        dispatch({ type: "reserved", mediaId: slot.media_id, chunked: false, at: Date.now() })
 
         await putObject(slot.upload_url, file, file.type || "video/mp4", {
           signal: controller.signal,
@@ -282,6 +379,10 @@ export function useVideoUpload(): VideoUpload {
       stopEverything()
       const token = run.current
       fileRef.current = file
+      // A NEW file. Any open session belongs to the old one, and resuming
+      // into it would assemble one asset out of two files' parts.
+      session.current = null
+      setResumable(false)
       setFacts(null)
       setStatusNote(null)
       dispatch({ type: "start" })
@@ -293,15 +394,46 @@ export function useVideoUpload(): VideoUpload {
   const cancel = useCallback(() => {
     stopEverything()
     fileRef.current = null
+    session.current = null
+    setResumable(false)
     setFacts(null)
     setStatusNote(null)
     dispatch({ type: "reset" })
   }, [dispatch, stopEverything])
 
+  /**
+   * The same file again — resuming into the open session when there is one.
+   *
+   * Deliberately NOT `start`, which clears the session: that is the one line
+   * that decides whether a dropped connection at 1.6 GB costs four minutes or
+   * forty.
+   */
   const retry = useCallback(() => {
     const file = fileRef.current
-    if (file) start(file)
-  }, [start])
+    if (!file) return
+    stopEverything()
+    const token = run.current
+    setStatusNote(null)
+    dispatch({ type: "start" })
+    void transfer(file, token)
+  }, [dispatch, stopEverything, transfer])
+
+  const adopt = useCallback(
+    (mediaId: string) => {
+      stopEverything()
+      const token = run.current
+      fileRef.current = null
+      session.current = null
+      setResumable(false)
+      setFacts(null)
+      setStatusNote(null)
+      dispatch({ type: "start" })
+      dispatch({ type: "reserved", mediaId, chunked: false, at: Date.now() })
+      dispatch({ type: "bytes_in" })
+      poll(mediaId, token)
+    },
+    [dispatch, poll, stopEverything]
+  )
 
   const markPosting = useCallback(() => dispatch({ type: "posting" }), [dispatch])
   const markPublished = useCallback(
@@ -315,5 +447,17 @@ export function useVideoUpload(): VideoUpload {
     [dispatch]
   )
 
-  return { state, facts, statusNote, start, cancel, retry, markPosting, markPublished, markFailed }
+  return {
+    state,
+    facts,
+    statusNote,
+    resumable,
+    adopt,
+    start,
+    cancel,
+    retry,
+    markPosting,
+    markPublished,
+    markFailed,
+  }
 }

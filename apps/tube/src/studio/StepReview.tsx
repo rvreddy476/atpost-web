@@ -21,15 +21,17 @@
  * category.
  */
 
-import { Loader2 } from "lucide-react"
+import { Check, Loader2, Minus } from "lucide-react"
 import {
   publishButtonLabel,
+  publishChecklist,
   publishSummary,
   type DraftIssue,
   type VideoDraft,
   VISIBILITY_OPTIONS,
 } from "./fields"
-import { canPublish, type UploadState } from "./machine"
+import { canPublish, publishGate, type UploadState } from "./machine"
+import { ReviewPreview } from "./ReviewPreview"
 import type { CoverStudio } from "./useCoverStudio"
 
 interface Props {
@@ -41,6 +43,8 @@ interface Props {
   publishError: string | null
   /** The chosen series' name, when the draft names one and the list has it. */
   seriesTitle: string | null
+  channelName: string
+  channelRef: string | null
   onPublish: () => void
   onGoToStep: (step: "details" | "settings") => void
 }
@@ -53,13 +57,20 @@ export function StepReview({
   publishing,
   publishError,
   seriesTitle,
+  channelName,
+  channelRef,
   onPublish,
   onGoToStep,
 }: Props) {
+  const gate = publishGate(state)
+  /** Fully ready — which is what decides whether the publish CALL is made. */
   const assetReady = canPublish(state)
+  /** Ready, or confirmed-and-still-encoding. Either may press the button. */
+  const assetPostable = gate.kind === "ready" || gate.kind === "early"
   const formValid = issues.length === 0
   const audience =
     VISIBILITY_OPTIONS.find((o) => o.value === draft.visibility)?.label ?? draft.visibility
+  const checklist = publishChecklist(draft, assetReady)
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -132,6 +143,45 @@ export function StepReview({
           </div>
         </section>
 
+        {/*
+          ── The checklist, and why it is not just the summary sentence ──────
+          Nothing on this page can be changed after the button is pressed, and
+          the studio now sends twenty-odd fields. Three of them — the
+          subscriber notification, the main feed, the comment rule — are things
+          somebody would be upset to get wrong in a direction no one-line
+          summary mentions. So each gets its own sentence, phrased as what WILL
+          happen rather than as a setting's name and value.
+
+          Nothing depends on colour: every row carries a tick or a dash as a
+          shape, and the sentence itself says "are not told" rather than
+          leaving a grey icon to carry the negative.
+        */}
+        <section
+          className="rounded-mo border border-mo bg-mo-surface p-5 shadow-mo"
+          aria-labelledby="will-happen"
+        >
+          <h3
+            id="will-happen"
+            className="font-mo-display text-sm uppercase tracking-mo-eyebrow text-mo-body"
+          >
+            What happens when you post
+          </h3>
+          <ul className="mt-3 space-y-2">
+            {checklist.map((entry) => (
+              <li key={entry.id} className="flex items-start gap-2.5 text-sm text-mo-ink">
+                <span className="mt-0.5 shrink-0" aria-hidden>
+                  {entry.on ? (
+                    <Check className="h-4 w-4 text-mo-good" />
+                  ) : (
+                    <Minus className="h-4 w-4 text-mo-body" />
+                  )}
+                </span>
+                <span>{entry.label}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
         {/* The two blockers, named separately because they are fixed
             differently. */}
         {!formValid ? (
@@ -160,9 +210,15 @@ export function StepReview({
           </section>
         ) : null}
 
-        {formValid && !assetReady && state.phase !== "failed" ? (
+        {formValid && gate.kind === "early" ? (
+          <p className="rounded-mo border border-mo bg-mo-raised p-4 text-sm text-mo-body">
+            {gate.note}
+          </p>
+        ) : null}
+
+        {formValid && gate.kind === "wait" ? (
           <p className="text-sm text-mo-body">
-            Everything is filled in. Posting unlocks the moment the video finishes processing.
+            Everything is filled in. {gate.note}
           </p>
         ) : null}
 
@@ -173,24 +229,21 @@ export function StepReview({
         ) : null}
       </div>
 
-      <div className="lg:sticky lg:top-4 lg:self-start">
+      <div className="space-y-5 lg:sticky lg:top-4 lg:self-start">
+        <div className="rounded-mo border border-mo bg-mo-surface p-5 shadow-mo">
+          <ReviewPreview
+            draft={draft}
+            coverUrl={cover.previewUrl}
+            channelName={channelName}
+            channelRef={channelRef}
+          />
+        </div>
+
         <div className="space-y-3 rounded-mo border border-mo bg-mo-surface p-5 shadow-mo">
-          {cover.previewUrl ? (
-            /* A local data:/blob: URL from this browser's own canvas — see
-               ./CoverPicker.tsx for why next/image cannot help with one. */
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={cover.previewUrl}
-              alt=""
-              className="aspect-video w-full rounded-mo object-cover"
-            />
-          ) : (
-            <div className="aspect-video w-full rounded-mo bg-mo-sunken" />
-          )}
           <button
             type="button"
             className="mo-btn-primary inline-flex h-12 w-full items-center justify-center gap-2 rounded-mo-pill px-6"
-            disabled={!assetReady || !formValid || publishing || cover.uploading}
+            disabled={!assetPostable || !formValid || publishing || cover.uploading}
             onClick={onPublish}
           >
             {publishing ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
@@ -207,10 +260,8 @@ export function StepReview({
               ? "Fix the items on the left first."
               : cover.uploading
                 ? "Waiting for the cover to finish uploading."
-                : !assetReady
-                  ? state.phase === "failed"
-                    ? "This upload cannot be posted."
-                    : "Waiting for the video to finish processing."
+                : !assetPostable
+                  ? gate.note
                   : publishSummary(draft)}
           </p>
         </div>

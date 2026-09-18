@@ -33,7 +33,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { CheckCircle2, CloudOff, Cloud, Loader2, RotateCcw } from "lucide-react"
 import { useSession } from "@atpost/api-client/session"
 import { fetchCategories, fetchOwnChannel, type TubeCategory } from "@/tube/channelApi"
 import { channelHref, channelRef, type TubeChannel } from "@/tube/channels"
@@ -53,13 +53,14 @@ import {
   validateDraft,
   type VideoDraft,
 } from "./fields"
-import { canPublish, isActive } from "./machine"
+import { canPublish, isActive, mayPublish } from "./machine"
 import { StepDetails } from "./StepDetails"
 import { StepFile } from "./StepFile"
 import { StepReview } from "./StepReview"
 import { StepSettings } from "./StepSettings"
 import { UploadStatus } from "./UploadStatus"
 import { useCoverStudio } from "./useCoverStudio"
+import { useDraftAutosave } from "./useDraftAutosave"
 import { useSeriesPicker } from "./useSeriesPicker"
 import { useVideoUpload } from "./useVideoUpload"
 
@@ -154,6 +155,37 @@ export function UploadStudio() {
   const cover = useCoverStudio(file)
   const series = useSeriesPicker(userId ?? null, draft.seriesId, Boolean(signedIn && channel))
 
+  /**
+   * The draft, saved as they type.
+   *
+   * ── It is persistence, not a publish route ────────────────────────────
+   * `POST /v1/posts/drafts/{id}/publish` drops nine of this form's fields on
+   * the way to `CreatePostInput` — see ../tube/uploadApi.ts, which lists
+   * them. So the draft holds the work and `POST /v1/posts` publishes it, and
+   * `discard()` deletes the draft afterwards. A draft that is abandoned stays
+   * a draft for ever and never becomes a post, because the only call that
+   * would turn one into a post is the one this studio does not make.
+   *
+   * ── A media id this tab never uploaded ────────────────────────────────
+   * On a RESUMED draft the bytes are on the server and there is no `File`
+   * here, so `upload.adopt` walks the machine to `processing` and starts the
+   * same status poll the real upload uses. Within a poll or two the asset
+   * reads `ready`/`passed` and Publish unlocks — without re-uploading a
+   * gigabyte somebody already sent yesterday.
+   */
+  const [restoredCoverMediaId, setRestoredCoverMediaId] = useState<string | null>(null)
+  const [restoreNote, setRestoreNote] = useState<string | null>(null)
+
+  const mediaId = upload.state.mediaId
+  const coverMediaId = cover.mediaId ?? restoredCoverMediaId
+
+  const drafts = useDraftAutosave({
+    draft,
+    mediaId,
+    coverMediaId,
+    enabled: Boolean(signedIn && channel),
+  })
+
   const issues = useMemo(
     () => validateDraft(draft, undefined, series.facts),
     [draft, series.facts]
@@ -189,9 +221,41 @@ export function UploadStudio() {
   const cancel = useCallback(() => {
     upload.cancel()
     setFile(null)
+    setRestoredCoverMediaId(null)
+    setRestoreNote(null)
     setPublishError(null)
     setStep("file")
   }, [upload])
+
+  /** Open the unfinished draft the server is holding. */
+  const resumeDraft = useCallback(() => {
+    const row = drafts.resumable
+    if (!row) return
+    const restored = drafts.resume(row)
+    if (!restored) return
+
+    setDraft(restored.draft)
+    setRestoredCoverMediaId(restored.coverMediaId)
+    idempotencyKey.current = crypto.randomUUID()
+    setPublishError(null)
+    setRestoreNote(
+      restored.complete
+        ? null
+        : // Said out loud rather than discovered. The server's draft payload
+          // is a closed set of keys and eleven of this form's fields have no
+          // key in it (../studio/draftPayload.ts lists them); they live in
+          // the browser that wrote them, so a draft opened somewhere else
+          // comes back with those at their defaults.
+          "This draft was started in another browser, so the licence, comment, remix and recording settings came back at their defaults. Check the Visibility step before posting."
+    )
+
+    if (restored.mediaId) {
+      upload.adopt(restored.mediaId)
+      setStep("details")
+    } else {
+      setStep("file")
+    }
+  }, [drafts, upload])
 
   /**
    * Leaving mid-upload.
@@ -215,16 +279,25 @@ export function UploadStudio() {
   /* ── Publish ───────────────────────────────────────────────────────────── */
 
   const onPublish = useCallback(async () => {
-    if (!canPublish(upload.state) || !upload.state.mediaId) return
+    if (!mayPublish(upload.state) || !upload.state.mediaId) return
     if (validateDraft(draft, undefined, series.facts).length > 0) return
 
     setPublishError(null)
     setPublishing(true)
     upload.markPosting()
 
-    const action = publishAction(draft)
+    // ── `canPublish`, not `mayPublish`, decides the ACTION ────────────────
+    // The button unlocks as soon as the asset is confirmed (`mayPublish`),
+    // because `POST /v1/posts` accepts a still-encoding one and holds the
+    // post author-only until it is done. The extra
+    // `POST /v1/videos/{id}/publish` does NOT: it is gated on
+    // `video_metadata.upload_status` and answers 409 NOT_READY until the
+    // transcode consumer flips it. So when the encode has not landed the
+    // action is `create` and the call is skipped — the post reaches exactly
+    // the same state on its own.
+    const action = publishAction(draft, canPublish(upload.state))
     try {
-      const body = toCreateRequest(draft, upload.state.mediaId, cover.mediaId)
+      const body = toCreateRequest(draft, upload.state.mediaId, coverMediaId)
       const post = await createLongVideoPost(body, idempotencyKey.current)
 
       // The cover repair path. `cover_media_id` goes in at CREATE — verified
@@ -233,8 +306,8 @@ export function UploadStudio() {
       // still produce. It is best-effort on purpose: a video that is live with
       // the auto thumbnail is a working video, and failing the publish over a
       // cover would be a much worse outcome than the wrong picture.
-      if (cover.mediaId && !body.cover_media_id) {
-        await setCoverFrame(post.id, cover.mediaId).catch(() => {})
+      if (coverMediaId && !body.cover_media_id) {
+        await setCoverFrame(post.id, coverMediaId).catch(() => {})
       }
 
       // `:videoId` IS THE POST ID. Not the media id. And this runs only for
@@ -273,6 +346,12 @@ export function UploadStudio() {
         setSeriesOutcome(outcome)
       }
 
+      // The post exists and is where it should be, so the draft has done its
+      // job. Deleting it here rather than on the way out is what keeps an
+      // abandoned draft and a published one distinguishable: a draft is only
+      // ever removed by a publish that worked.
+      drafts.discard()
+
       upload.markPublished(post.id, action === "schedule")
     } catch (error) {
       const message = uploadFailureMessage(error)
@@ -286,7 +365,7 @@ export function UploadStudio() {
     } finally {
       setPublishing(false)
     }
-  }, [cover.mediaId, draft, series.facts, series.list, upload])
+  }, [coverMediaId, draft, drafts, series.facts, series.list, upload])
 
   /* ── What is on screen ─────────────────────────────────────────────────── */
 
@@ -347,17 +426,65 @@ export function UploadStudio() {
 
   return (
     <div className="mx-auto max-w-6xl py-6">
-      <header className="mb-6">
-        <h1 className="font-mo-display text-2xl tracking-mo-display text-mo-ink">New video</h1>
-        <p className="mt-1 text-sm text-mo-body">
-          Posting to {channel.name}
-          {ref ? ` · @${ref}` : null}
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-mo-display text-2xl tracking-mo-display text-mo-ink">New video</h1>
+          <p className="mt-1 text-sm text-mo-body">
+            Posting to {channel.name}
+            {ref ? ` · @${ref}` : null}
+          </p>
+        </div>
+        <DraftIndicator status={drafts.status} error={drafts.error} />
       </header>
+
+      {/*
+        ── Coming back to an unfinished video ───────────────────────────────
+        Offered rather than restored automatically. Somebody who opened the
+        studio to upload something new would find last week's half-finished
+        video in the form, and the fix — cancel — looks exactly like throwing
+        their draft away. So the draft waits until it is asked for.
+      */}
+      {drafts.resumable && upload.state.phase === "idle" ? (
+        <section className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-mo border border-mo-strong bg-mo-raised p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-mo-ink">You have a video in progress</p>
+            <p className="mt-0.5 text-xs text-mo-body">
+              {draftTitleOf(drafts.resumable) ?? "Untitled"} — saved{" "}
+              {formatSavedAt(drafts.resumable.updated_at)}. The file is already uploaded.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={resumeDraft}
+              className="inline-flex items-center gap-2 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-surface"
+            >
+              <RotateCcw aria-hidden className="h-3.5 w-3.5" />
+              Pick up where I left off
+            </button>
+            <button
+              type="button"
+              onClick={drafts.dismissResumable}
+              className="text-sm text-mo-body underline underline-offset-2 hover:text-mo-ink"
+            >
+              Start something new
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {restoreNote ? (
+        <p className="mb-6 rounded-mo border border-mo bg-mo-surface p-4 text-sm text-mo-warn">
+          {restoreNote}
+        </p>
+      ) : null}
 
       <Stepper
         current={step}
-        reachable={file !== null}
+        // A resumed draft has a media id and no `File` — the bytes are on the
+        // server and this tab never held them — so the steps are reachable on
+        // either fact and not only on the picker having been used.
+        reachable={file !== null || upload.state.mediaId !== null}
         onGo={setStep}
         invalidSteps={new Set(issues.map((i) => i.step))}
       />
@@ -369,6 +496,7 @@ export function UploadStudio() {
             facts={upload.facts}
             statusNote={upload.statusNote}
             fileName={file?.name ?? null}
+            resumable={upload.resumable}
             onRetry={upload.retry}
             onCancel={cancel}
           />
@@ -397,6 +525,8 @@ export function UploadStudio() {
           publishing={publishing}
           publishError={publishError}
           seriesTitle={series.list.find((s) => s.id === draft.seriesId)?.title ?? null}
+          channelName={channel.name}
+          channelRef={ref}
           onPublish={() => void onPublish()}
           onGoToStep={setStep}
         />
@@ -415,6 +545,64 @@ export function UploadStudio() {
       ) : null}
     </div>
   )
+}
+
+/* ── "Draft saved" ────────────────────────────────────────────────────────── */
+
+/**
+ * The quietest thing on the page, and deliberately.
+ *
+ * ── `aria-live="polite"`, and nothing else ────────────────────────────────
+ * A toast for every autosave is an interruption every two seconds. This is a
+ * line of text in the header that changes when the state does, announced
+ * politely so it lands between sentences rather than over them. The founder
+ * asked for "show 'Draft saved' quietly" and this is the quietest version of
+ * it that a screen reader can still hear.
+ *
+ * A FAILED save is the one case that gets a colour and a role, because it is
+ * the only one that asks anything of the person: their work is still on the
+ * page and it is not on the server.
+ */
+function DraftIndicator({
+  status,
+  error,
+}: {
+  status: "idle" | "saving" | "saved" | "error"
+  error: string | null
+}) {
+  if (status === "idle") return null
+  if (status === "error") {
+    return (
+      <p role="alert" className="flex items-center gap-1.5 text-xs text-mo-warn">
+        <CloudOff aria-hidden className="h-3.5 w-3.5" />
+        {error ?? "The draft could not be saved."}
+      </p>
+    )
+  }
+  return (
+    <p aria-live="polite" className="flex items-center gap-1.5 text-xs text-mo-body">
+      <Cloud aria-hidden className="h-3.5 w-3.5" />
+      {status === "saving" ? "Saving draft…" : "Draft saved"}
+    </p>
+  )
+}
+
+/** The draft's own title, out of the payload the server handed back. */
+function draftTitleOf(row: { payload?: unknown }): string | null {
+  if (typeof row.payload !== "object" || row.payload === null) return null
+  const title = (row.payload as Record<string, unknown>).title
+  return typeof title === "string" && title.trim() ? title.trim() : null
+}
+
+/** "today at 14:02", or a date once it is not today. */
+function formatSavedAt(iso?: string | null): string {
+  if (!iso) return "a moment ago"
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return "a moment ago"
+  const sameDay = new Date().toDateString() === at.toDateString()
+  return sameDay
+    ? `today at ${at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
+    : at.toLocaleDateString(undefined, { day: "numeric", month: "short" })
 }
 
 /* ── The stepper ──────────────────────────────────────────────────────────── */
@@ -543,6 +731,32 @@ function Posted({
           </Link>
         ) : null}
       </div>
+
+      {/*
+        ── What to do next, and only what actually exists ───────────────────
+        `POST /v1/posts/{id}/chapters`, `/cards` and `/end-screens` are all
+        real routes, and on the WEB only one of them has an editor: the links
+        page, which is cards, end screens and the series sequence. There is no
+        chapters editor in this zone — `../watch/Chapters.tsx` reads them and
+        nothing writes them — so chapters are named as a thing that exists
+        without a link that would 404. Offering a dead link on a success screen
+        is a worse outcome than not offering one.
+      */}
+      <div className="mt-8 border-t border-mo pt-6 text-left">
+        <h2 className="text-sm font-semibold text-mo-ink">Finish it off</h2>
+        <ul className="mt-2 space-y-2 text-sm text-mo-body">
+          <li>
+            <Link href={`/links/${postId}`} className="underline underline-offset-2 hover:text-mo-ink">
+              Linked videos
+            </Link>{" "}
+            — the cards, the end screen and what plays next.
+          </li>
+          <li>
+            Chapters are set from the video&apos;s own page once it has finished processing.
+          </li>
+        </ul>
+      </div>
+
       <p className="mt-6 text-xs text-mo-body">
         Video id <span className="font-mo-mono">{postId}</span>
       </p>

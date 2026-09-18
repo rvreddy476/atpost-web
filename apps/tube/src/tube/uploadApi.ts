@@ -420,6 +420,53 @@ export async function putChunk(
 }
 
 /**
+ * Which parts of a chunked upload already landed.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THIS IS WHAT MAKES A RETRY A RESUME RATHER THAN A RESTART.
+ *
+ * `GET /v1/media/upload/resumable/{uploadId}` (media-service
+ * `resumable_handler.go`, `GetResumableUploadStatus`) answers with
+ * `uploaded_parts: [1, 2, 3, …]` — the part numbers already in the object
+ * store — alongside `uploaded_bytes` and the session's own `chunk_size` and
+ * `total_parts`. It is owner-scoped: somebody else's upload id is a 404, not
+ * a peek.
+ *
+ * Without this the honest retry for a dropped connection at 1.6 GB of 2 GB is
+ * "start again", which on a domestic upstream is another forty minutes. With
+ * it the retry re-sends only the parts that are missing. The session's own TTL
+ * is 24 hours — far longer than the simple path's 15-minute signed URL —
+ * which is what makes resuming worth building at all.
+ */
+export interface ResumableStatus {
+  upload_id: string
+  media_id: string
+  total_bytes: number
+  uploaded_bytes: number
+  chunk_size: number
+  total_parts: number
+  status: string
+  expires_at: string
+  /** 1-based part numbers. Absent on a session with nothing in it. */
+  uploaded_parts?: number[]
+}
+
+export async function fetchResumableStatus(uploadId: string): Promise<ResumableStatus | null> {
+  try {
+    const res = await api.get<Envelope<ResumableStatus>>(
+      `/v1/media/upload/resumable/${encodeURIComponent(uploadId)}`
+    )
+    return res.data?.data ?? null
+  } catch {
+    // A session that has expired, or that this account does not own, is a
+    // 404 here. Either way the answer the caller needs is the same — there is
+    // nothing to resume — and it is not an error worth surfacing, because the
+    // caller's next move is to open a fresh session.
+    return null
+  }
+}
+
+/**
  * Close a chunked upload.
  *
  * Returns the assembled media row, already `processing` — so unlike the
@@ -488,6 +535,19 @@ export interface CreateLongVideoRequest {
   language?: string
   /** Max 20, each max 50 characters. */
   tags?: string[]
+  /**
+   * The reel studio's separate hashtag field, merged server-side with
+   * whatever the caption parser finds in `text`.
+   *
+   * `NormalizeExplicitHashtags`: at most 30, each 1–50 runes matching
+   * `^[\p{L}\p{M}\p{N}_]+$` once a leading `#` is dropped, lowercased,
+   * deduped. A single bad entry is 400 for the WHOLE create — nothing is
+   * dropped quietly — so ../studio/fields.ts refuses one at the chip input.
+   */
+  hashtags?: string[]
+  /** Likewise, at most 20, each ≤30 of `^[A-Za-z0-9_.]+$` after a leading
+   *  `@`. Case is kept: user-service owns username case. */
+  mentions?: string[]
 
   is_made_for_kids?: boolean
   paid_promotion?: boolean
@@ -514,6 +574,33 @@ export interface CreateLongVideoRequest {
 
   /** RFC3339, between now+5min and now+30days. Sets `is_scheduled: true`. */
   publish_at?: string
+
+  /**
+   * The typed, versioned distribution policy (migration 025,
+   * post-service `internal/service/distribution.go`).
+   *
+   * ── Three things about it that are not guessable from the name ────────
+   *   · It is parsed with `DisallowUnknownFields` and a version check. An
+   *     extra key, or any `version` but 1, is 400 INVALID_DISTRIBUTION.
+   *   · When it is present it is AUTHORITATIVE and the legacy
+   *     `publish_to_feed` / `share_to_postbook` fields are not consulted at
+   *     all (`ResolveDistributionWithLegacy`). Absent, both legacy fields
+   *     are honoured and the default is `main_feed: true,
+   *     notify_subscribers: true`.
+   *   · `create_reel_preview: true` is 400 UNSUPPORTED_DISTRIBUTION — "not
+   *     yet supported", refused loudly rather than no-opped. It is in the
+   *     type because it is in the schema, and ../studio/fields.ts never
+   *     sends it.
+   */
+  distribution?: DistributionPolicy
+}
+
+export interface DistributionPolicy {
+  version: 1
+  main_feed?: boolean
+  notify_subscribers?: boolean
+  /** Sending `true` is a 400. See above. */
+  create_reel_preview?: boolean
 }
 
 /** The bare post the create returns. Narrowed to what the studio uses. */
@@ -612,6 +699,123 @@ export async function setCoverFrame(postId: string, coverMediaId: string): Promi
     `/v1/videos/${encodeURIComponent(postId)}/cover-frame`,
     { cover_media_id: coverMediaId }
   )
+}
+
+/* ── Drafts ───────────────────────────────────────────────────────────────── */
+
+/**
+ * `/v1/posts/drafts` — the unified composer's server-side draft.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THE STUDIO SAVES DRAFTS HERE AND DOES NOT PUBLISH THEM HERE. READ WHY.
+ *
+ * `POST /v1/posts/drafts/{id}/publish` exists and works. It is not used, and
+ * that is a decision rather than an omission. post-service
+ * `publishDraftRow` (internal/service/post_drafts.go, read 2026-09-18) maps a
+ * draft payload onto `CreatePostInput` field by field, and the fields it does
+ * NOT map are:
+ *
+ *     seo_title · license · allow_embedding · publish_to_feed ·
+ *     remix_setting · comment_moderation · comment_access ·
+ *     recording_date · recording_location
+ *
+ * Nine columns, silently dropped. `allow_download` is hardcoded on. A studio
+ * that published through this route would present a compliance and
+ * permissions page whose answers land nowhere — on a platform with no
+ * post-update endpoint, so the creator could never put them back.
+ *
+ * So the division is: the draft is WHERE THE WORK IS KEPT, and
+ * `POST /v1/posts` is how it is published. On a successful publish the draft
+ * is deleted, so nothing is left behind; on an abandoned one the draft stays a
+ * draft, which is the point, and NEVER becomes a post — the publish route is
+ * the only thing that would turn one into a post and this client never calls
+ * it.
+ *
+ * ── The payload is closed, and a stray key is a 400 ───────────────────────
+ * `parseDraftPayload` decodes with `DisallowUnknownFields`. Every key the
+ * studio may send is enumerated in ../studio/draftPayload.ts, which is also
+ * where the fields the payload cannot carry are listed and where they are kept
+ * instead. Sending one it does not know is 400 INVALID_DRAFT for the whole
+ * save.
+ *
+ * ── Three more things the route does that a caller must know ──────────────
+ *   · `post_type` must be one of `post | poll | article | reel | video`.
+ *     `video` is the one that fits, and `long_video` is NOT in the set.
+ *   · `validateDraft` refuses a payload with neither text nor media, so
+ *     there is nothing to save until the upload has reserved a media id.
+ *   · 100 active drafts per author, then 409 DRAFT_QUOTA.
+ *   · Saving a draft does NOT spend the 20-posts-an-hour create allowance:
+ *     `CheckPostRateLimit` is on `CreatePost` alone.
+ */
+export interface PostDraftRow {
+  id: string
+  author_id?: string
+  post_type?: string
+  payload?: unknown
+  schedule_at?: string | null
+  status?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PostDraftWrite {
+  /** Always `"video"` from this studio. See above. */
+  post_type: string
+  /** The closed payload. ../studio/draftPayload.ts builds it. */
+  payload: Record<string, unknown>
+  /** RFC3339 UTC, or null for "not scheduled". A sibling of the payload,
+   *  not a key inside it. */
+  schedule_at?: string | null
+}
+
+export async function createPostDraft(body: PostDraftWrite): Promise<PostDraftRow> {
+  const res = await api.post<Envelope<PostDraftRow>>("/v1/posts/drafts", body)
+  const row = res.data?.data
+  if (!row?.id) throw new Error("The server saved the draft but did not return its id.")
+  return row
+}
+
+/**
+ * Replace a draft's contents.
+ *
+ * PATCH by name, a full REPLACE by behaviour: `UpdatePostDraft` re-parses the
+ * whole payload and rewrites the row and its media reference set. There is no
+ * merge, so a caller that sends half a payload loses the other half — which
+ * is why ../studio/useDraftAutosave.ts always sends the whole draft.
+ */
+export async function updatePostDraft(
+  draftId: string,
+  body: PostDraftWrite
+): Promise<PostDraftRow> {
+  const res = await api.patch<Envelope<PostDraftRow>>(
+    `/v1/posts/drafts/${encodeURIComponent(draftId)}`,
+    body
+  )
+  return res.data?.data ?? { id: draftId }
+}
+
+export async function fetchPostDraft(draftId: string): Promise<PostDraftRow | null> {
+  try {
+    const res = await api.get<Envelope<PostDraftRow>>(
+      `/v1/posts/drafts/${encodeURIComponent(draftId)}`
+    )
+    return res.data?.data ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Newest first. `status` is `draft | publishing | published | blocked`. */
+export async function listPostDrafts(limit = 20): Promise<PostDraftRow[]> {
+  const res = await api.get<Envelope<PostDraftRow[]>>("/v1/posts/drafts", { params: { limit } })
+  const rows = res.data?.data
+  return Array.isArray(rows) ? rows : []
+}
+
+/** Best effort. A draft that outlives its post is untidy, not broken, and
+ *  failing a successful publish over one would be much worse. */
+export async function deletePostDraft(draftId: string): Promise<void> {
+  await api.delete<Envelope<unknown>>(`/v1/posts/drafts/${encodeURIComponent(draftId)}`)
 }
 
 /* ── The channel gate ─────────────────────────────────────────────────────── */

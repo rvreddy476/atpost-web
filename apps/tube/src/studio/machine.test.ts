@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest"
 import {
   canPublish,
+  formatBytes,
+  formatRemaining,
   initialUploadState,
   isActive,
+  mayPublish,
   phaseLabel,
+  publishGate,
   ringShape,
+  transferStats,
   uploadReducer,
   type UploadEvent,
   type UploadState,
@@ -15,7 +20,10 @@ function run(...events: UploadEvent[]): UploadState {
   return events.reduce(uploadReducer, initialUploadState)
 }
 
-const reserved: UploadEvent = { type: "reserved", mediaId: "m1", chunked: false }
+/** A fixed clock, so the ETA arithmetic is arithmetic and not a race. */
+const T0 = 1_700_000_000_000
+
+const reserved: UploadEvent = { type: "reserved", mediaId: "m1", chunked: false, at: T0 }
 
 describe("uploadReducer — the happy path", () => {
   it("walks idle → preparing → uploading → processing → ready → posting → published", () => {
@@ -264,5 +272,160 @@ describe("ringShape", () => {
       kind: "indeterminate",
     })
     expect(ringShape({ ...initialUploadState, phase: "idle" })).toEqual({ kind: "none" })
+  })
+})
+
+/* ── Publishing before the transcode has finished ──────────────────────────── */
+
+describe("publishGate", () => {
+  /*
+    post-service stopped requiring `ready` on 2026-09-04: `create_guards.go`'s
+    media gate is an allowlist of `uploaded | processing | ready` plus "not
+    outright rejected", and the old ready+passed rule became the author-only
+    VISIBILITY rule in processing.go. These assert the client half of that, and
+    every one of them failed before `publishGate` existed — the studio's only
+    gate was `canPublish`, which is `phase === "ready"`.
+  */
+
+  const processing = (processing_status: string, moderation_status: string): UploadState =>
+    run({ type: "start" }, reserved, { type: "bytes_in" }, {
+      type: "status",
+      status: { processing_status, moderation_status },
+    })
+
+  it("lets a confirmed but still-encoding asset be posted", () => {
+    const gate = publishGate(processing("processing", "pending"))
+    expect(gate.kind).toBe("early")
+    expect(mayPublish(processing("processing", "pending"))).toBe(true)
+  })
+
+  it("lets an encoded asset awaiting its safety verdict be posted", () => {
+    // `processing_status: ready` + `moderation_status: pending` is the state
+    // the old gate refused and the server accepts.
+    expect(publishGate(processing("ready", "pending")).kind).toBe("early")
+  })
+
+  it("lets one held for manual review be posted", () => {
+    // `manual_review` is a scanner that produced no verdict, which
+    // create_guards accepts: only `rejected` and an empty column are refused.
+    expect(publishGate(processing("processing", "manual_review")).kind).toBe("early")
+  })
+
+  it("does NOT let an unconfirmed asset be posted", () => {
+    // `pending_upload` fails `mediaConfirmed`, so a create here is a 400 out
+    // of an allowance of twenty an hour.
+    expect(publishGate(processing("pending_upload", "pending")).kind).toBe("wait")
+    expect(mayPublish(processing("pending_upload", "pending"))).toBe(false)
+  })
+
+  it("does NOT let one be posted before any status has arrived", () => {
+    const state = run({ type: "start" }, reserved, { type: "bytes_in" })
+    expect(publishGate(state).kind).toBe("wait")
+    expect(mayPublish(state)).toBe(false)
+  })
+
+  it("is ready, not early, once the asset is ready and passed", () => {
+    const state = processing("ready", "passed")
+    expect(state.phase).toBe("ready")
+    expect(publishGate(state)).toEqual({ kind: "ready" })
+    expect(canPublish(state)).toBe(true)
+  })
+
+  it("blocks a rejection with the reducer's own sentence", () => {
+    const state = processing("ready", "rejected")
+    const gate = publishGate(state)
+    expect(gate.kind).toBe("blocked")
+    expect(mayPublish(state)).toBe(false)
+  })
+
+  it("never lets a published or posting upload be posted again", () => {
+    for (const phase of ["idle", "preparing", "uploading", "posting", "published"] as const) {
+      expect(mayPublish({ ...initialUploadState, phase })).toBe(false)
+    }
+  })
+})
+
+/* ── The numbers under the bar ─────────────────────────────────────────────── */
+
+describe("transferStats", () => {
+  it("carries the real byte counts, not just a fraction", () => {
+    const state = run({ type: "start" }, reserved, {
+      type: "progress",
+      loaded: 500,
+      total: 2000,
+    })
+    const stats = transferStats(state, T0 + 10_000)
+    expect(stats.loaded).toBe(500)
+    expect(stats.total).toBe(2000)
+    expect(stats.percent).toBe(25)
+  })
+
+  it("estimates the time left from the mean speed so far", () => {
+    // 500 bytes in 10s is 50 B/s; 1500 left is 30s.
+    const state = run({ type: "start" }, reserved, {
+      type: "progress",
+      loaded: 500,
+      total: 2000,
+    })
+    expect(transferStats(state, T0 + 10_000).secondsRemaining).toBe(30)
+  })
+
+  it("offers no estimate in the first second", () => {
+    const state = run({ type: "start" }, reserved, { type: "progress", loaded: 1, total: 2000 })
+    expect(transferStats(state, T0 + 500).secondsRemaining).toBeNull()
+    expect(transferStats(state, T0 + 500).bytesPerSecond).toBeNull()
+  })
+
+  it("floors the percentage so it never reads 100 while bytes are moving", () => {
+    const state = run({ type: "start" }, reserved, {
+      type: "progress",
+      loaded: 1999,
+      total: 2000,
+    })
+    expect(transferStats(state, T0 + 10_000).percent).toBe(99)
+  })
+
+  it("never lets the byte count run backwards when a part is re-sent", () => {
+    // The chunked path replays a retried part's bytes. A counter that stepped
+    // back would make "time remaining" jump for a frame.
+    const state = run(
+      { type: "start" },
+      reserved,
+      { type: "progress", loaded: 1500, total: 2000 },
+      { type: "progress", loaded: 1000, total: 2000 }
+    )
+    expect(state.loaded).toBe(1500)
+  })
+
+  it("counts the whole file once the bytes are in", () => {
+    const state = run(
+      { type: "start" },
+      reserved,
+      { type: "progress", loaded: 1900, total: 2000 },
+      { type: "bytes_in" }
+    )
+    expect(state.loaded).toBe(2000)
+    expect(transferStats(state, T0 + 10_000).percent).toBe(100)
+  })
+})
+
+describe("formatBytes", () => {
+  it("uses the units a file manager uses", () => {
+    expect(formatBytes(512)).toBe("512 B")
+    expect(formatBytes(820 * 1000 * 1000)).toBe("820 MB")
+    expect(formatBytes(2 * 1000 * 1000 * 1000)).toBe("2.0 GB")
+  })
+})
+
+describe("formatRemaining", () => {
+  it("stops counting when there is nothing useful left to count", () => {
+    expect(formatRemaining(4)).toBe("nearly done")
+  })
+
+  it("rounds coarsely, so nobody watches it go up", () => {
+    expect(formatRemaining(38)).toBe("about 40 seconds left")
+    expect(formatRemaining(61)).toBe("about a minute left")
+    expect(formatRemaining(6 * 60)).toBe("about 6 minutes left")
+    expect(formatRemaining(3600)).toBe("about an hour left")
   })
 })

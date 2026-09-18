@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest"
 import {
+  commentWire,
   emptyDraft,
   nextEpisodeNum,
+  normaliseCategory,
+  normaliseHashtag,
+  normaliseMention,
   normaliseTags,
   parseLocalDateTime,
   publishAction,
   publishButtonLabel,
+  publishChecklist,
   publishSummary,
   runeLength,
   SCHEDULE_MAX_MS,
@@ -227,13 +232,13 @@ describe("toCreateRequest — the field mapping", () => {
     expect(toCreateRequest(draft({ madeForKids: null }), "m").is_made_for_kids).toBe(false)
   })
 
-  // The phone's "Allow comments" switch, inverted on the wire.
+  // One question on screen, three columns on the wire.
   it("inverts the two switches the server stores negatively", () => {
-    const on = toCreateRequest(draft({ allowComments: true, allowLikes: true }), "m")
+    const on = toCreateRequest(draft({ commentsMode: "on", allowLikes: true }), "m")
     expect(on.no_comments).toBe(false)
     expect(on.no_likes).toBe(false)
 
-    const off = toCreateRequest(draft({ allowComments: false, allowLikes: false }), "m")
+    const off = toCreateRequest(draft({ commentsMode: "off", allowLikes: false }), "m")
     expect(off.no_comments).toBe(true)
     expect(off.no_likes).toBe(true)
   })
@@ -406,5 +411,269 @@ describe("validateDraft — series", () => {
     for (const key of ["series_id", "seriesId", "episode_num", "seriesEpisodeNum"]) {
       expect(body).not.toHaveProperty(key)
     }
+  })
+})
+
+/* ── Category ──────────────────────────────────────────────────────────────── */
+
+describe("normaliseCategory", () => {
+  /*
+    post-service `NormalizeCategory`: trim, lowercase, collapse each internal
+    run of whitespace to a single hyphen. Reimplemented in the browser so the
+    combobox shows the value that will actually be stored — migration 047
+    exists because the column held "Education" and "education" as separate
+    buckets and some category pages came up empty.
+  */
+  it("lowercases and trims", () => {
+    expect(normaliseCategory("  Education ")).toBe("education")
+  })
+
+  it("collapses whitespace into a single hyphen", () => {
+    expect(normaliseCategory("Home   Repair")).toBe("home-repair")
+    expect(normaliseCategory("a\tb\nc")).toBe("a-b-c")
+  })
+
+  it("leaves an already-canonical id alone", () => {
+    expect(normaliseCategory("tech")).toBe("tech")
+    expect(normaliseCategory("home-repair")).toBe("home-repair")
+  })
+
+  it("is empty in, empty out", () => {
+    expect(normaliseCategory("   ")).toBe("")
+  })
+
+  it("normalises on the wire too, so the form cannot show a different value", () => {
+    expect(toCreateRequest(draft({ category: "Home Repair" }), "m").category).toBe("home-repair")
+  })
+})
+
+/* ── Hashtags and mentions ─────────────────────────────────────────────────── */
+
+describe("normaliseHashtag", () => {
+  /*
+    `NormalizeExplicitHashtags` returns an ERROR for a bad entry and
+    `CreatePost` never runs — one malformed hashtag is a 400 for the whole
+    create. So `null` means "the server would refuse this", not "tidy it up".
+  */
+  it("drops a leading # and lowercases for the index", () => {
+    expect(normaliseHashtag("#HowTo")).toBe("howto")
+  })
+
+  it("accepts letters from any script, and combining marks", () => {
+    expect(normaliseHashtag("नमस्ते")).toBe("नमस्ते")
+    expect(normaliseHashtag("тест")).toBe("тест")
+  })
+
+  it("refuses anything outside the server's alphabet", () => {
+    expect(normaliseHashtag("two words")).toBeNull()
+    expect(normaliseHashtag("dash-ed")).toBeNull()
+    expect(normaliseHashtag("emoji🎉")).toBeNull()
+    expect(normaliseHashtag("#")).toBeNull()
+  })
+
+  it("refuses one longer than 50 code points, counted in runes", () => {
+    expect(normaliseHashtag("a".repeat(50))).toBe("a".repeat(50))
+    expect(normaliseHashtag("a".repeat(51))).toBeNull()
+  })
+})
+
+describe("normaliseMention", () => {
+  it("drops a leading @ and KEEPS the case", () => {
+    // user-service owns username case, so the server keeps it and so do we.
+    expect(normaliseMention("@RaviK")).toBe("RaviK")
+  })
+
+  it("accepts the username alphabet and nothing else", () => {
+    expect(normaliseMention("ravi.k_1")).toBe("ravi.k_1")
+    expect(normaliseMention("ravi k")).toBeNull()
+    expect(normaliseMention("ravi-k")).toBeNull()
+    expect(normaliseMention("नमस्ते")).toBeNull()
+  })
+
+  it("refuses one longer than 30", () => {
+    expect(normaliseMention("a".repeat(31))).toBeNull()
+  })
+})
+
+describe("toCreateRequest — hashtags and mentions", () => {
+  it("sends them under their own keys", () => {
+    const body = toCreateRequest(draft({ hashtags: ["howto"], mentions: ["RaviK"] }), "m")
+    expect(body.hashtags).toEqual(["howto"])
+    expect(body.mentions).toEqual(["RaviK"])
+  })
+
+  it("omits them when empty rather than sending empty arrays", () => {
+    const body = toCreateRequest(draft(), "m")
+    expect(body).not.toHaveProperty("hashtags")
+    expect(body).not.toHaveProperty("mentions")
+  })
+
+  it("normalises and dedupes whatever is in the draft", () => {
+    // A restored draft has been through a different machine's form, so the
+    // wire re-normalises rather than trusting it.
+    const body = toCreateRequest(
+      draft({ hashtags: ["#HowTo", "howto", "bad word"], mentions: ["@Ravi", "ravi"] }),
+      "m"
+    )
+    expect(body.hashtags).toEqual(["howto"])
+    expect(body.mentions).toEqual(["Ravi"])
+  })
+})
+
+describe("validateDraft — hashtags and mentions", () => {
+  it("refuses a hashtag the server would 400 on", () => {
+    const issues = validateDraft(draft({ hashtags: ["two words"] }), NOW)
+    expect(issues.map((i) => i.field)).toContain("hashtags")
+  })
+
+  it("refuses more than thirty hashtags", () => {
+    const issues = validateDraft(
+      draft({ hashtags: Array.from({ length: 31 }, (_, i) => `tag${i}`) }),
+      NOW
+    )
+    expect(issues.find((i) => i.field === "hashtags")?.message).toMatch(/limit is 30/)
+  })
+
+  it("refuses more than twenty mentions", () => {
+    const issues = validateDraft(
+      draft({ mentions: Array.from({ length: 21 }, (_, i) => `user${i}`) }),
+      NOW
+    )
+    expect(issues.find((i) => i.field === "mentions")?.message).toMatch(/limit is 20/)
+  })
+
+  it("accepts a draft whose hashtags and mentions are legal", () => {
+    expect(validateDraft(draft({ hashtags: ["howto"], mentions: ["ravi.k"] }), NOW)).toEqual([])
+  })
+})
+
+/* ── Comments ──────────────────────────────────────────────────────────────── */
+
+describe("commentWire", () => {
+  /*
+    One question, three columns. Asserted here rather than in the component so
+    the mapping cannot be changed by editing a JSX prop.
+  */
+  it("maps on", () => {
+    expect(commentWire("on")).toEqual({ no_comments: false, comment_moderation: "none" })
+  })
+
+  it("maps on-with-approval to the drafts table's own hold_all", () => {
+    expect(commentWire("review")).toEqual({ no_comments: false, comment_moderation: "hold_all" })
+  })
+
+  it("does not claim a moderation queue on a video that takes no comments", () => {
+    expect(commentWire("off")).toEqual({ no_comments: true, comment_moderation: "none" })
+  })
+})
+
+/* ── Distribution ──────────────────────────────────────────────────────────── */
+
+describe("toCreateRequest — the distribution policy", () => {
+  it("sends the typed policy at version 1", () => {
+    const body = toCreateRequest(draft(), "m")
+    expect(body.distribution).toEqual({
+      version: 1,
+      main_feed: true,
+      notify_subscribers: true,
+    })
+  })
+
+  // `ParseDistributionPolicy` answers 400 UNSUPPORTED_DISTRIBUTION for
+  // `create_reel_preview: true` — in those words. It is never sent.
+  it("never sends create_reel_preview", () => {
+    const body = toCreateRequest(draft(), "m")
+    expect(body.distribution).not.toHaveProperty("create_reel_preview")
+  })
+
+  it("keeps the legacy column in step with the policy", () => {
+    // The policy wins wherever it is read, but an older consumer still reads
+    // `publish_to_feed`, and two readers must not get two answers.
+    const off = toCreateRequest(draft({ mainFeed: false }), "m")
+    expect(off.publish_to_feed).toBe(false)
+    expect(off.distribution?.main_feed).toBe(false)
+  })
+
+  it("carries the subscriber notification separately from the feed", () => {
+    const body = toCreateRequest(draft({ mainFeed: true, notifySubscribers: false }), "m")
+    expect(body.distribution).toEqual({
+      version: 1,
+      main_feed: true,
+      notify_subscribers: false,
+    })
+  })
+})
+
+/* ── Publishing before the encode finishes ─────────────────────────────────── */
+
+describe("publishAction — the still-processing case", () => {
+  /*
+    `POST /v1/videos/{id}/publish` is gated on `video_metadata.upload_status`
+    and answers 409 NOT_READY until the transcode consumer flips it. The CREATE
+    accepts a still-encoding asset. So the second call is dropped rather than
+    attempted, and the post reaches the same state on its own.
+  */
+  it("still publishes a public video when the asset is ready", () => {
+    expect(publishAction(draft({ visibility: "public" }), true)).toBe("publish")
+  })
+
+  it("creates without the publish call while the asset is still encoding", () => {
+    expect(publishAction(draft({ visibility: "public" }), false)).toBe("create")
+  })
+
+  it("never calls publish for a narrower audience, ready or not", () => {
+    expect(publishAction(draft({ visibility: "unlisted" }), true)).toBe("create")
+    expect(publishAction(draft({ visibility: "private" }), false)).toBe("create")
+  })
+
+  it("schedules regardless of readiness", () => {
+    const scheduled = draft({ scheduleMode: "at", scheduleAt: localAfter(60 * 60 * 1000) })
+    expect(publishAction(scheduled, true)).toBe("schedule")
+    expect(publishAction(scheduled, false)).toBe("schedule")
+  })
+})
+
+/* ── The checklist ─────────────────────────────────────────────────────────── */
+
+describe("publishChecklist", () => {
+  const labels = (d: VideoDraft, ready = true) => publishChecklist(d, ready).map((s) => s.label)
+
+  it("names the audience", () => {
+    expect(labels(draft({ visibility: "followers" })).join(" ")).toMatch(
+      /only people who follow you/i
+    )
+  })
+
+  it("says whether subscribers are told, in both directions", () => {
+    expect(labels(draft({ notifySubscribers: true })).join(" ")).toMatch(/are told about it/)
+    expect(labels(draft({ notifySubscribers: false })).join(" ")).toMatch(/are not told about it/)
+  })
+
+  it("says whether it reaches the main feed", () => {
+    expect(labels(draft({ mainFeed: false })).join(" ")).toMatch(/out of the main feed/)
+  })
+
+  it("explains the author-only window when the encode has not finished", () => {
+    const entry = publishChecklist(draft(), false).find((s) => s.id === "processing")
+    expect(entry?.label).toMatch(/only you can see it/i)
+  })
+
+  it("has no processing line once the asset is ready", () => {
+    expect(publishChecklist(draft(), true).some((s) => s.id === "processing")).toBe(false)
+  })
+
+  it("carries a shape as well as a sentence, so nothing rests on colour", () => {
+    const entry = publishChecklist(draft({ mainFeed: false }), true).find((s) => s.id === "feed")
+    expect(entry?.on).toBe(false)
+  })
+
+  it("restates both disclosures when they are declared", () => {
+    const joined = labels(draft({ paidPromotion: true, alteredContent: true })).join(" ")
+    expect(joined).toMatch(/paid promotion/i)
+    expect(joined).toMatch(/altered or synthetic/i)
+  })
+
+  it("says nothing about a disclosure that was not made", () => {
+    expect(labels(draft()).join(" ")).not.toMatch(/paid promotion/i)
   })
 })
