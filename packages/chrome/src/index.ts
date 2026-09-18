@@ -51,7 +51,13 @@ export type { AppFrameProps } from "./AppFrame"
  * header alone instead of forking it.
  */
 export { AppHeader } from "./AppHeader"
-export { LeftRail } from "./LeftRail"
+/**
+ * Both shapes of the left rail. A surface taking these alone has to take BOTH
+ * and wire the trigger, or it has given a phone a header and no navigation —
+ * which is precisely the state this package was in until the drawer existed.
+ */
+export { LeftRail, LeftRailDrawer } from "./LeftRail"
+export type { LeftRailProps } from "./LeftRail"
 export { RightRail } from "./RightRail"
 export { ProfileMenu } from "./ProfileMenu"
 export { SearchBox } from "./SearchBox"

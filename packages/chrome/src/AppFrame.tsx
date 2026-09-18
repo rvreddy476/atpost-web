@@ -38,28 +38,36 @@
  *                                 is navigation and identity — when space is
  *                                 short, knowing where you are and how to
  *                                 leave beats being shown someone new.
- *   < 1024        one column.     Both rails gone. The header still carries
- *                                 every destination, which is why it is
- *                                 sticky and why it holds the full icon strip
- *                                 rather than a hamburger.
+ *   < 1024        one column.     Both rails gone from the LAYOUT. The left
+ *                                 one comes back as a drawer behind the
+ *                                 header's hamburger — see below.
  *
- * ── Why there is no bottom bar, having looked at adding one ───────────────
- * The obvious phone pattern, and it was measured rather than dismissed. The
- * strip in the header IS the bottom bar's content: the same seven
- * destinations, the same glyphs, the same active mark, already sticky and
- * already the thing every zone mounting this frame shares. Adding a second
- * navigation below 1024 would put those seven entries on screen TWICE — once
- * in a bar that does not scroll away and once in a bar pinned to the other
- * edge — and it would do it in apps/reels and apps/kwit as well, since both
- * mount this component and neither asked for it.
+ * ── The phone's navigation is a drawer, and the strip is not ──────────────
+ * What stood here argued that no second navigation was needed below 1024,
+ * because the header's icon strip "IS the bottom bar's content: the same seven
+ * destinations, the same glyphs, the same active mark". That is true of the
+ * destinations and false of the navigation. The strip is seven UNLABELLED
+ * glyphs in a band that scrolls — no names, no descriptions, no mark on the
+ * four rows the web cannot open and no reason given for them, and no account
+ * on it anywhere. At 360px the last of the seven are off screen behind a
+ * scroll with no affordance announcing itself. That is a row of shortcuts for
+ * somebody who already knows the product, which is the opposite of the case a
+ * phone is.
  *
- * What the phone case actually needed was not a second bar but for the one
- * that exists to be usable: 44px targets that do not compress (./NavItem, and
- * its `shrink-0` note is the older half of the same fix), a strip that scrolls
- * rather than squeezes, and a wordmark that gets out of the way under md. That
- * is what changed. If the destination list ever grows past what a 360px strip
- * can scroll comfortably, the answer is fewer destinations in the chrome, not
- * a third place to put them.
+ * So the strip is now `lg:` and up, where the rail is open beside it anyway
+ * and a shortcut row is exactly the right thing; and below it there is a
+ * hamburger in the header opening `LeftRailDrawer` — the SAME rail, from the
+ * same `RailContent`, with the labels, the descriptions, the app-only note and
+ * the viewer's own card. The old note's real concern was two navigations on
+ * one screen, and that concern is kept: at every width there is exactly one.
+ *
+ * Still no bottom bar, and for the reason the old note gave: a second bar
+ * pinned to the other edge would appear in apps/reels and apps/kwit as well,
+ * since both mount this component and neither asked for one.
+ *
+ * apps/tube reached the same shape first, from the other direction — its
+ * `TubeRailDrawer` observes that this package "drops its left rail below `lg`
+ * and gets away with it". It did not, and this is the correction.
  *
  * ── The centre column keeps its measure at every width ────────────────────
  * `max-w-[600px]` with `mx-auto` on `main`, under a grid track that is already
@@ -95,11 +103,11 @@
  * this file is the cheaper version of the same discipline.
  */
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { useSession } from "@atpost/api-client/session"
 import { AppHeader } from "./AppHeader"
-import { LeftRail } from "./LeftRail"
+import { LeftRail, LeftRailDrawer } from "./LeftRail"
 import { RightRail } from "./RightRail"
 import { currentDestinationId } from "./destinations"
 import { zonePath } from "./zone"
@@ -125,6 +133,20 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
   const currentId = currentDestinationId(zonePath(basePath, pathname))
 
   const [profile, setProfile] = useState<ViewerProfile | null>(null)
+
+  const [navOpen, setNavOpen] = useState(false)
+  const navButtonRef = useRef<HTMLButtonElement>(null)
+
+  // A route change closes the drawer. Without this, following a row inside it
+  // leaves an overlay sitting over the page that was just navigated to — which
+  // on a phone reads as a navigation that did nothing. Every row in the rail is
+  // a real anchor to another ZONE and so is a document navigation that unmounts
+  // all of this; the one case that survives is a same-zone destination, and
+  // this is what covers it. apps/tube's TubeFrame does the same on the same
+  // dependency.
+  useEffect(() => {
+    setNavOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     if (sessionStatus === "unknown") return
@@ -155,6 +177,20 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
         displayName={profile?.display_name}
         avatarMediaId={profile?.avatar_media_id}
         currentId={currentId}
+        navOpen={navOpen}
+        onToggleNav={() => setNavOpen((open) => !open)}
+        navButtonRef={navButtonRef}
+      />
+      {/* The rail's other shape. It renders nothing at all while shut, and it
+          is `lg:hidden` while open, so the two are never on screen together
+          even for the frame it would take a resize to notice. */}
+      <LeftRailDrawer
+        basePath={basePath}
+        profile={profile}
+        currentId={currentId}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        returnFocusTo={navButtonRef}
       />
       <div
         className={[

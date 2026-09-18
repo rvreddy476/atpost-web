@@ -33,6 +33,7 @@
  * there is nothing else to reach them by.
  */
 
+import { Menu } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
 import { NotificationBell } from "@momentum/notifications"
@@ -65,6 +66,9 @@ export function AppHeader({
   displayName,
   avatarMediaId,
   currentId,
+  navOpen,
+  onToggleNav,
+  navButtonRef,
 }: {
   /** The zone this header is drawn in. See ./zone.ts. */
   basePath: string
@@ -72,6 +76,12 @@ export function AppHeader({
   /** The viewer's avatar asset id, from `/v1/profiles/me`. Not a URL. */
   avatarMediaId?: string | null
   currentId: string | null
+  /** Whether ./LeftRail's drawer is open, for the trigger's `aria-expanded`. */
+  navOpen?: boolean
+  /** Opens the drawer. Omit and no hamburger is drawn at all. */
+  onToggleNav?: () => void
+  /** The frame's handle on the trigger, so the drawer can hand focus back. */
+  navButtonRef?: React.Ref<HTMLButtonElement>
 }) {
   const { signedIn } = useSession()
 
@@ -84,6 +94,28 @@ export function AppHeader({
           left edge of the rail and the header does not look inset by a
           different amount from the page. */}
       <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-4 sm:gap-3 sm:px-6">
+        {/* ── The way into the navigation, below lg ─────────────────────────
+            Drawn only under 1024, which is exactly where ./LeftRail's column
+            is not. Above it the rail is already open beside the page and a
+            button that opens it again would be a control with nothing to do.
+
+            `-ml-2` for the reason the lockup beside it carries the same trick:
+            a 44px box whose glyph has to stay on the 16px gutter. Without it
+            the hamburger sits 8px further in than the wordmark below it and
+            the whole bar looks inset by a different amount from the page. */}
+        {onToggleNav && (
+          <button
+            ref={navButtonRef}
+            type="button"
+            onClick={onToggleNav}
+            aria-label="Navigation"
+            aria-expanded={navOpen ?? false}
+            className="-ml-2 grid h-11 w-11 shrink-0 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink lg:hidden"
+          >
+            <Menu aria-hidden="true" className="h-5 w-5" />
+          </button>
+        )}
+
         {/* ── Left: the lockup and search ───────────────────────────────── */}
         {/* A plain <a> and an absolute path, because from the reels zone this
             is a different Next app behind the shell's rewrite table — and
@@ -131,10 +163,45 @@ export function AppHeader({
 
         <SearchBox basePath={basePath} />
 
-        {/* ── Centre: the destinations ──────────────────────────────────── */}
+        {/* ── Centre: the destinations ──────────────────────────────────────
+
+            ── `hidden lg:flex`, and why this strip stopped being the phone's
+               navigation ────────────────────────────────────────────────────
+            It was the ONLY navigation below 1024, and ./AppFrame's header made
+            a careful argument for that: the strip is the same seven
+            destinations a bottom bar would carry, so a second one would print
+            them twice. What the argument missed is what the strip actually
+            carries — seven unlabelled glyphs in a band that scrolls, with no
+            descriptions, no marker for the four rows the web cannot open, and
+            no account on it anywhere. ./LeftRail's drawer is those rows with
+            their names on, and it is now what a phone gets. Two navigations
+            was never the plan; this is still one, and it is the better one.
+
+            Above `lg` the rail is open beside the page and this is a shortcut
+            row rather than the way through, which is the job it is good at.
+
+            ── The scrollbar, and where a PACKAGE can put the fix ─────────────
+            apps/tube solved the same slab with a `.mo-hscroll` helper in its
+            own globals.css. This package cannot have one: it ships source, not
+            CSS, every zone compiles its own stylesheet, and a class defined in
+            one zone's globals is an undeclared dependency that fails silently
+            in the next — apps/social's globals.css declares no classes at all
+            and apps/reels only declares `.reels-scroller`, so the helper would
+            simply not exist in either zone that mounts this header.
+
+            Inline styles cannot do it either: `scrollbarWidth` is a real React
+            style property, but `::-webkit-scrollbar` is a pseudo-element and
+            there is no inline form of one, so the bar would stay in every
+            WebKit browser.
+
+            So it is written as Tailwind arbitrary variants, which compile into
+            whichever zone's stylesheet scans this file — and both of them
+            already glob `packages/chrome/src` for exactly this reason. Same
+            two declarations as `.mo-hscroll`, with no shared class to keep in
+            step. */}
         <nav
           aria-label="Momentum destinations"
-          className="mx-auto flex min-w-0 items-center gap-0.5 overflow-x-auto"
+          className="mx-auto hidden min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] lg:flex [&::-webkit-scrollbar]:hidden"
         >
           {DESTINATIONS.map((destination) => (
             <HeaderNavIcon

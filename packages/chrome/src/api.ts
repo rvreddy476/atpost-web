@@ -96,14 +96,31 @@ interface Envelope<T> {
  */
 export interface ViewerProfile {
   user_id: string
-  display_name: string
-  bio: string
+  display_name?: string
+  bio?: string
   avatar_media_id?: string
-  is_verified: boolean
-  follower_count: number
-  following_count: number
-  friend_count: number
-  post_count: number
+  is_verified?: boolean
+  /**
+   * ── The counts are OPTIONAL, and that is a correction ────────────────────
+   * All four were typed `number` and not one of them is guaranteed. This
+   * handler serialises the raw profile-service row — the same reason it sends
+   * `avatar_media_id` and no `avatar_url` — so a row written before a counter
+   * existed, or by a service that omits a zero, arrives without the field.
+   *
+   * The type said that could not happen, so ./LeftRail called
+   * `.toLocaleString()` straight on it. One absent `friend_count` threw inside
+   * a component the frame draws on EVERY page of two zones, and because the
+   * rail is inside the frame there is no boundary under it: the whole document
+   * went blank over one number.
+   *
+   * Optional here is the half of the fix a reader can check at the call site.
+   * The other half is `statText` in ./LeftRail, which is now the only thing
+   * allowed to format one.
+   */
+  follower_count?: number
+  following_count?: number
+  friend_count?: number
+  post_count?: number
 }
 
 export async function fetchViewerProfile(): Promise<ViewerProfile | null> {
