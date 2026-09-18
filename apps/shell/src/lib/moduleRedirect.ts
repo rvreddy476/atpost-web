@@ -21,7 +21,7 @@
  * `?redirect=` is still refused, because the only way to that host from here
  * is the shell's own redirect.
  */
-const moduleHomes = ['/shop', '/admin', '/social', '/apps', '/reels', '/tube'] as const
+const moduleHomes = ['/shop', '/admin', '/social', '/apps', '/reels', '/tube', '/kwit'] as const
 
 export type ModuleHome = (typeof moduleHomes)[number]
 
@@ -83,6 +83,8 @@ const moduleLabels: Record<ModuleHome, string> = {
   // Lower case and no article, like the two above it: the sentence around it
   // is "take you to …", and Tube is a name rather than a place with a "the".
   '/tube': 'Tube',
+  // Same reasoning as Tube: "take you to Know It" names the module, not a place.
+  '/kwit': 'Know It',
 }
 
 /**

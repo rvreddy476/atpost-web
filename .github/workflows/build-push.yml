@@ -31,7 +31,7 @@ jobs:
         # STALE (not deleted here, flagged 2026-09-16): dating, community, creator,
         # messenger, live and memories have no app under apps/, so those jobs fail
         # at `turbo run build --filter`; reels and tube exist but are not listed.
-        zone: [shell, commerce, admin, dating, social, community, creator, messenger, live, memories, miniapps]
+        zone: [shell, commerce, admin, dating, social, community, creator, messenger, live, memories, miniapps, kwit]
     steps:
       - uses: actions/checkout@v4
 

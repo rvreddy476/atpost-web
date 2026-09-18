@@ -20,6 +20,7 @@ const zones = [
   ["/apps", "MINIAPPS_ZONE_URL", "http://localhost:3010"],
   ["/reels", "REELS_ZONE_URL", "http://localhost:3011"],
   ["/tube", "TUBE_ZONE_URL", "http://localhost:3012"],
+  ["/kwit", "KWIT_ZONE_URL", "http://localhost:3013"],
 ] as const
 
 /**

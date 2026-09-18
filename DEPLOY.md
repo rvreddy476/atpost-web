@@ -66,6 +66,20 @@ docker build --build-arg ZONE=commerce -t web-commerce .
   `shell` (`/`) is the catch-all (`group.order` 100). **Check rule ordering on
   first deploy** — `/` must evaluate last.
 
+### Zone: kwit (Know It, Q&A)
+| what | value |
+|---|---|
+| app | `apps/kwit` (`@atpost/kwit`), basePath `/kwit`, dev port 3013, e2e port 3023 |
+| image | ECR `atpost/web-kwit` (`kwit` is in the `build-push.yml` matrix) |
+| ArgoCD values | `deploy/web/kwit/values-<env>.yaml` in modernsmapp (does not exist yet; copy an existing zone's, e.g. `deploy/web/miniapps/`) |
+| ALB path | `/kwit` and `/kwit/*` on the shared `atpost-web-<env>` group, ordered before the shell's `/` catch-all |
+| shell env | `KWIT_ZONE_URL` = the kwit Service URL (local default `http://localhost:3013`) |
+| backend | qa-service at `/v1/qa`, behind the gateway dormant gate: `QA_PUBLIC_ENABLED` / `QA_PILOT_USER_IDS` |
+
+Deploying the zone does not open the product. While `QA_PUBLIC_ENABLED` is off,
+everyone not in `QA_PILOT_USER_IDS` (and every signed-out visitor) sees "Know It
+isn't available yet". See `docs/kwit-web.md`.
+
 ## 5. Bring the monolith in (the actual route migration)
 ```bash
 ./scripts/migrate-shell.sh          # postbook-ui → apps/shell (no codemod; @/* still resolves)

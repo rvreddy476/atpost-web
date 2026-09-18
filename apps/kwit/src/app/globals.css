@@ -1,0 +1,16 @@
+/* The Momentum theme, then Tailwind — the same order as every other zone.
+   There are no colours in this file; everything visual lives in
+   packages/tokens/tokens.css. */
+@import "@momentum/tokens/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* next/font exposes each family as a variable; hand them to the token sheet. */
+:root {
+  --mo-font-display: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mo-font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}

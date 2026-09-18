@@ -43,8 +43,8 @@
  *     verified. The list of videos is `/v1/feed/videos`, on feed-service.)
  *
  * ── Why a destination with no web zone still appears ──────────────────────
- * The web has six zones and the shell's rewrite table is the whole list:
- * /shop, /admin, /social, /apps, /reels, /tube (apps/shell/next.config.ts, and
+ * The web has seven zones and the shell's rewrite table is the whole list:
+ * /shop, /admin, /social, /apps, /reels, /tube, /kwit (apps/shell/next.config.ts, and
  * the same list again in apps/shell/src/lib/moduleRedirect.ts). Friends and
  * Messages are not among them.
  *
@@ -73,6 +73,7 @@ import {
   House,
   LayoutGrid,
   MessageCircle,
+  MessageCircleQuestion,
   ShoppingBag,
   Tv,
   Users,
@@ -154,6 +155,24 @@ export const DESTINATIONS: readonly AppDestination[] = [
     href: "/tube",
     unavailableReason: null,
     description: "Long video",
+  },
+  {
+    id: "kwit",
+    // KWIT, the short label, because the rail and the header strip are where
+    // space is tightest. The product's full name is "Know It", which is what
+    // the zone's own headings and sentences say.
+    label: "KWIT",
+    // Lucide `message-circle-question`: the Messages glyph with a question
+    // mark in it. Deliberately not `circle-help`, which reads as "help for
+    // this page" rather than a place where people ask each other things.
+    icon: MessageCircleQuestion,
+    // A real zone as of the Know It build: apps/kwit on port 3013, and the
+    // shell's rewrite table carries /kwit. Whether Q&A is switched on for a
+    // viewer is qa-service's gateway gate, not this row; the zone itself says
+    // "Know It isn't available yet" while the product is dark.
+    href: "/kwit",
+    unavailableReason: null,
+    description: "Questions and answers",
   },
   {
     id: "messages",

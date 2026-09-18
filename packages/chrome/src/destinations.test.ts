@@ -34,7 +34,7 @@ import {
  * was `href: null` with APP_ONLY_REASON, and this test is what would have
  * caught either being linked a release too early.
  */
-const LIVE_ZONES = ["/shop", "/admin", "/social", "/apps", "/reels", "/tube"]
+const LIVE_ZONES = ["/shop", "/admin", "/social", "/apps", "/reels", "/tube", "/kwit"]
 
 describe("DESTINATIONS", () => {
   it("carries the mobile client's own top-level vocabulary", () => {
@@ -125,6 +125,13 @@ describe("currentDestinationId", () => {
   it("matches a route inside the zone", () => {
     expect(currentDestinationId("/social/post/abc")).toBe("home")
     expect(currentDestinationId("/shop/orders")).toBe("shop")
+    expect(currentDestinationId("/kwit/questions/4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f80")).toBe("kwit")
+  })
+
+  it("resolves the Know It zone root and its query form", () => {
+    expect(currentDestinationId("/kwit")).toBe("kwit")
+    expect(currentDestinationId("/kwit?tab=unanswered")).toBe("kwit")
+    expect(currentDestinationId("/kwitter")).toBeNull()
   })
 
   it("matches a zone root carrying a query", () => {
@@ -147,7 +154,7 @@ describe("currentDestinationId", () => {
   it("never returns an id that has no href", () => {
     // A destination with no zone can never be "current", because there is no
     // path that could be inside it.
-    for (const path of ["/social", "/apps", "/shop", "/reels", "/tube", "/messages"]) {
+    for (const path of ["/social", "/apps", "/shop", "/reels", "/tube", "/kwit", "/messages"]) {
       const id = currentDestinationId(path)
       if (id === null) continue
       const destination = DESTINATIONS.find((d) => d.id === id)

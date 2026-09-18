@@ -78,6 +78,37 @@
         "vitest": "2.1.9",
       },
     },
+    "apps/kwit": {
+      "name": "@atpost/kwit",
+      "version": "0.1.0",
+      "dependencies": {
+        "@atpost/api-client": "workspace:*",
+        "@atpost/types": "workspace:*",
+        "@atpost/ui": "workspace:*",
+        "@momentum/brand": "workspace:*",
+        "@momentum/chrome": "workspace:*",
+        "@momentum/content": "workspace:*",
+        "@momentum/interactions": "workspace:*",
+        "@momentum/tokens": "workspace:*",
+        "@tanstack/react-query": "^5.90.21",
+        "axios": "^1.7.0",
+        "lucide-react": "^0.460.0",
+        "next": "^15.0.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+      },
+      "devDependencies": {
+        "@atpost/config": "workspace:*",
+        "@types/node": "^22.14.0",
+        "@types/react": "^19.2.2",
+        "@types/react-dom": "^19.2.2",
+        "autoprefixer": "^10.4.20",
+        "postcss": "^8.4.49",
+        "tailwindcss": "^3.4.17",
+        "typescript": "^5.8.2",
+        "vitest": "2.1.9",
+      },
+    },
     "apps/miniapps": {
       "name": "@atpost/miniapps",
       "version": "0.1.0",
@@ -453,6 +484,8 @@
     "@atpost/config": ["@atpost/config@workspace:packages/config"],
 
     "@atpost/form": ["@atpost/form@workspace:packages/form"],
+
+    "@atpost/kwit": ["@atpost/kwit@workspace:apps/kwit"],
 
     "@atpost/miniapps": ["@atpost/miniapps@workspace:apps/miniapps"],
 
