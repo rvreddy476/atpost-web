@@ -84,7 +84,10 @@
      #06B6D4 cyan   on #332F55 overlay ..........  5.15  AA
      #8B5CF6 purple on #0D0C14 bg ...............  4.59  AA (small text OK here)
      #8B5CF6 purple on #1F1D33 surface ..........  3.87  LARGE / NON-TEXT ONLY
-     #0D0C14 ink    on #06B6D4 cyan fill ........  8.01  AAA
+     #0D0C14 ink    on #06B6D4 cyan fill ........  8.01  AAA  — and this is
+                                                          also the ACCENT fill
+                                                          on this theme; see
+                                                          --mo-accent below
      #0D0C14 ink    on #8B5CF6 purple fill ......  4.59  AA
      #FFFFFF white  on #06B6D4 cyan fill ........  2.43  FAILS — never used
      #FFFFFF white  on #8B5CF6 purple fill ......  4.23  AA (unused; ink wins)
@@ -243,6 +246,44 @@
   --mo-cyan: 6 182 212;          /* #06B6D4 interactive: links, focus      */
   --mo-purple: 139 92 246;       /* #8B5CF6 presence: live, unread, mine   */
 
+  /* ── The accent: THE ATTENTION COLOUR, AND IT EXISTS IN BOTH THEMES ─────
+     THE RULE, and it is the reason this pair is declared here and not only
+     under `.mo-light`: the accent is *the* attention colour in BOTH themes,
+     and it is the SAME JOB in each — only a different hue. Orange there, cyan
+     here. Its territory is identical in both and is the list the light block
+     writes out in full: unread and notification marks, "new" and "live"
+     pills, count bubbles, and the active tab's indicator or underline. Fills
+     and rules, never a run of words, and never anything pressable.
+
+     It used to be a light-only pair, on the same footing as gold under
+     `.mo-commerce` — outside the scope it resolved to nothing and rendered
+     transparent, and that was called a deliberate loud failure. Gold earns
+     that treatment because gold means MONEY and a zone that is not the shop
+     has no business painting it. An attention mark is not like that. Every
+     zone has unread counts, and a package that draws one — `@momentum/
+     notifications` is the case that proved it — is not a zone and cannot know
+     which scope it will be mounted under. `apps/tube` renders that bell under
+     a bare `.mo-root`, so `bg-mo-accent` was `rgba(0, 0, 0, 0)` there: not a
+     loud failure, a SILENT one, an unread count that is simply absent. A
+     component cannot be asked to know its theme, so the token answers in
+     every scope.
+
+     The values here are the dark theme's honest ones — what that badge has
+     been painting all along through a defensive var() fallback chain, to the
+     pixel. #0D0C14 on #06B6D4 is 8.01, so unlike orange's 4.72 there is no
+     size question at all on this ground.
+
+     One consequence, stated rather than hidden: in a DARK zone the accent and
+     --mo-cyan are the same #06B6D4, so an unread badge and a link share a hue,
+     which they do not under `.mo-light` (orange marks, green actions). They
+     are still distinguished the way the rules above already require — the
+     accent is a FILL or a RULE and the interactive colour is a WORD — and
+     collapsing cyan's two jobs into one value here is the same move --mo-info
+     already makes below, not a new one. */
+  --mo-accent: 6 182 212;        /* #06B6D4 = --mo-cyan, deliberately;
+                                    unread, new/live, counts, active tab rules */
+  --mo-on-accent: 13 12 20;      /* #0D0C14 the ONLY type on the accent fill */
+
   /* ── Semantic ───────────────────────────────────────────────────────────
      Same hues and same names as the shop's sheet, so a status pill means the
      same thing in both zones. Re-measured against the new ground — all three
@@ -310,9 +351,54 @@
      overlay at .40 is a dimmer, not a scrim, and nothing may be written on
      one. Everything in this repo that carries words uses .70 or more; .60 is
      the modal backdrop, which carries none at all and is chosen for how much
-     of the page it puts away rather than for what sits on it. */
+     of the page it puts away rather than for what sits on it.
+
+     ── AND THE VEIL HAS TWO INKS, for the same reason the grounds do ─────
+     A scrim carries running text — a clock, a chapter title, a caption — and
+     running text has a hierarchy: the live number and the fact about the file
+     are not the same voice. Every ground in this sheet gets --mo-ink and
+     --mo-body for that. The scrim got only one, and the consequence was that
+     a component wanting a quieter voice on a veil reached for --mo-body,
+     which is a THEME colour: #A19CB9 measures 4.89 against the dark ground
+     and 1.63 over a white video frame under `.mo-light`, where --mo-body is
+     the near-black #46554D. Dark-on-dark, i.e. gone — the same failure
+     --mo-on-scrim already exists to prevent, one step down the hierarchy.
+
+     So --mo-on-scrim-body, declared HERE beside the scrim and in :root only,
+     exactly like the scrim and its ink: a veil is dark in both themes, so its
+     inks are too. It must never be redeclared under `.mo-light`.
+
+     ── What the value had to clear ───────────────────────────────────────
+     Same method as the alpha table above — composite #08070E over PURE WHITE
+     media, then the ink on the result — and the same worst case, because
+     white is the only ground a photograph can actually reach.
+
+     The alphas that matter are the ones the player's control gradient puts
+     under a word. That gradient is .95 at the bottom edge easing to .65 at
+     its halfway line, and the transport row occupies the 8-40px band of it,
+     which is .907 at the row's floor, .821 through its middle and .736 at its
+     ceiling. .736 is therefore the thinnest veil any label sits on and it is
+     the figure that governs.
+
+       #C6C0D9 on the .736 band over white ....  5.11  AA at any size
+       #C6C0D9 on the .821 band over white ....  7.07  AAA
+       #C6C0D9 on the .907 band over white ....  9.40  AAA
+       #C6C0D9 on a .92 veil over white .......  9.73  AAA  (the settings menu)
+       #C6C0D9 on the .821 band over mid grey .  9.55
+       #C6C0D9 on the .821 band over black ....  11.50
+       #C6C0D9 on --mo-bg, for comparison .....  11.06  (--mo-ink is 16.97)
+
+     It is chosen as the dimmest violet in this family that still clears 4.5
+     at .736 with margin, so it reads as a second voice rather than as a
+     second ink: against --mo-on-scrim it is 7.07 to 14.42 through the middle
+     of the row. Below .70 it does not clear, and nothing in this repo writes
+     a secondary word on a veil that thin — .60 is the modal backdrop, which
+     carries no words at all. The dark theme's own --mo-body would NOT have
+     done: #A19CB9 is 4.73 at .821 and 3.41 at .736, so it fails exactly where
+     the gradient is thinnest. */
   --mo-scrim: 8 7 14;            /* #08070E dark in BOTH scopes            */
   --mo-on-scrim: 241 238 248;    /* #F1EEF8 the ONLY type on a scrim       */
+  --mo-on-scrim-body: 198 192 217; /* #C6C0D9 secondary type on a scrim    */
 
   /* ── Elevation ──────────────────────────────────────────────────────────
      Long, soft, and very dark. Paired with the surface step above; across a
@@ -751,9 +837,14 @@
      2.08). The full rule and the reasoning are in the block header — this is
      the summary, not the source.
 
-     These two exist only inside .mo-light, the way gold exists only inside
-     .mo-commerce. Outside this scope they resolve to nothing and render
-     transparent, which is a loud failure and is not softened. */
+     These two are RE-declarations, not the only ones: :root declares the same
+     pair as the dark theme's cyan, because the accent is the same job in both
+     themes and a component that draws an unread count cannot know which scope
+     it is under. See the rule beside the :root declaration for why this pair
+     is not treated the way gold is. What changes here is the HUE, and with it
+     the size rule — 4.72 as a fill is legal at any size, but orange as a
+     colour on a ground is 3.77 and the dark theme's 8.01 asks no such
+     question. */
   --mo-accent: 226 86 11;        /* #E2560B unread, new/live, counts, active
                                     tab rules — fills and rules, not words   */
   --mo-on-accent: 15 26 20;      /* #0F1A14 the ONLY type on an orange fill */
@@ -823,8 +914,9 @@
   --mo-focus: rgb(11 107 55);
 
   /* ── The scrim is NOT redefined here, and that is the whole point ───────
-     --mo-scrim and --mo-on-scrim are declared once in :root and inherit into
-     this scope unchanged: a dark veil with light type, on a white page.
+     --mo-scrim, --mo-on-scrim and --mo-on-scrim-body are declared once in
+     :root and inherit into this scope unchanged: a dark veil with light type,
+     primary and secondary, on a white page.
 
      This is the one place the light block deliberately keeps a dark-theme
      value, so it is worth saying why in the scope that looks wrong. A scrim

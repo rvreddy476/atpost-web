@@ -30,13 +30,31 @@
  * /tube, next/link would ask for /tube/u/abc. A plain `<a href>` is a full
  * page load, and the shell's rewrite table routes it.
  *
- * ── The badge is cyan, not ember ──────────────────────────────────────────
- * tokens.css measures #0D0C14 on ember red at 4.03, which is LARGE-TEXT-ONLY,
- * and an unread count is 11px bold. The same sheet measures the same ink on
- * cyan at 8.01 (the RoleSwitcher chip), so the badge is cyan and the number
- * is legible. The dot on an unread ROW is purple, because tokens.css gives
- * purple exactly one job, "presence: live, unread, mine", and it is a
- * non-text mark so the contrast floor does not apply.
+ * ── The badge is the ACCENT, not cyan, and not ember ──────────────────────
+ * It was cyan, and the reason given was a measurement: tokens.css puts #0D0C14
+ * on ember red at 4.03, which is LARGE-TEXT-ONLY, and an unread count is 11px
+ * bold, whereas the same ink on cyan is 8.01. That measurement is still true
+ * and is no longer the question. tokens.css now hands --mo-accent a closed list
+ * of jobs — "unread and notification marks, 'new' and 'live' pills, count
+ * bubbles, and the active tab's indicator or underline" — and a count bubble is
+ * the third item, named. The sanctioned form is the FILL form, `bg-mo-accent
+ * text-mo-on-accent`, which is 4.72 and therefore legal at any size, so an 11px
+ * bold number is fine. Cyan in a light zone means --mo-info, a notice, which is
+ * not what an unread count is.
+ *
+ * The dot on an unread ROW stays purple, because tokens.css gives purple
+ * exactly one job, "presence: live, unread, mine", and it is a non-text mark so
+ * the contrast floor does not apply.
+ *
+ * ── The four cyan sites, and where each went ───────────────────────────────
+ * The count badge above, and three PRESSABLE words: "Mark all as read",
+ * "Retry", "Load more". Those three are now `text-brand-accent`, the alias that
+ * follows the scope — #06B6D4 in :root, #0B6B37 under `.mo-light` — the same
+ * move `packages/chrome` and `packages/interactions` made, for the same reason:
+ * cyan stopped being the interactive colour when the zone went light, and a
+ * cyan button on a page whose every other pressable thing is green reads as a
+ * notice. Measured on the panel's own ground: 5.15 dark, 6.61 light; on the
+ * hover fill, 5.86 and 5.97.
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react"
@@ -138,8 +156,28 @@ export interface NotificationBellViewProps {
   onRetry: () => void
 }
 
-/** Why the class is a constant: the test asserts the unread row wears it. */
-export const UNREAD_ROW_CLASS = "bg-mo-surface"
+/**
+ * Why the class is a constant: the test asserts the unread row wears it.
+ *
+ * `--mo-raised`, not `--mo-surface`. The panel's ground is `--mo-overlay`, and
+ * the old fill worked only by accident of the dark theme having five tones:
+ * #1F1D33 on #332F55 is 1.30, a real if faint "this one is new". In a light
+ * zone --mo-surface IS #FFFFFF, the same white as the panel behind it — 1.00,
+ * no fill at all, and the only thing left marking an unread row was the purple
+ * dot. --mo-raised is the token whose documented job is exactly this, a nested
+ * step, and it reads on both: 1.13 dark and 1.10 light. Small numbers, because
+ * a row wash is meant to be one; the difference is that neither is 1.00. The
+ * sentence on it stays AAA either way — #F1EEF8 on #2A2745 is 12.42, #0F1A14 on
+ * #F1F4F2 is 16.09 — and the timestamp clears AA at 5.40 and 7.11.
+ *
+ * KNOWN GAP, not fixed here: ROW's hover and focus fills are also --mo-raised,
+ * so an unread row no longer changes under the pointer. Closing it needs a tone
+ * one step from raised that exists in BOTH scopes, and there isn't one — the
+ * light block has three tones where the dark block has five, so the only deeper
+ * step is --mo-sunken, which is #08070E in a dark zone and would flash a
+ * near-black row inside a #332F55 panel. That is a tokens.css decision.
+ */
+export const UNREAD_ROW_CLASS = "bg-mo-raised"
 
 const ROW =
   "flex w-full items-start gap-3 rounded-mo-sm px-3 py-2.5 text-left text-sm transition-colors duration-150 ease-mo hover:bg-mo-raised focus-visible:bg-mo-raised focus-visible:outline-none"
@@ -185,17 +223,39 @@ export function NotificationBellView({
             onClose(true)
           }
         }}
-        // 40x40: the same square as the profile trigger and the upload glyph
-        // beside it, and the smallest one a thumb reliably hits.
-        className="relative grid h-10 w-10 shrink-0 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-surface hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
+        // 44x44: the WCAG 2.2 target-size floor, and the number the
+        // accessibility brief names. It was 40, described as "the smallest one
+        // a thumb reliably hits" — 44 is the size that claim is actually made
+        // about. The glyph inside is unchanged, so it grows by padding only and
+        // sits on the same centre line as the trigger beside it.
+        //
+        // The hover fill moved from --mo-surface to --mo-raised for the reason
+        // written out at UNREAD_ROW_CLASS: the header's ground is --mo-bg, and
+        // --mo-surface is the SAME white as it under `.mo-light`, so the hover
+        // state simply did not exist there. --mo-raised is 1.36 against the
+        // dark header and 1.10 against the white one.
+        className="relative grid h-11 w-11 shrink-0 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
       >
         <Bell aria-hidden="true" className="h-5 w-5" />
         {unread > 0 && (
           // aria-hidden: the count is already in the button's name, and a
           // badge read out after it would say the number twice.
+          //
+          // The plain fill form, which is the sanctioned one: `bg-mo-accent
+          // text-mo-on-accent` is 4.72 under `.mo-light` and 8.01 under a bare
+          // `.mo-root`, so an 11px bold number is legal in either.
+          //
+          // It used to carry a defensive `var(--mo-accent, var(--mo-cyan))`
+          // chain, because the accent pair was declared only inside
+          // `.mo-light` and this package is not a zone — `apps/tube` renders
+          // this exact bell under `.mo-root`, where `bg-mo-accent` measured
+          // `rgba(0, 0, 0, 0)` and the count was simply gone. tokens.css now
+          // declares the pair in `:root` as well, with the dark theme's own
+          // values, so the chain has nothing left to defend against and the
+          // badge renders the same cyan it always did, to the pixel.
           <span
             aria-hidden="true"
-            className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-mo-pill bg-mo-cyan px-1 text-center text-[11px] font-bold leading-[18px] text-mo-bg"
+            className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-mo-pill bg-mo-accent px-1 text-center text-[11px] font-bold leading-[18px] text-mo-on-accent"
           >
             {unread > 99 ? "99+" : unread}
           </span>
@@ -226,7 +286,7 @@ export function NotificationBellView({
             type="button"
             onClick={onMarkAllRead}
             disabled={unread === 0 && !anyUnreadRow}
-            className="rounded-mo-pill px-2 py-1 text-xs font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-surface disabled:cursor-default disabled:text-mo-body disabled:hover:bg-transparent"
+            className="rounded-mo-pill px-2 py-1 text-xs font-semibold text-brand-accent transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:cursor-default disabled:text-mo-body disabled:hover:bg-transparent"
           >
             Mark all as read
           </button>
@@ -238,7 +298,7 @@ export function NotificationBellView({
             <button
               type="button"
               onClick={onRetry}
-              className="shrink-0 font-semibold text-mo-cyan hover:underline"
+              className="shrink-0 font-semibold text-brand-accent hover:underline"
             >
               Retry
             </button>
@@ -269,7 +329,7 @@ export function NotificationBellView({
               type="button"
               onClick={onLoadMore}
               disabled={loadingMore}
-              className="w-full rounded-mo-sm px-3 py-2 text-center text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:cursor-progress disabled:text-mo-body"
+              className="w-full rounded-mo-sm px-3 py-2 text-center text-sm font-semibold text-brand-accent transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:cursor-progress disabled:text-mo-body"
             >
               {loadingMore ? "Loading…" : "Load more"}
             </button>

@@ -22,11 +22,37 @@
  * `aria-haspopup`, and each carries its current VALUE in the label — "Speed,
  * Normal" — so the state is available without opening anything.
  *
- * ── Colour ───────────────────────────────────────────────────────────────
- * Every surface here is a token. This floats over user photography, so the
- * ground is `--mo-bg` at .92 rather than `--mo-overlay`: the menu has to be
- * legible over a white sky as well as over a night shot, and a themed panel
- * with no ground behind it disappears into half the videos on the platform.
+ * ── Colour: this menu is ON THE SCRIM, like everything else in the player ─
+ * Every surface here is a token, and the tokens are the media ones. The menu
+ * floats over user photography, so it needs a ground that does not follow the
+ * page — it has to be legible over a white sky as well as over a night shot.
+ *
+ * It used to say that in the comment and then paint `--mo-bg` at .92 with
+ * `--mo-ink` on it, which is the THEME's ground and the THEME's type. That
+ * works only as long as every zone is dark. Under `.mo-light` the veil becomes
+ * white at .92 — over a white frame, literally the frame — and the ink becomes
+ * the near-black #0F1A14, so the menu stops being a panel at all and its rows
+ * become dark words floating on the video. `--mo-scrim` is the token whose
+ * whole job is a veil that stays dark in both scopes, and `--mo-on-scrim` is
+ * the only type that goes on one. The gradient under the transport, the
+ * carousel's counter pill and the seek tooltip are all already on that pair;
+ * this is the last surface in the player that was not.
+ *
+ * Measured the way tokens.css measures every scrim, against the worst ground
+ * a veil can have — pure white media. `--mo-on-scrim` on `--mo-scrim` at .92
+ * is 14.94 over white, 16.42 over mid grey and 17.56 over black, AAA
+ * throughout; the value column's `--mo-on-scrim-body` is 9.73 over white.
+ *
+ * On the tokens alone the dark zones would not move to speak of: the veil goes
+ * from #0D0C14 at .92 to #08070E at .92, five parts in 255 on a surface that is
+ * 92% opaque, and the ink is #F1EEF8 either way — the same value `--mo-ink`
+ * already had there. They DO move, though, and for a separate reason recorded
+ * on the class itself: the old alpha never compiled, so there was no veil in
+ * any zone. The dark menu gains the ground it was always described as having.
+ *
+ * The hover and active fills follow the ink rather than the theme for the same
+ * reason: `bg-mo-ink/15` over this veil is a near-black wash in a light zone,
+ * where it is meant to be a lift.
  */
 
 import { CheckGlyph, ChevronLeftGlyph } from "./icons"
@@ -59,8 +85,21 @@ export interface SettingsMenuProps {
   labelledBy: string
 }
 
-/** A row's minimum box. 40px, which is the smallest a finger reliably hits. */
-const ROW = "flex h-10 w-full items-center gap-2 rounded-mo-sm px-2.5 text-left text-xs"
+/**
+ * A row's box. 44px.
+ *
+ * It was 40, under a note calling that "the smallest a finger reliably hits" —
+ * the same sentence, and the same wrong number, that stood over
+ * `TRANSPORT_BUTTON` in ./MomentumVideo. The brief names 44 and the rest of
+ * the product is built to it. These rows were found at 40 by opening the gear
+ * at 360px, where the menu is 192px wide and every row in it is a target a
+ * thumb has to land on without catching the one above.
+ *
+ * Height only: the type stays `text-xs` and the gutters stay `px-2.5`, so it
+ * is the same menu with 4px more air a row. At 360 it still ends 24px inside
+ * the frame, which a change in height does not touch.
+ */
+const ROW = "flex h-11 w-full items-center gap-2 rounded-mo-sm px-2.5 text-left text-xs"
 
 export function SettingsMenu({
   title,
@@ -85,7 +124,17 @@ export function SettingsMenu({
         // picture: a menu that covers the frame is a menu you close to see
         // what you were changing.
         "absolute bottom-14 right-2 z-20 w-48 overflow-hidden rounded-mo",
-        "bg-mo-bg/92 p-1 text-mo-ink shadow-mo backdrop-blur-sm",
+        // `/[0.92]` and not `/92`, and that is not a style preference. 92 is
+        // not a step in Tailwind's opacity scale — it runs in fives — so
+        // `bg-mo-bg/92`, which is what stood here, matched no utility and
+        // emitted NO CSS. The menu has had no ground at all: rows of type
+        // floating directly on the video, which over a bright frame is the
+        // exact failure this comment has always claimed to prevent. The
+        // bracketed form is the arbitrary-value syntax and compiles to
+        // `rgb(var(--mo-scrim) / 0.92)`. Checked against the whole repo: this
+        // was its only out-of-scale alpha, and the test in @momentum/tokens
+        // now keeps it that way.
+        "bg-mo-scrim/[0.92] p-1 text-mo-on-scrim shadow-mo backdrop-blur-sm",
         "max-h-[min(18rem,60%)] overflow-y-auto",
       ].join(" ")}
     >
@@ -93,7 +142,7 @@ export function SettingsMenu({
         <button
           type="button"
           onClick={onBack}
-          className={`${ROW} font-semibold text-mo-ink hover:bg-mo-ink/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-mo`}
+          className={`${ROW} font-semibold text-mo-on-scrim hover:bg-mo-on-scrim/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-mo`}
         >
           <ChevronLeftGlyph className="h-4 w-4 shrink-0" />
           {title}
@@ -116,10 +165,10 @@ export function SettingsMenu({
             onPointerEnter={() => onHover(index)}
             className={[
               ROW,
-              "text-mo-ink transition-colors duration-150 ease-mo motion-reduce:transition-none",
-              "hover:bg-mo-ink/15",
+              "text-mo-on-scrim transition-colors duration-150 ease-mo motion-reduce:transition-none",
+              "hover:bg-mo-on-scrim/15",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-mo",
-              index === activeIndex ? "bg-mo-ink/15" : "",
+              index === activeIndex ? "bg-mo-on-scrim/15" : "",
             ].join(" ")}
           >
             {leaf && (
@@ -129,7 +178,7 @@ export function SettingsMenu({
             )}
             <span className="min-w-0 flex-1 truncate">{row.label}</span>
             {row.value && (
-              <span className="shrink-0 text-[11px] text-mo-body">{row.value}</span>
+              <span className="shrink-0 text-[11px] text-mo-on-scrim-body">{row.value}</span>
             )}
           </button>
         )

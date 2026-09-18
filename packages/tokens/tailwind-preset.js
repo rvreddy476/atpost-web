@@ -50,21 +50,26 @@
  * green ramp, `border-mo` is a dark hairline, `shadow-mo` is the light
  * elevation. That is the whole reason the preset never declares a colour.
  *
- * Two exceptions, both additive:
+ * One exception, and it is additive:
  *
- * `mo-accent` / `mo-on-accent` are the light theme's ORANGE, and like
- * `mo-gold*` the variables behind them exist only inside their scope —
- * `.mo-light` — so they render transparent in a dark zone. Same deliberate
- * loud failure, same absence of a fallback.
+ * `mo-accent` / `mo-on-accent` are THE attention colour, and the variables
+ * behind them are declared in BOTH scopes — orange under `.mo-light`, the
+ * dark theme's cyan in `:root`. That is unlike `mo-gold*`, deliberately: gold
+ * means money and a zone outside the shop has no business painting it, but
+ * every zone has unread counts, and a package that draws one cannot know
+ * which scope it will be mounted under. tokens.css carries the argument.
  *
  * ── ORANGE CANNOT CARRY SMALL TEXT, AND THIS FILE CANNOT STOP YOU ─────────
  * `text-mo-accent` is 3.77 on white: large text (>=18.66px bold / >=24px) and
  * non-text ONLY. A `text-mo-accent text-sm` is an accessibility bug that
  * Tailwind will happily compile, exactly like `bg-mo-ember` with a 14px label.
+ * The dark scope's cyan is 8.01 and asks no such question, which is exactly
+ * why the constraint has to be written against the class rather than the
+ * value: the same utility is safe in one zone and not in the other.
  * The sanctioned forms are `text-mo-accent text-mo-accent-label` for a word,
- * or — better, and legal at any size — `bg-mo-accent text-mo-on-accent` for a
- * badge, pill or count at 4.72. `text-white` on `bg-mo-accent` is 3.77 and is
- * never correct.
+ * or — better, and legal at any size in either scope — `bg-mo-accent
+ * text-mo-on-accent` for a badge, pill or count (4.72 light, 8.01 dark).
+ * `text-white` on `bg-mo-accent` is 3.77 and is never correct.
  *
  * `mo-accent-label` is the 19px/700 floor for orange as text. It is the same
  * two variables as `mo-ember-label`, deliberately aliased rather than
@@ -105,9 +110,12 @@ module.exports = {
           cyan: "rgb(var(--mo-cyan) / <alpha-value>)",
           purple: "rgb(var(--mo-purple) / <alpha-value>)",
 
-          // Light zones only — see the note above. As TEXT on a ground,
-          // `accent` is large-text-and-non-text only (3.77 on white); as a
-          // FILL under `on-accent` it is legal at any size (4.72).
+          // THE attention colour, in both scopes — unread marks, new/live
+          // pills, count bubbles, active tab rules. Orange under `.mo-light`
+          // and cyan under a bare `.mo-root`, same job either way. As a FILL
+          // under `on-accent` it is legal at any size in both (4.72 light,
+          // 8.01 dark); as TEXT on a ground, the LIGHT value is
+          // large-text-and-non-text only (3.77 on white), so write the fill.
           accent: "rgb(var(--mo-accent) / <alpha-value>)",
           "on-accent": "rgb(var(--mo-on-accent) / <alpha-value>)",
 
@@ -118,11 +126,19 @@ module.exports = {
           // the alphas were measured against pure white media, the worst
           // ground a veil can have: .60 is 4.68, .70 is 6.86, .80 is 10.02 and
           // .40 is 2.38 and may never carry a word.
-          // Type on it is `text-mo-on-scrim` and nothing else — `text-mo-ink`
-          // flips dark in a light zone and would be dark-on-dark here, which
-          // is the exact failure the token exists to prevent.
+          // Type on it is `text-mo-on-scrim` or `text-mo-on-scrim-body` and
+          // nothing else — `text-mo-ink` and `text-mo-body` both flip dark in
+          // a light zone and would be dark-on-dark here, which is the exact
+          // failure the pair exists to prevent (`text-mo-body` over a white
+          // frame measures 1.63).
+          // `on-scrim-body` is the veil's SECONDARY voice, what `body` is to
+          // `ink` on a ground: 5.11 on the thinnest band the player's control
+          // gradient puts a word on (.736) over pure white media, 7.07 through
+          // the middle of that row, 9.73 on a .92 veil. Below .70 it does not
+          // clear 4.5 and nothing may be written on a veil that thin anyway.
           scrim: "rgb(var(--mo-scrim) / <alpha-value>)",
           "on-scrim": "rgb(var(--mo-on-scrim) / <alpha-value>)",
+          "on-scrim-body": "rgb(var(--mo-on-scrim-body) / <alpha-value>)",
 
           good: "rgb(var(--mo-good) / <alpha-value>)",
           bad: "rgb(var(--mo-bad) / <alpha-value>)",

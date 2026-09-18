@@ -2543,9 +2543,13 @@ export function MomentumVideo({
             picture is unobstructed in between.
 
             Colour: this sits over PHOTOGRAPHY, so nothing here may rely on a
-            theme colour alone. `--mo-ink` on `--mo-bg` at .70 is the scrim the
-            carousel's overlays already use, measured 6.46 against a pure white
-            frame — AA at any size, and better over anything darker.
+            theme colour alone — which is exactly why the ground is `--mo-scrim`
+            and not `--mo-bg`. `--mo-bg` IS the theme, so in a light zone the
+            veil turned white and a white sky put a white glyph on it. The scrim
+            is the same dark value in both scopes. `--mo-on-scrim` on
+            `--mo-scrim` at .70 is the veil the carousel's overlays already use,
+            measured 6.86 against a pure white frame — AA at any size, and
+            better over anything darker.
           */}
           <button
             type="button"
@@ -2562,7 +2566,22 @@ export function MomentumVideo({
             className={[
               OVERLAY_BUTTON,
               hit,
-              "absolute right-2 top-2 h-9 w-9",
+              // 44px, up from 36. This one is not in the transport row — it
+              // floats in the corner over the picture — so growing it changes
+              // nothing about the row's rhythm; what it does change is the
+              // veil pill, which now matches the transport's own controls
+              // instead of being the one target in the player below the
+              // guidance. The glyph stays `h-4 w-4`: it is a 16px mark on its
+              // own scrim rather than a 20px one inside a gradient, and
+              // padding is what was missing, not weight.
+              //
+              // The volume slider beside it moved from `right-12` to
+              // `right-14` in the same change. Its old offset was this
+              // button's old width plus the gutter (36 + 8 = 44 -> `right-12`
+              // at 48); at 44 wide the button now reaches 52 and the two
+              // overlapped, with the slider drawn over the speaker it is
+              // supposed to sit beside.
+              "absolute right-2 top-2 h-11 w-11",
               "transition-opacity duration-150 ease-mo motion-reduce:transition-none",
               chromeShown ? "opacity-100" : "opacity-0",
             ].join(" ")}
@@ -2610,19 +2629,36 @@ export function MomentumVideo({
               }}
               className={[
                 hit,
-                // 40px tall for the touch target, and `top-1.5` so its centre
-                // line is the speaker's: two controls side by side whose middles
-                // disagree by two pixels look like a mistake at every size.
-                "absolute right-12 top-1.5 flex h-10 w-20 cursor-pointer items-center",
-                "rounded-mo-pill bg-mo-bg/70 px-2 backdrop-blur-sm",
+                // 44px tall for the touch target — it is a `role="slider"` and
+                // a real tab stop, so it is held to the same floor as every
+                // other control here — and `top-2`, which is now the speaker's
+                // own inset: the two are the same height again, so aligning
+                // their centres no longer needs the half-step `top-1.5` that
+                // stood here when one was 36 and the other 40. Two controls
+                // side by side whose middles disagree by two pixels look like
+                // a mistake at every size.
+                //
+                // `right-14` (56) and not `right-12` (48): the speaker beside
+                // it grew from 36 to 44 and now reaches 52 from the right edge,
+                // which the old offset sat inside. See the speaker's note.
+                "absolute right-14 top-2 flex h-11 w-20 cursor-pointer items-center",
+                // Scrim, not ground: this pill floats over the picture with
+                // nothing else behind it. .70 is 6.86 over a white frame.
+                "rounded-mo-pill bg-mo-scrim/70 px-2 backdrop-blur-sm",
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo",
                 "transition-opacity duration-150 ease-mo motion-reduce:transition-none",
                 chromeShown ? "opacity-100" : "opacity-0",
               ].join(" ")}
             >
-              <div className="relative h-1 w-full overflow-hidden rounded-mo-pill bg-mo-ink/30">
+              {/*
+                The level sits ON the scrim, so it is `--mo-on-scrim` and not
+                `--mo-ink`: ink flips dark under `.mo-light` and a dark bar on a
+                dark veil is the same disappearance in the other direction. The
+                filled bar is 6.86 against its own pill over a white frame.
+              */}
+              <div className="relative h-1 w-full overflow-hidden rounded-mo-pill bg-mo-on-scrim/30">
                 <div
-                  className="h-full rounded-mo-pill bg-mo-ink"
+                  className="h-full rounded-mo-pill bg-mo-on-scrim"
                   style={{ width: `${volumePercent(isMuted ? 0 : volume)}%` }}
                 />
               </div>
@@ -2641,6 +2677,12 @@ export function MomentumVideo({
             Not `aria-live`. The audio IS the announcement: a screen-reader user
             hearing the video does not need its dialogue read to them a second
             time, and a live region firing on every cue would talk over it.
+
+            Colour: a cue box is the one thing here that is pure TEXT over
+            photography, so it takes the scrim rather than the ground and
+            `--mo-on-scrim` rather than `--mo-ink`. At .80 that is 10.02
+            against a pure white frame — AAA at any size — and 14.27 and 17.64
+            over mid grey and black.
           */}
           {captionLines.length > 0 && (
             <div
@@ -2653,7 +2695,7 @@ export function MomentumVideo({
               {captionLines.map((line, index) => (
                 <span
                   key={`${index}-${line}`}
-                  className="max-w-full rounded-mo-sm bg-mo-bg/80 px-2 py-0.5 text-center text-sm leading-snug text-mo-ink"
+                  className="max-w-full rounded-mo-sm bg-mo-scrim/80 px-2 py-0.5 text-center text-sm leading-snug text-mo-on-scrim"
                 >
                   {line}
                 </span>
@@ -2671,10 +2713,17 @@ export function MomentumVideo({
             already watching — without putting a control over the picture to
             do it, and it is what stops the frame from looking like a still
             image with nothing happening.
+
+            The track is `--mo-scrim` at .40 and the played part `--mo-on-scrim`
+            — a 2px hairline over photography is still over photography, and the
+            ground token would have made both of them white on a light page.
+            .40 carries no words (2.38 over white) and is not asked to: this is
+            a dimmer under a mark, and the mark against it is the pair the
+            scrim table is built on.
           */}
           {restingVisible && (
-            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-mo-bg/40">
-              <div className="h-full bg-mo-ink/80" style={{ width: `${progress * 100}%` }} />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-mo-scrim/40">
+              <div className="h-full bg-mo-on-scrim/80" style={{ width: `${progress * 100}%` }} />
             </div>
           )}
 
@@ -2709,16 +2758,25 @@ export function MomentumVideo({
               sky. A hard-edged strip would be a black bar stapled across the
               bottom of every video; a gradient reads as light falling off and
               is what a real player uses. It is sized so the controls sit in
-              its dense end: `--mo-bg` at .95 at the very bottom easing to .65
-              at the halfway line, which puts the play glyph and the clock on
-              roughly .83 and the seek bar on roughly .60. Against the worst
-              case — a pure white frame — that is 9.5:1 for the glyph and the
-              clock (AAA at any size) and 4.2:1 for the seek bar, which is
-              non-text and needs 3.0. Over anything darker it only improves.
+              its dense end: `--mo-scrim` at .95 at the very bottom easing to
+              .65 at the halfway line, which puts the play glyph and the clock
+              on roughly .83 and the seek bar on roughly .60.
+
+              `--mo-scrim`, not `--mo-bg`. The ground token made this gradient
+              the THEME's colour, so the moment a zone wears `.mo-light` the
+              veil faded from white to transparent over a white sky and the
+              whole transport went with it. The scrim is dark in both scopes for
+              exactly this reason; the dark zones see no change, because the
+              scrim's value is the dark theme's own `--mo-sunken`.
+
+              Against the worst case — a pure white frame — `--mo-on-scrim` on
+              the .83 band is 11.24 for the glyph and the clock (AAA at any
+              size) and 4.68 on the .60 band for the seek bar, which is non-text
+              and needs 3.0. Over anything darker it only improves.
             */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-mo-bg/95 via-mo-bg/65 to-transparent"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-mo-scrim/95 via-mo-scrim/65 to-transparent"
             />
 
             <div className="relative flex flex-col gap-1 px-3 pb-2">
@@ -2777,7 +2835,15 @@ export function MomentumVideo({
                     " focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
                   }
                 >
-                  <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-mo-pill bg-mo-ink/30 transition-[height] duration-150 ease-mo group-hover/scrub:h-1.5 motion-reduce:transition-none">
+                  {/*
+                    Every layer of this bar is `--mo-on-scrim`, not `--mo-ink`.
+                    The bar sits inside the transport's scrim, and ink flips to
+                    near-black under `.mo-light` — a dark scrubber on a dark
+                    veil is invisible in exactly the way the veil exists to
+                    prevent. `--mo-on-scrim` is the dark theme's own ink value,
+                    so the dark zones see no change at all.
+                  */}
+                  <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-mo-pill bg-mo-on-scrim/30 transition-[height] duration-150 ease-mo group-hover/scrub:h-1.5 motion-reduce:transition-none">
                     {/*
                       What is LOADED, behind what has been PLAYED.
 
@@ -2786,15 +2852,15 @@ export function MomentumVideo({
                       gap between them is ready when it is the exact thing that
                       is about to stall. ./scrubber.ts has the argument.
 
-                      `--mo-ink` at .45 — between the .30 track and the solid
-                      played bar, so the three layers read as three depths of
-                      the same material rather than as three colours.
+                      `--mo-on-scrim` at .45 — between the .30 track and the
+                      solid played bar, so the three layers read as three depths
+                      of the same material rather than as three colours.
                     */}
                     {buffered.map((span) => (
                       <div
                         key={`${span.start}-${span.end}`}
                         aria-hidden="true"
-                        className="absolute inset-y-0 bg-mo-ink/45"
+                        className="absolute inset-y-0 bg-mo-on-scrim/45"
                         style={{
                           left: `${span.start * 100}%`,
                           width: `${(span.end - span.start) * 100}%`,
@@ -2802,27 +2868,32 @@ export function MomentumVideo({
                       />
                     ))}
                     {/*
-                      The filled part is `--mo-ink` rather than the ember: a
-                      scrubber is a MARK, not the primary action on the screen,
-                      and an ember bar on every video would put twenty gradient
-                      fills in a feed that has one accent colour for the thing
-                      it actually wants you to press.
+                      The filled part is `--mo-on-scrim` rather than the ember:
+                      a scrubber is a MARK, not the primary action on the
+                      screen, and an ember bar on every video would put twenty
+                      gradient fills in a feed that has one accent colour for
+                      the thing it actually wants you to press. Solid, it is
+                      4.68 against the .60 band of the gradient over a white
+                      frame — non-text, which needs 3.0.
                     */}
                     <div
-                      className="absolute inset-y-0 left-0 rounded-mo-pill bg-mo-ink"
+                      className="absolute inset-y-0 left-0 rounded-mo-pill bg-mo-on-scrim"
                       style={{ width: `${progress * 100}%` }}
                     />
                     {/*
-                      Chapter ticks. Drawn in the GROUND colour rather than as
+                      Chapter ticks. Drawn in the VEIL colour rather than as
                       marks on top, so a tick reads as a gap in the bar — which
                       is what it is — and stays visible over the played part,
-                      the buffered part and the bare track alike.
+                      the buffered part and the bare track alike. It used to be
+                      the ground colour, which was the same dark tone only for
+                      as long as every zone was dark; `--mo-scrim` is what
+                      actually means "the colour behind this bar".
                     */}
                     {marks.map((at) => (
                       <div
                         key={at}
                         aria-hidden="true"
-                        className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-mo-bg/90"
+                        className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-mo-scrim/90"
                         style={{ left: `${at * 100}%` }}
                       />
                     ))}
@@ -2830,7 +2901,7 @@ export function MomentumVideo({
                   {/* The handle. A seek bar without one is a progress bar. */}
                   <div
                     aria-hidden="true"
-                    className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-mo-pill bg-mo-ink shadow-mo-sm"
+                    className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-mo-pill bg-mo-on-scrim shadow-mo-sm"
                     style={{ left: `${progress * 100}%` }}
                   />
                   {/*
@@ -2840,12 +2911,16 @@ export function MomentumVideo({
                     says where the playhead is, and a screen reader being told
                     a hover position it cannot aim at is noise. This is a
                     sighted-pointer affordance and says so.
+
+                    It carries a clock, so it is a veil with WORDS on it: scrim
+                    at .90 under `--mo-on-scrim`, which is 14.10 over a white
+                    frame and 17.60 over a black one.
                   */}
                   {features.tooltip && hoverAt !== null && duration > 0 && (
                     <div
                       ref={tooltipRef}
                       aria-hidden="true"
-                      className="pointer-events-none absolute bottom-full mb-1 -translate-x-1/2 rounded-mo-sm bg-mo-bg/90 px-1.5 py-0.5 text-[11px] tabular-nums text-mo-ink shadow-mo-sm"
+                      className="pointer-events-none absolute bottom-full mb-1 -translate-x-1/2 rounded-mo-sm bg-mo-scrim/90 px-1.5 py-0.5 text-[11px] tabular-nums text-mo-on-scrim shadow-mo-sm"
                       style={{
                         left: `${tooltipLeftPercent(
                           hoverAt,
@@ -2860,7 +2935,7 @@ export function MomentumVideo({
                 </div>
               ) : (
                 <div aria-hidden="true" className="pointer-events-none relative h-4 w-full">
-                  <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-mo-pill bg-mo-ink/30" />
+                  <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-mo-pill bg-mo-on-scrim/30" />
                 </div>
               )}
 
@@ -2878,22 +2953,43 @@ export function MomentumVideo({
                   aria-hidden="true"
                   className={
                     hit +
-                    " inline-flex h-8 w-8 items-center justify-center rounded-mo-pill text-mo-ink" +
-                    " transition-colors duration-150 ease-mo hover:bg-mo-ink/20 motion-reduce:transition-none"
+                    " inline-flex h-8 w-8 items-center justify-center rounded-mo-pill text-mo-on-scrim" +
+                    " transition-colors duration-150 ease-mo hover:bg-mo-on-scrim/20 motion-reduce:transition-none"
                   }
                 >
                   {isPlaying ? <PauseGlyph className="h-5 w-5" /> : <PlayGlyph className="h-5 w-5" />}
                 </button>
                 {/*
-                  Elapsed in ink, total in body — one is a live number and the
-                  other is a fact about the file, and setting them in one
-                  colour makes the person read the slash to tell which is
-                  which. The total is omitted entirely until metadata arrives,
-                  because "0:00 / 0:00" over a poster looks like a broken file.
+                  Elapsed in the scrim's ink, total in body — one is a live
+                  number and the other is a fact about the file, and setting
+                  them in one colour makes the person read the slash to tell
+                  which is which. The total is omitted entirely until metadata
+                  arrives, because "0:00 / 0:00" over a poster looks like a
+                  broken file.
+
+                  The elapsed clock is `--mo-on-scrim`, 11.24 on the .83 band
+                  over a white frame.
+
+                  The total is `--mo-on-scrim-body`, which is the fix for what
+                  this comment used to record as a known gap. It was
+                  `--mo-body`: a THEME colour on a veil, so under `.mo-light`
+                  it became the near-black #46554D and measured 1.63 over a
+                  white frame — invisible, the same failure `--mo-on-scrim`
+                  exists to prevent, one step down the hierarchy. tokens.css
+                  now declares the veil's secondary ink beside the scrim's own,
+                  in `:root` only, because a veil is dark in both themes and so
+                  are its inks. Over a white frame it is 5.11 on the thinnest
+                  band this row touches (.736, its ceiling), 7.07 through the
+                  middle and 9.40 at its floor; over anything darker it only
+                  improves. In a dark zone this is the only visible change on
+                  the row — the total goes from #A19CB9 to #C6C0D9, a step
+                  brighter, which is what buying the light zone cost.
                 */}
-                <span className="pointer-events-none select-none text-xs tabular-nums text-mo-ink">
+                <span className="pointer-events-none select-none text-xs tabular-nums text-mo-on-scrim">
                   {formatClock(playhead)}
-                  {duration > 0 && <span className="text-mo-body"> / {formatClock(duration)}</span>}
+                  {duration > 0 && (
+                    <span className="text-mo-on-scrim-body"> / {formatClock(duration)}</span>
+                  )}
                 </span>
                 {/*
                   The chapter, beside the clock and after it.
@@ -2902,9 +2998,13 @@ export function MomentumVideo({
                   the same order the clock already reads in. Truncated rather
                   than wrapped: a long chapter title must not push the transport
                   row to two lines and move the play button under the picture.
+
+                  `--mo-on-scrim-body` for the same reason as the total beside
+                  it, and it is the secondary voice on purpose: the chapter
+                  name is context for the clock, not a second clock.
                 */}
                 {chaptersShown && chapterLabel && (
-                  <span className="pointer-events-none min-w-0 flex-1 select-none truncate text-xs text-mo-body">
+                  <span className="pointer-events-none min-w-0 flex-1 select-none truncate text-xs text-mo-on-scrim-body">
                     {chapterLabel}
                   </span>
                 )}
@@ -2917,7 +3017,7 @@ export function MomentumVideo({
                 */}
                 {features.speed && rateIsNotable(rate) && (
                   <span
-                    className="pointer-events-none select-none rounded-mo-sm bg-mo-ink/20 px-1.5 py-0.5 text-[11px] tabular-nums text-mo-ink"
+                    className="pointer-events-none select-none rounded-mo-sm bg-mo-on-scrim/20 px-1.5 py-0.5 text-[11px] tabular-nums text-mo-on-scrim"
                     aria-label={rateAriaLabel(rate)}
                   >
                     {rateLabel(rate)}
@@ -2956,11 +3056,20 @@ export function MomentumVideo({
                       <CaptionsGlyph className="h-5 w-5" />
                       {/* The underline is the "on" state a glyph alone cannot
                           carry over photography, where a colour change is not
-                          reliably visible. */}
+                          reliably visible.
+
+                          `bottom-1.5` and not `bottom-1`: the button grew from
+                          40 to 44 by padding, which pushed the glyph 2px
+                          further from the bottom edge, and an underline
+                          measured from that edge would have drifted 2px away
+                          from the thing it underlines. Moving it by the same 2
+                          keeps the gap between glyph and mark exactly what it
+                          was, which is what "the visual rhythm is unchanged"
+                          has to mean at this size. */}
                       <span
                         aria-hidden="true"
                         className={[
-                          "absolute bottom-1 h-0.5 w-4 rounded-mo-pill bg-mo-ink",
+                          "absolute bottom-1.5 h-0.5 w-4 rounded-mo-pill bg-mo-on-scrim",
                           captionIndex === CAPTIONS_OFF ? "opacity-0" : "opacity-100",
                         ].join(" ")}
                       />
@@ -3056,12 +3165,14 @@ export function MomentumVideo({
 /**
  * The shape every overlay control shares.
  *
- * A circle of scrim with `--mo-ink` on it. The scrim is not decoration: these
- * sit on user photography which can be any colour, including a white sky, and
- * a themed button with no ground behind it disappears into half the pictures
- * on the platform. `--mo-ink` on `--mo-bg` at .70 measures 6.46 against pure
- * white, 11.62 over mid grey and 17.38 over black — the same table the
- * carousel's pill was built from.
+ * A circle of scrim with `--mo-on-scrim` on it. The scrim is not decoration:
+ * these sit on user photography which can be any colour, including a white sky,
+ * and a themed button with no ground behind it disappears into half the
+ * pictures on the platform — which is precisely what `--mo-bg` did here, since
+ * the ground IS the theme and goes white under `.mo-light`. `--mo-on-scrim` on
+ * `--mo-scrim` at .70 measures 6.86 against pure white, 12.25 over mid grey and
+ * 17.72 over black — the same table the carousel's pill was built from, and the
+ * numbers only went up, because the scrim is the darker of the two values.
  *
  * It carries no `pointer-events` of its own. That belongs to the caller,
  * because it depends on whether the control is currently on screen — see `hit`
@@ -3069,28 +3180,56 @@ export function MomentumVideo({
  * appear together.
  */
 /**
- * A control in the transport row: 40px square, which is the smallest target a
- * finger hits reliably and the number the accessibility brief names.
+ * A control in the transport row: 44px square.
+ *
+ * ── It was 40, and 40 is not the number ───────────────────────────────────
+ * What stood here said 40px was "the smallest target a finger hits reliably
+ * and the number the accessibility brief names". Neither half holds: the brief
+ * names 44, and every other real control in this product is built to it — the
+ * header's icon strip (./NavItem, raised from 40 for exactly this reason, and
+ * its note says 40 "is under the pointer-target guidance it was already citing
+ * two lines down"), the account trigger, Sign in, the rail rows, the
+ * suggestions rail's Add. The player's transport was the last surface still on
+ * 40, and it is the one where a miss costs most, because the thing behind the
+ * glyph is the video and a stray press lands on play/pause.
+ *
+ * ── Grown by PADDING, so the row's rhythm is unchanged ────────────────────
+ * The glyph stays `h-5 w-5`. These carry no fill at rest — the hover wash is
+ * the only thing that ever draws the box — so four more pixels move nothing a
+ * viewer sees except the height of that wash, and of the row, which goes 40 to
+ * 44. Growing the GLYPH instead would have made the controls louder against
+ * the picture, which is the one thing a transport over somebody else's video
+ * must not do.
+ *
+ * Measured at 360px with captions and chapters both present, which is the
+ * fullest this row ever gets: four 44px controls are 176px against the 336px
+ * inside the transport's `px-3`, leaving 160 for the play glyph, the clock and
+ * the chapter title. The chapter is `flex-1 truncate` and is therefore the
+ * thing that gives ground first, so the row cannot be pushed to two lines.
  *
  * `relative`, because the captions button draws its on-state underline as an
  * absolutely positioned child — a glyph swap alone is not a reliable state
  * indicator over photography, where any colour can be the one behind it.
  *
  * No scrim of its own: these sit inside the transport's gradient, which is
- * already dense enough at the bottom edge to carry `--mo-ink` at 9.5:1 against
- * a pure white frame. The speaker, which floats over the picture with nothing
- * behind it, uses OVERLAY_BUTTON instead.
+ * already dense enough at the bottom edge to carry `--mo-on-scrim` at 11.24:1
+ * against a pure white frame (the .83 band). The speaker, which floats over the
+ * picture with nothing behind it, uses OVERLAY_BUTTON instead.
+ *
+ * The glyph is `--mo-on-scrim` and not `--mo-ink` for the same reason the
+ * gradient under it is `--mo-scrim`: a veil that stays dark in both themes
+ * needs type that stays light in both, and `--mo-ink` flips.
  */
 const TRANSPORT_BUTTON =
-  "relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-mo-pill " +
-  "text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-ink/20 " +
+  "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-mo-pill " +
+  "text-mo-on-scrim transition-colors duration-150 ease-mo hover:bg-mo-on-scrim/20 " +
   "motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 " +
   "focus-visible:outline-offset-2 focus-visible:outline-mo"
 
 const OVERLAY_BUTTON =
   "inline-flex items-center justify-center rounded-mo-pill " +
-  "bg-mo-bg/70 text-mo-ink backdrop-blur-sm transition-colors duration-150 ease-mo " +
-  "hover:bg-mo-bg/85 focus-visible:outline focus-visible:outline-2 " +
+  "bg-mo-scrim/70 text-mo-on-scrim backdrop-blur-sm transition-colors duration-150 ease-mo " +
+  "hover:bg-mo-scrim/85 focus-visible:outline focus-visible:outline-2 " +
   "focus-visible:outline-offset-2 focus-visible:outline-mo"
 
 export { HEARTBEAT_INTERVAL_MS, SAMPLE_INTERVAL_MS }
