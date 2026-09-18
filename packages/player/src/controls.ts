@@ -130,6 +130,42 @@ export type ControlAction =
   | { kind: "toggle-muted" }
   | { kind: "seek"; deltaSeconds: number }
   | { kind: "seek-to-fraction"; fraction: number }
+  | { kind: "step-rate"; direction: 1 | -1 }
+  | { kind: "step-volume"; direction: 1 | -1 }
+  | { kind: "toggle-captions" }
+  | { kind: "toggle-fullscreen" }
+  | { kind: "toggle-pip" }
+
+/**
+ * Which of the OPTIONAL chords this player is allowed to claim.
+ *
+ * ── Why the new keys are gated and the old ones are not ───────────────────
+ * Every key in the original set is bound on every surface, and the zones were
+ * built around exactly that list: apps/reels/src/reels/keys.ts says in so many
+ * words which keys `MomentumVideo` claims, and picks ArrowUp/ArrowDown and
+ * PageUp/PageDown for "previous reel" / "next reel" PRECISELY BECAUSE the
+ * player claims neither. The player calls `stopPropagation` on everything it
+ * claims, so the day it starts claiming ArrowUp unconditionally is the day
+ * reels can no longer be driven from the keyboard — silently, with no error,
+ * on a surface this package is not allowed to edit.
+ *
+ * So a new chord is live only where its control is. The flags line up one for
+ * one with `PlayerFeatures` in ./chrome.ts, which means the rule is the same
+ * for the key and for the button: minimal chrome, and the keyboard is exactly
+ * what it has always been.
+ */
+export interface KeyFeatures {
+  /** `<` and `>` step the playback rate. */
+  speed?: boolean
+  /** ArrowUp / ArrowDown step the volume. */
+  volume?: boolean
+  /** `c` toggles captions. */
+  captions?: boolean
+  /** `f` toggles fullscreen. */
+  fullscreen?: boolean
+  /** `i` toggles picture-in-picture. */
+  pictureInPicture?: boolean
+}
 
 /**
  * What a key press means to a focused player.
@@ -140,15 +176,53 @@ export type ControlAction =
  * reaches the page — a player that swallowed Tab or PageDown would trap a
  * keyboard user inside a video in the middle of a feed.
  *
+ * With the full chrome, five more, every one of them YouTube's: `<` and `>`
+ * for speed, `c` for captions, `f` for fullscreen, `i` for picture-in-picture,
+ * ArrowUp/ArrowDown for volume. Each is live only when its feature is — see
+ * `KeyFeatures` for the reels breakage that rule exists to prevent.
+ *
  * Modifier chords are never ours: Ctrl+Left is "back" in some browsers and
  * Cmd+M minimises the window on macOS. Claiming those would break the OS to
- * mute a video.
+ * mute a video. Shift is the exception and has to be: `<` and `>` ARE shifted
+ * keys on every layout that has them, so `event.key` already carries the
+ * result and testing the modifier would reject the key for being itself.
  */
 export function keyAction(
   key: string,
-  modifiers: { ctrl?: boolean; meta?: boolean; alt?: boolean } = {}
+  modifiers: { ctrl?: boolean; meta?: boolean; alt?: boolean } = {},
+  features: KeyFeatures = {}
 ): ControlAction | null {
   if (modifiers.ctrl || modifiers.meta || modifiers.alt) return null
+
+  /*
+    The optional chords first, and separately.
+
+    ArrowUp/ArrowDown have to be decided before the main switch reaches its
+    `default`, and keeping the two groups apart is what makes it obvious at a
+    glance that nothing below this block is conditional. A gate accidentally
+    wrapped around Space would be a player that cannot be paused.
+  */
+  switch (key) {
+    case "<":
+      return features.speed ? { kind: "step-rate", direction: -1 } : null
+    case ">":
+      return features.speed ? { kind: "step-rate", direction: 1 } : null
+    case "ArrowUp":
+      return features.volume ? { kind: "step-volume", direction: 1 } : null
+    case "ArrowDown":
+      return features.volume ? { kind: "step-volume", direction: -1 } : null
+    case "c":
+    case "C":
+      return features.captions ? { kind: "toggle-captions" } : null
+    case "f":
+    case "F":
+      return features.fullscreen ? { kind: "toggle-fullscreen" } : null
+    case "i":
+    case "I":
+      return features.pictureInPicture ? { kind: "toggle-pip" } : null
+    default:
+      break
+  }
 
   switch (key) {
     case " ":

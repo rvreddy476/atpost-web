@@ -18,7 +18,7 @@
  * statement is at the top of `mediaSession.ts` — read it before promising it.
  */
 export { MomentumVideo, HEARTBEAT_INTERVAL_MS, SAMPLE_INTERVAL_MS } from "./MomentumVideo"
-export type { MomentumVideoProps, VideoSource } from "./MomentumVideo"
+export type { CaptionSource, MomentumVideoProps, VideoSource } from "./MomentumVideo"
 
 // `visibleFraction` is exported because it is the ONE definition of "how much
 // of this is on screen" the product has. @momentum/content's dwell tracker
@@ -123,3 +123,127 @@ export type { UseMediaSessionOptions } from "./useMediaSession"
 
 export { WatchSession } from "./watchTracker"
 export type { WatchEvent, WatchSessionInfo } from "./watchTracker"
+
+/**
+ * The full chrome, and the switch that turns it on.
+ *
+ * `chrome="full"` is the long-video player — speed, quality, captions, volume,
+ * fullscreen, picture-in-picture, chapters, buffered ranges and a gear menu.
+ * The DEFAULT is `"minimal"`, which is the transport the feed and reels have
+ * always had, and `chromeFeatures("minimal")` returning all-false is the whole
+ * of the compatibility promise. Read ./chrome.ts before changing a default.
+ */
+export { chromeFeatures, settingsMenuUseful } from "./chrome"
+export type { PlayerChrome, PlayerFeatures } from "./chrome"
+
+/**
+ * The rules behind each optional control, as values.
+ *
+ * Exported for the same reason the transport rules above are: a surface that
+ * draws its own speed control or its own chapter list must reach the same
+ * answer this player does, and two implementations of "which chapter is
+ * playing" drift. Nothing here touches a DOM.
+ */
+export {
+  DEFAULT_PLAYBACK_RATE,
+  PLAYBACK_RATES,
+  normalizeRate,
+  parseRate,
+  rateAriaLabel,
+  rateIsNotable,
+  rateLabel,
+  readPlaybackRate,
+  stepRate,
+  writePlaybackRate,
+} from "./playbackRate"
+
+export {
+  AUTO_LEVEL,
+  autoLabel,
+  currentQualityLabel,
+  levelLabel,
+  nearestLevelForHeight,
+  parseQualityHeight,
+  qualityMenuAvailable,
+  qualityOptions,
+  readQualityHeight,
+  writeQualityHeight,
+} from "./quality"
+export type { LevelLike, QualityOption } from "./quality"
+
+export {
+  CAPTIONS_OFF,
+  captionLabel,
+  captionOptions,
+  captionsAvailable,
+  captionsButtonLabel,
+  cueLines,
+  cueText,
+  findCaptionByLanguage,
+  initialCaptionIndex,
+  readCaptionLanguage,
+  toggleCaptions,
+  writeCaptionLanguage,
+} from "./captions"
+export type { CaptionOption, CaptionTrackLike } from "./captions"
+
+export {
+  DEFAULT_VOLUME,
+  VOLUME_STEP,
+  clampVolume,
+  parseVolume,
+  readVolume,
+  stepVolume,
+  volumeChange,
+  volumeFromPointer,
+  volumeOnUnmute,
+  volumePercent,
+  writeVolume,
+} from "./volume"
+
+export {
+  activePlayerChapter,
+  chapterMarks,
+  currentChapterTitle,
+  orderedPlayerChapters,
+} from "./chapters"
+export type { PlayerChapter } from "./chapters"
+
+export { bufferedAhead, bufferedSpans, hoverFraction, tooltipLeftPercent } from "./scrubber"
+export type { BufferedSpan, TimeRangesLike } from "./scrubber"
+
+export { isOutsidePress, menuKeyAction, nextMenuIndex } from "./menu"
+export type { MenuAction } from "./menu"
+
+export {
+  canFullscreen,
+  canPictureInPicture,
+  fullscreenLabel,
+  pictureInPictureLabel,
+} from "./presentation"
+
+/**
+ * The preference store, exported so a zone can namespace ITS OWN player
+ * preference the same way rather than inventing a second key shape. Every
+ * access is already wrapped: `localStorage` throws before a read in a browser
+ * with site data blocked. See ./preferences.ts.
+ */
+export { clearPreference, preferenceKey, readPreference, writePreference } from "./preferences"
+
+/**
+ * The consumer-facing rules a zone with its own transport needs.
+ *
+ * `MomentumVideo` takes `videoRef`, `onTimeUpdate` and a CONTROLLED `muted`
+ * because MShorts was otherwise querying the DOM for the `<video>` element and
+ * driving it by hand. `resolveMuted` is the one worth reading: it is the whole
+ * precedence ladder between a browser's refusal, this player's own answer, the
+ * document-wide arming in `soundPreference.ts` and the prop's cold default.
+ */
+export {
+  TIME_UPDATE_INTERVAL_MS,
+  assignRef,
+  mutedPropChanged,
+  resolveMuted,
+  shouldEmitTimeUpdate,
+} from "./controlled"
+export type { ElementRef, MutedInputs, TimeUpdateMemo } from "./controlled"

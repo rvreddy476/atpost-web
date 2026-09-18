@@ -350,3 +350,81 @@ describe("formatClock", () => {
     expect(formatClock(Number.NaN)).toBe("0:00")
   })
 })
+
+/**
+ * The optional chords, and the surface they must not break.
+ *
+ * The first block is the one that matters most: with the minimal chrome — what
+ * @momentum/content's feed and apps/reels pass, which is to say what a caller
+ * that says nothing gets — the new keys must return null so the event reaches
+ * the zone. apps/reels/src/reels/keys.ts binds ArrowUp and ArrowDown to
+ * "previous reel" / "next reel" precisely because this function did not claim
+ * them, and the player calls `stopPropagation` on everything it claims.
+ */
+describe("keyAction, the optional chords", () => {
+  const FULL = {
+    speed: true,
+    volume: true,
+    captions: true,
+    fullscreen: true,
+    pictureInPicture: true,
+  }
+
+  it("claims none of them under the minimal chrome — reels keeps its arrows", () => {
+    expect(keyAction("ArrowUp")).toBeNull()
+    expect(keyAction("ArrowDown")).toBeNull()
+    expect(keyAction("<")).toBeNull()
+    expect(keyAction(">")).toBeNull()
+    expect(keyAction("c")).toBeNull()
+    expect(keyAction("f")).toBeNull()
+    expect(keyAction("i")).toBeNull()
+  })
+
+  it("leaves the original chords exactly as they were when the rest are on", () => {
+    expect(keyAction(" ", {}, FULL)).toEqual({ kind: "toggle-play" })
+    expect(keyAction("k", {}, FULL)).toEqual({ kind: "toggle-play" })
+    expect(keyAction("m", {}, FULL)).toEqual({ kind: "toggle-muted" })
+    expect(keyAction("ArrowRight", {}, FULL)).toEqual({
+      kind: "seek",
+      deltaSeconds: SEEK_STEP_SECONDS,
+    })
+    expect(keyAction("ArrowLeft", {}, FULL)).toEqual({
+      kind: "seek",
+      deltaSeconds: -SEEK_STEP_SECONDS,
+    })
+    expect(keyAction("Home", {}, FULL)).toEqual({ kind: "seek-to-fraction", fraction: 0 })
+    expect(keyAction("End", {}, FULL)).toEqual({ kind: "seek-to-fraction", fraction: 1 })
+    expect(keyAction("7", {}, FULL)).toEqual({ kind: "seek-to-fraction", fraction: 0.7 })
+  })
+
+  it("steps the speed on < and >", () => {
+    expect(keyAction("<", {}, FULL)).toEqual({ kind: "step-rate", direction: -1 })
+    expect(keyAction(">", {}, FULL)).toEqual({ kind: "step-rate", direction: 1 })
+  })
+
+  it("steps the volume on the vertical arrows", () => {
+    expect(keyAction("ArrowUp", {}, FULL)).toEqual({ kind: "step-volume", direction: 1 })
+    expect(keyAction("ArrowDown", {}, FULL)).toEqual({ kind: "step-volume", direction: -1 })
+  })
+
+  it("toggles captions on c, fullscreen on f and picture-in-picture on i", () => {
+    expect(keyAction("c", {}, FULL)).toEqual({ kind: "toggle-captions" })
+    expect(keyAction("C", {}, FULL)).toEqual({ kind: "toggle-captions" })
+    expect(keyAction("f", {}, FULL)).toEqual({ kind: "toggle-fullscreen" })
+    expect(keyAction("F", {}, FULL)).toEqual({ kind: "toggle-fullscreen" })
+    expect(keyAction("i", {}, FULL)).toEqual({ kind: "toggle-pip" })
+    expect(keyAction("I", {}, FULL)).toEqual({ kind: "toggle-pip" })
+  })
+
+  it("gates each chord on its OWN feature, not on the set", () => {
+    expect(keyAction("f", {}, { speed: true })).toBeNull()
+    expect(keyAction("<", {}, { fullscreen: true })).toBeNull()
+    expect(keyAction("ArrowUp", {}, { captions: true })).toBeNull()
+  })
+
+  it("still refuses a modified press", () => {
+    expect(keyAction("f", { meta: true }, FULL)).toBeNull()
+    expect(keyAction("ArrowUp", { ctrl: true }, FULL)).toBeNull()
+    expect(keyAction("c", { alt: true }, FULL)).toBeNull()
+  })
+})
