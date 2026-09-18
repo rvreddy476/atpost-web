@@ -42,7 +42,7 @@ export interface ReportControlProps {
 }
 
 const TRIGGER =
-  "inline-flex items-center gap-1.5 rounded-mo-pill px-2.5 py-1.5 text-mo-body " +
+  "inline-flex min-h-11 items-center gap-1.5 rounded-mo-pill px-3 text-mo-body " +
   "transition-colors duration-150 ease-mo hover:bg-mo-raised " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo-cyan"
 

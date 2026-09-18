@@ -347,9 +347,27 @@ export function Reel({
       // the two are the same distance — but `start` is what a browser lands on
       // after a programmatic `scrollTo`, and disagreeing with it makes a
       // keyboard move settle one pixel off and then re-snap.
-      className="relative h-full w-full shrink-0 snap-start snap-always overflow-hidden bg-mo-bg"
+      className="relative flex h-full w-full shrink-0 snap-start snap-always justify-center overflow-hidden bg-mo-bg"
       aria-label={`Short ${position} of ${total}${authorName ? ` by ${authorName}` : ""}`}
     >
+      {/* ── The stage, and why it is not the whole window ───────────────────
+          A 9:16 short shown on a 1280px desktop occupies a column about 480px
+          wide in the middle of the screen; everything else is empty. The
+          overlays are positioned against THIS box rather than against the
+          article, so the author, the caption, the rail, the mute and the
+          scrubber stay on the video the way they do on a phone. Anchored to
+          the article they drifted to the window's own edges — the like button
+          800px away from the short it likes — which is the single thing that
+          made this surface look like a prototype on a laptop.
+
+          `56.25vh` is 9/16 of the viewport height: the exact width the letter-
+          boxed video fills, so the controls sit ON the picture and never
+          beside it. `min()` keeps it the full width on a phone, where the
+          short is already edge to edge. */}
+      <div
+        className="relative h-full w-full"
+        style={{ maxWidth: "min(100%, 56.25vh)" }}
+      >
       {/* The blurhash is what is on screen for the second before the first
           frame decodes. A short has no poster behind it otherwise — the page
           is BLACK — and that black page is what the "stuck" complaint on the
@@ -507,7 +525,7 @@ export function Reel({
                 state={followState ?? "none"}
                 displayName={authorName || undefined}
                 onToggle={(next) => handlers.onFollow(item.author_id, next)}
-                className={`shrink-0 border-transparent px-4 ${FOLLOW_SKIN[followState ?? "none"]}`}
+                className={`min-h-11 shrink-0 border-transparent px-4 ${FOLLOW_SKIN[followState ?? "none"]}`}
               />
             )}
           </div>
@@ -516,6 +534,7 @@ export function Reel({
         </div>
 
         <ReelRail controls={controls} item={item} onAction={onRail} />
+      </div>
       </div>
     </article>
   )
@@ -583,7 +602,7 @@ function Caption({ text }: { text: string }) {
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="rounded-mo-sm text-xs font-semibold text-white/70 hover:text-white"
+          className="inline-flex min-h-11 items-center self-start rounded-mo-sm pr-2 text-xs font-semibold text-white/70 hover:text-white"
         >
           {expanded ? "less" : "more"}
         </button>

@@ -30,7 +30,7 @@ import { signInHref } from "@momentum/chrome"
 import { ZONE } from "@/zone"
 
 const ACTION =
-  "mt-5 inline-block rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold " +
+  "mt-5 inline-flex min-h-11 items-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold " +
   "text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
 
 function Card({ children }: { children: React.ReactNode }) {

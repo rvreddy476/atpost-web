@@ -136,7 +136,7 @@ export function ReelMenu({
               type="button"
               onClick={() => setView("rows")}
               aria-label="Back"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-mo-pill text-mo-body hover:bg-mo-raised hover:text-mo-ink"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-mo-pill text-mo-body hover:bg-mo-raised hover:text-mo-ink"
             >
               <ChevronLeft aria-hidden className="h-5 w-5" />
             </button>
@@ -221,7 +221,7 @@ export function ReelMenu({
                       onClose()
                     }}
                     disabled={details.trim().length === 0}
-                    className="mt-3 w-full rounded-mo-pill bg-mo-raised px-4 py-2 text-sm font-semibold text-mo-bad hover:bg-mo-sunken disabled:text-mo-body"
+                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-mo-pill bg-mo-raised px-4 text-sm font-semibold text-mo-bad hover:bg-mo-sunken disabled:text-mo-body"
                   >
                     Send report
                   </button>

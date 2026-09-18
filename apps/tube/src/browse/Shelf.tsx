@@ -72,7 +72,7 @@ export function Shelf({
   }, [])
 
   const chevron =
-    "grid h-8 w-8 place-items-center rounded-mo-pill border border-mo text-mo-body " +
+    "grid h-9 w-9 place-items-center rounded-mo-pill border border-mo text-mo-body " +
     "transition-colors duration-150 ease-mo hover:border-mo-strong hover:text-mo-ink"
 
   return (
@@ -134,7 +134,7 @@ export function Shelf({
         // `-mx-1 px-1` so a focus ring on the first and last tile is not
         // clipped by the scroll container's own edge, which is the commonest
         // way a horizontal row loses its visible focus state.
-        className="-mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-1 pb-2 motion-reduce:scroll-auto"
+        className="mo-hscroll -mx-1 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-1 pb-1 motion-reduce:scroll-auto"
       >
         {children}
       </ul>
@@ -144,7 +144,7 @@ export function Shelf({
 
 /** The pill "View all" wears. One string, so the two branches cannot drift. */
 const PILL =
-  "rounded-mo-pill border border-mo-strong px-3 py-1.5 text-xs font-semibold text-mo-cyan " +
+  "inline-flex min-h-11 items-center rounded-mo-pill border border-mo-strong px-4 text-xs font-semibold text-mo-cyan " +
   "transition-colors duration-150 ease-mo hover:bg-mo-raised " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
 
@@ -170,7 +170,7 @@ export function ShelfSkeleton({
   width?: string
 }) {
   return (
-    <ul aria-hidden="true" className="-mx-1 flex gap-4 overflow-hidden px-1 pb-2">
+    <ul aria-hidden="true" className="-mx-1 flex gap-4 overflow-hidden px-1 pb-1">
       {Array.from({ length: count }, (_, i) => (
         <li key={i} className={`${width} shrink-0 animate-pulse motion-reduce:animate-none`}>
           <div className={`${ratio} w-full rounded-mo bg-mo-raised`} />

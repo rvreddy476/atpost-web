@@ -457,7 +457,7 @@ export function UploadStudio() {
             <button
               type="button"
               onClick={resumeDraft}
-              className="inline-flex items-center gap-2 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-surface"
+              className="inline-flex min-h-11 items-center gap-2 rounded-mo-pill border border-mo-strong px-4 text-sm text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-surface"
             >
               <RotateCcw aria-hidden className="h-3.5 w-3.5" />
               Pick up where I left off

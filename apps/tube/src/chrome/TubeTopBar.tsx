@@ -42,7 +42,7 @@
  */
 
 import Link from "next/link"
-import { Menu, Upload } from "lucide-react"
+import { Menu, Search, Upload } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
 import { NotificationBell } from "@momentum/notifications"
@@ -77,7 +77,7 @@ function UploadControl() {
     <>
       <Link
         href="/upload"
-        className="hidden h-10 shrink-0 items-center gap-2 rounded-mo-pill border border-mo px-4 text-sm font-semibold text-mo-body transition-colors hover:border-mo-strong hover:text-mo-ink sm:flex"
+        className="hidden h-11 shrink-0 items-center gap-2 rounded-mo-pill border border-mo px-4 text-sm font-semibold text-mo-body transition-colors hover:border-mo-strong hover:text-mo-ink sm:flex"
       >
         <Upload aria-hidden="true" className="h-4 w-4" />
         Upload
@@ -87,7 +87,7 @@ function UploadControl() {
       <Link
         href="/upload"
         aria-label="Upload"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-mo-pill border border-mo text-mo-body transition-colors hover:border-mo-strong hover:text-mo-ink sm:hidden"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-mo-pill border border-mo text-mo-body transition-colors hover:border-mo-strong hover:text-mo-ink sm:hidden"
       >
         <Upload aria-hidden="true" className="h-4 w-4" />
       </Link>
@@ -124,7 +124,7 @@ export function TubeTopBar({
           // is why it reads the drawer OR the collapse flag.
           aria-expanded={drawerOpen || !railCollapsed}
           aria-label="Toggle navigation"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-surface hover:text-mo-ink"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-surface hover:text-mo-ink"
         >
           <Menu aria-hidden="true" className="h-5 w-5" />
         </button>
@@ -137,7 +137,7 @@ export function TubeTopBar({
         <Link
           href="/"
           aria-label="Momentum Tube home"
-          className="flex shrink-0 items-center gap-2 rounded-mo outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
+          className="flex min-h-11 shrink-0 items-center gap-2 rounded-mo outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
         >
           {/* The one ember surface on the page. `bg-mo-primary` UNDER
               `bg-mo-ember` is not belt and braces: they are different CSS
@@ -161,10 +161,26 @@ export function TubeTopBar({
         </Link>
 
         {/* The search box takes the middle and absorbs the slack, which is
-            what makes the bar look like a video app's rather than a feed's. */}
-        <div className="flex min-w-0 flex-1 justify-center px-1 sm:px-4">
+            what makes the bar look like a video app's rather than a feed's.
+
+            ── And it is GONE below 640px, replaced by its own glyph ──────────
+            A phone bar already carries a menu, a lockup, an upload, a bell and
+            an account picture; what is left for the field at 360px is about
+            70px, which shows four characters of what somebody typed and looks
+            like a mistake rather than a search box. The glyph opens the search
+            PAGE, where the field has the whole width — the same trade YouTube
+            and every other video app on a phone makes. */}
+        <div className="hidden min-w-0 flex-1 justify-center px-1 sm:flex sm:px-4">
           <TubeSearch />
         </div>
+        <div aria-hidden="true" className="min-w-0 flex-1 sm:hidden" />
+        <Link
+          href="/search"
+          aria-label="Search videos and channels"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-surface hover:text-mo-ink sm:hidden"
+        >
+          <Search aria-hidden="true" className="h-5 w-5" />
+        </Link>
 
         <UploadControl />
 
@@ -188,7 +204,7 @@ export function TubeTopBar({
           ) : (
             <a
               href={signInHref}
-              className="rounded-mo-pill border border-mo-strong px-3 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-surface sm:px-4"
+              className="inline-flex min-h-11 items-center rounded-mo-pill border border-mo-strong px-3 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-surface sm:px-4"
             >
               Sign in
             </a>

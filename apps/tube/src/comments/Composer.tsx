@@ -124,7 +124,7 @@ export function Composer({
             }
           }}
           className={[
-            "w-full resize-none bg-transparent py-1.5 text-sm leading-relaxed text-mo-ink",
+            "min-h-11 w-full resize-none bg-transparent py-2.5 text-sm leading-relaxed text-mo-ink",
             "border-b border-mo outline-none transition-colors duration-150 ease-mo",
             "placeholder:text-mo-body focus:border-mo-strong",
           ].join(" ")}
@@ -144,7 +144,7 @@ export function Composer({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-mo-pill px-3 py-1.5 text-sm text-mo-body hover:bg-mo-raised"
+              className="inline-flex min-h-11 items-center rounded-mo-pill px-3 text-sm text-mo-body hover:bg-mo-raised"
             >
               Cancel
             </button>
@@ -154,7 +154,7 @@ export function Composer({
               type="button"
               onClick={() => void send()}
               disabled={sending}
-              className="inline-flex items-center gap-2 rounded-mo-pill border border-mo-strong px-4 py-1.5 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:opacity-60"
+              className="inline-flex min-h-11 items-center gap-2 rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:opacity-60"
             >
               {sending && <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
               {submitLabel}

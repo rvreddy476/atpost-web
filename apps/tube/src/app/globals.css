@@ -64,3 +64,19 @@
 body.tube-theatre-open {
   overflow: hidden;
 }
+
+/* ── The shelves scroll sideways without a bar ─────────────────────────────
+   A shelf is paged by its own chevrons and by a swipe, so the native bar
+   under it can never be dragged to a useful position — and on Windows, where
+   it is a permanent 12px slab rather than an overlay, it draws a grey line
+   under every shelf and makes the gap between "Keep watching" and "Shorts"
+   different from the gap between any other two sections. The content stays
+   reachable by wheel, by touch, and by the chevrons, which is what makes
+   hiding the bar an adjustment rather than a trap. */
+.mo-hscroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.mo-hscroll::-webkit-scrollbar {
+  display: none;
+}

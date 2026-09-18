@@ -67,7 +67,7 @@ export function SubscribeButton({
       aria-label={subscribeLabel({ subscribed }, name)}
       className={[
         PILL,
-        "px-4 py-2",
+        "min-h-11 px-4",
         subscribed
           ? // Subscribed is a settled state, not an invitation. It recedes.
             "border-mo text-mo-body hover:bg-mo-raised"
@@ -111,9 +111,9 @@ export function NotifyBell({
         aria-label={bellLabel(subscription, name)}
         className={[
           PILL,
-          // 40x40: the same height as the subscribe button beside it, and the
+          // 44x44: the same height as the subscribe button beside it, and the
           // smallest square a thumb reliably hits.
-          "inline-flex h-10 w-10 items-center justify-center",
+          "inline-flex h-11 w-11 items-center justify-center",
           on ? "border-mo-strong text-mo-ink hover:bg-mo-raised" : "border-mo text-mo-body hover:bg-mo-raised",
           failed ? "border-mo-bad" : "",
         ].join(" ")}

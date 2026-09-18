@@ -111,7 +111,7 @@ export function TubeCategories({
       // so this rail can cover neither. A sticky filter that painted over an
       // open menu in the first row would be a control eating the control it
       // just opened.
-      className="sticky top-14 z-20 -mx-4 mb-5 flex gap-2 overflow-x-auto bg-mo-bg px-4 pb-2 pt-1 sm:-mx-6 sm:px-6"
+      className="mo-hscroll sticky top-14 z-20 -mx-4 mb-5 flex gap-2 overflow-x-auto bg-mo-bg px-4 pb-3 pt-2 sm:-mx-6 sm:px-6"
     >
       {chips.map((chip) => {
         const key = chipKey(chip)
@@ -126,7 +126,7 @@ export function TubeCategories({
             aria-pressed={current}
             onClick={() => onSelect(chip)}
             className={[
-              "h-9 shrink-0 whitespace-nowrap rounded-mo-pill px-4 text-sm font-semibold",
+              "inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-mo-pill px-4 text-sm font-semibold",
               "transition-colors duration-150 ease-mo",
               "outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo",
               current

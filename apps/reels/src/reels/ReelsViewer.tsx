@@ -743,7 +743,7 @@ export function ReelsViewer({ initialPostId }: { initialPostId?: string }) {
         */}
         <Link
           href="/"
-          className="inline-flex shrink-0 items-center gap-2 rounded-mo-pill px-2 py-1 text-sm font-semibold text-white hover:bg-white/10"
+          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-mo-pill px-2 text-sm font-semibold text-white hover:bg-white/10"
         >
           <ArrowLeft aria-hidden className="h-4 w-4" />
           <span className="sr-only">Back to </span>
@@ -765,7 +765,7 @@ export function ReelsViewer({ initialPostId }: { initialPostId?: string }) {
                   aria-selected={selected}
                   onClick={() => setTab(spec.id)}
                   className={[
-                    "rounded-mo-pill px-3 py-1 text-sm font-semibold transition-colors duration-150 ease-mo",
+                    "inline-flex min-h-11 items-center rounded-mo-pill px-3 text-sm font-semibold transition-colors duration-150 ease-mo",
                     selected ? "bg-white/20 text-white" : "text-white/70 hover:bg-white/10 hover:text-white",
                   ].join(" ")}
                 >

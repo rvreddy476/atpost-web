@@ -239,18 +239,18 @@ export function ChannelHeader({
 
       {/* The avatar rides up over the band's lower edge — YouTube's and
           RUTUBE's shape, and the thing that ties the band to this identity. */}
-      <div className="-mt-8 flex flex-wrap items-start gap-4 px-1 sm:-mt-10 sm:px-4">
+      <div className="-mt-8 flex flex-wrap items-start gap-x-4 gap-y-3 px-1 sm:-mt-10 sm:px-4">
         {/* `avatar_url` is a real signed URL when the channel has one — unlike
             `avatar_media_id`, which is not a URL and whose derivable one is
             unsigned and 403s. Every channel on the dev stack has null here, so
             what is drawn today is the initial. */}
         <ChannelAvatar channel={channel} />
 
-        <div className="min-w-0 flex-1 pt-8 sm:pt-10">
-          <h1 className="font-mo-display text-2xl font-semibold tracking-mo-display text-mo-ink">
+        <div className="min-w-0 flex-1 basis-[13rem] pt-8 sm:pt-10">
+          <h1 className="break-words font-mo-display text-xl font-semibold tracking-mo-display text-mo-ink sm:text-2xl">
             {channel.name || handle || "Channel"}
           </h1>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-mo-body">
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 break-words text-sm text-mo-body">
             {handle && <span>{handle}</span>}
             {handle && <span aria-hidden>·</span>}
             {/* Null means "we could not read it", which is not zero: a failed
@@ -284,7 +284,7 @@ export function ChannelHeader({
           )}
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2 pt-8 sm:pt-10">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 pt-1 sm:pt-10">
           {isOwner ? (
             /* `next/link`, because /tube/settings is a route of this same app
                and it is where a channel's name, handle and about are edited

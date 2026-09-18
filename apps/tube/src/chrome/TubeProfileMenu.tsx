@@ -130,7 +130,7 @@ export function TubeProfileMenu({
             close(true)
           }
         }}
-        className="grid h-10 w-10 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-surface hover:text-mo-ink"
+        className="grid h-11 w-11 place-items-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-surface hover:text-mo-ink"
       >
         <Avatar name={displayName ?? undefined} id={user?.id} size="sm" />
       </button>
@@ -190,7 +190,7 @@ export function TubeProfileMenu({
             role="menuitem"
             href="/settings"
             onClick={() => close(false)}
-            className={` font-semibold text-mo-ink hover:bg-mo-raised focus-visible:bg-mo-raised focus-visible:outline-none`}
+            className={`${row} font-semibold text-mo-ink hover:bg-mo-raised focus-visible:bg-mo-raised focus-visible:outline-none`}
           >
             <Settings aria-hidden="true" className="h-4 w-4 shrink-0 text-mo-body" />
             Settings

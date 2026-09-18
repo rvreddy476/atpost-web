@@ -116,7 +116,7 @@ export function ChannelTabs({
     <div
       role="tablist"
       aria-label="Channel sections"
-      className="mb-6 flex gap-1 overflow-x-auto border-b border-mo"
+      className="mo-hscroll mb-6 flex gap-1 overflow-x-auto border-b border-mo"
     >
       {CHANNEL_TABS.map((tab) => {
         const active = tab === current

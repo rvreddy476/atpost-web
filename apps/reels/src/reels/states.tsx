@@ -51,7 +51,7 @@ function Body({ children }: { children: React.ReactNode }) {
 }
 
 const ACTION =
-  "rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan " +
+  "inline-flex min-h-11 items-center justify-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-mo-cyan " +
   "transition-colors duration-150 ease-mo hover:bg-mo-raised"
 
 /**
@@ -146,7 +146,7 @@ export function ReelsSignInPill() {
     <a
       href={signInHref(ZONE)}
       aria-label={`Sign in to ${BRAND.name}`}
-      className="ml-auto rounded-mo-pill bg-mo-ink px-3 py-1 text-sm font-semibold text-mo-on-primary transition-colors duration-150 ease-mo hover:bg-white"
+      className="ml-auto inline-flex min-h-11 items-center rounded-mo-pill bg-mo-ink px-3 text-sm font-semibold text-mo-on-primary transition-colors duration-150 ease-mo hover:bg-white"
     >
       Sign in
     </a>

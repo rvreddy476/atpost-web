@@ -63,7 +63,7 @@ export function Description({ text, durationMs, onSeek, meta }: DescriptionProps
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="mt-2 text-sm font-semibold text-mo-cyan underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo-cyan"
+        className="mt-1 inline-flex min-h-11 items-center text-sm font-semibold text-mo-cyan underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo-cyan"
       >
         {open ? "Show less" : "Show more"}
       </button>

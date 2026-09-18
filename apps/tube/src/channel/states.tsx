@@ -195,7 +195,7 @@ export function TabError({ what, onRetry }: { what: string; onRetry: () => void 
       <button
         type="button"
         onClick={onRetry}
-        className="mt-5 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
+        className="mt-5 inline-flex min-h-11 items-center justify-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
       >
         Try again
       </button>

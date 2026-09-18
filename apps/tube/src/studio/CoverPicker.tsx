@@ -247,7 +247,7 @@ function UploadPill({ cover }: { cover: CoverStudio }) {
     <>
       <button
         type="button"
-        className="inline-flex items-center gap-2 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:opacity-50"
+        className="inline-flex min-h-11 items-center gap-2 rounded-mo-pill border border-mo-strong px-4 text-sm text-mo-ink transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:opacity-50"
         onClick={() => input.current?.click()}
         disabled={cover.uploading}
         aria-label="Upload a cover from your files"

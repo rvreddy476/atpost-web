@@ -21,7 +21,7 @@ import { TUBE_SIGN_IN_HREF } from "@/chrome/links"
 import { VIDEO_GRID } from "./grid"
 
 const ACTION =
-  "mt-5 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan " +
+  "mt-5 inline-flex min-h-11 items-center justify-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-mo-cyan " +
   "transition-colors duration-150 ease-mo hover:bg-mo-raised"
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -248,7 +248,7 @@ export function PublicNotice() {
           behind a rewrite, so next/link would ask for /tube/login. */}
       <a
         href={TUBE_SIGN_IN_HREF}
-        className="shrink-0 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
+        className="shrink-0 inline-flex min-h-11 items-center justify-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
       >
         Sign in
       </a>

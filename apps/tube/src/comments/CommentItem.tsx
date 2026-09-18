@@ -73,7 +73,7 @@ export interface CommentItemProps {
 }
 
 const ACTION =
-  "inline-flex items-center gap-1.5 rounded-mo-pill px-2.5 py-1.5 text-xs text-mo-body " +
+  "inline-flex min-h-11 items-center gap-1.5 rounded-mo-pill px-3 text-xs text-mo-body " +
   "transition-colors duration-150 ease-mo hover:bg-mo-raised " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo-cyan"
 
@@ -156,7 +156,7 @@ export function CommentItem(props: CommentItemProps) {
         )}
 
         {!pending && !editing && (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
+          <div className="-ml-3 mt-0.5 flex flex-wrap items-center gap-0.5">
             <button
               type="button"
               onClick={() => props.onToggleLike(row.id)}

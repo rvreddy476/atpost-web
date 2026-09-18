@@ -344,7 +344,7 @@ export function VideoCardMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={name}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
+        className="-my-1.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
       >
         <MoreVertical aria-hidden="true" className="h-5 w-5" />
       </button>
@@ -461,7 +461,7 @@ export function VideoCardMenu({
                     <button
                       type="submit"
                       disabled={busy || newTitle.trim().length === 0}
-                      className="shrink-0 rounded-mo-pill border border-mo-strong px-3 py-1.5 text-xs font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:opacity-50"
+                      className="shrink-0 inline-flex min-h-11 items-center rounded-mo-pill border border-mo-strong px-3 text-xs font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised disabled:opacity-50"
                     >
                       Create
                     </button>
@@ -535,7 +535,7 @@ export function VideoCardMenu({
                   />
                   <button
                     type="submit"
-                    className="mt-2 w-full rounded-mo-pill border border-mo-strong px-3 py-1.5 text-xs font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
+                    className="mt-2 w-full inline-flex min-h-11 items-center rounded-mo-pill border border-mo-strong px-3 text-xs font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-raised"
                   >
                     Send report
                   </button>

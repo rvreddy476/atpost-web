@@ -183,7 +183,7 @@ export function CommentsPanel({
           type="button"
           onClick={onClose}
           aria-label="Close comments"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-mo-pill text-mo-body hover:bg-mo-raised hover:text-mo-ink"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-mo-pill text-mo-body hover:bg-mo-raised hover:text-mo-ink"
         >
           <X aria-hidden className="h-5 w-5" />
         </button>
@@ -200,7 +200,7 @@ export function CommentsPanel({
             <button
               type="button"
               onClick={thread.retry}
-              className="mt-3 rounded-mo-pill border border-mo-strong px-4 py-2 text-sm font-semibold text-mo-cyan hover:bg-mo-raised"
+              className="mt-3 inline-flex min-h-11 items-center justify-center rounded-mo-pill border border-mo-strong px-4 text-sm font-semibold text-mo-cyan hover:bg-mo-raised"
             >
               Try again
             </button>
@@ -236,7 +236,7 @@ export function CommentsPanel({
             type="button"
             onClick={thread.loadMore}
             disabled={thread.loadingMore}
-            className="mt-4 w-full rounded-mo border border-mo px-4 py-2 text-sm font-semibold text-mo-cyan hover:bg-mo-raised disabled:text-mo-body"
+            className="mt-4 w-full inline-flex min-h-11 items-center justify-center rounded-mo border border-mo px-4 text-sm font-semibold text-mo-cyan hover:bg-mo-raised disabled:text-mo-body"
           >
             {thread.loadingMore ? "Loading…" : "Load more comments"}
           </button>
@@ -295,7 +295,7 @@ export function CommentsPanel({
                 onClick={() => void submit()}
                 disabled={sending}
                 aria-label="Post comment"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-mo-pill bg-mo-raised text-mo-cyan hover:bg-mo-surface disabled:text-mo-body"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-mo-pill bg-mo-raised text-mo-cyan hover:bg-mo-surface disabled:text-mo-body"
               >
                 {sending ? (
                   <Loader2 aria-hidden className="h-5 w-5 animate-spin" />
@@ -498,14 +498,14 @@ function InlineComposer({
           type="button"
           onClick={onSubmit}
           disabled={busy || !canSend(value)}
-          className="rounded-mo-pill bg-mo-raised px-3 py-1.5 text-xs font-semibold text-mo-cyan hover:bg-mo-surface disabled:text-mo-body"
+          className="inline-flex min-h-11 items-center rounded-mo-pill bg-mo-raised px-3 text-xs font-semibold text-mo-cyan hover:bg-mo-surface disabled:text-mo-body"
         >
           {busy ? "Saving…" : "Save"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-mo-pill px-3 py-1.5 text-xs font-semibold text-mo-body hover:bg-mo-raised"
+          className="inline-flex min-h-11 items-center rounded-mo-pill px-3 text-xs font-semibold text-mo-body hover:bg-mo-raised"
         >
           Cancel
         </button>

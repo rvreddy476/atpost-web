@@ -147,7 +147,7 @@ export function MuteButton({ muted, onToggle }: { muted: boolean; onToggle: () =
       // what it is for. "Muted" as a name leaves you guessing what pressing it
       // does.
       aria-label={muteLabel(muted)}
-      className="absolute right-3 top-14 z-20 inline-flex h-10 w-10 items-center justify-center rounded-mo-pill bg-black/55 text-white transition-colors duration-150 ease-mo hover:bg-black/75"
+      className="absolute right-3 top-14 z-20 inline-flex h-11 w-11 items-center justify-center rounded-mo-pill bg-black/55 text-white transition-colors duration-150 ease-mo hover:bg-black/75"
     >
       {muted ? (
         <VolumeX aria-hidden className="h-5 w-5" />
@@ -234,7 +234,7 @@ export function PlayPauseButton({ paused, onToggle }: { paused: boolean; onToggl
       type="button"
       onClick={onToggle}
       aria-label={paused ? "Play" : "Pause"}
-      className="absolute bottom-6 left-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-mo-pill bg-black/55 text-white transition-colors duration-150 ease-mo hover:bg-black/75"
+      className="absolute bottom-6 left-3 z-20 inline-flex h-11 w-11 items-center justify-center rounded-mo-pill bg-black/55 text-white transition-colors duration-150 ease-mo hover:bg-black/75"
     >
       {paused ? (
         <Play aria-hidden className="h-5 w-5 fill-current" />
