@@ -20,6 +20,8 @@ export interface StatMetric {
   kind?: "count" | "paise"
   /** "bad" or "warn" when the value is above zero. */
   alert?: "bad" | "warn"
+  /** A count the product may not report yet: the tile is shown only when the answer carries the key. */
+  optional?: boolean
 }
 
 export const STATS_METRICS: Record<StatsApp, readonly StatMetric[]> = {
@@ -78,6 +80,11 @@ export const STATS_METRICS: Record<StatsApp, readonly StatMetric[]> = {
     { key: "cancellations_today", label: "Cancellations today" },
     { key: "rides_last_7_days", label: "Rides, 7 days" },
     { key: "revenue_today_paise", label: "Subscription revenue today", kind: "paise" },
+    // Money (ride fares through payments-service): reported once rider's
+    // stats route carries them; until then the tiles are not shown.
+    { key: "payments_confirming", label: "Payments confirming", alert: "warn", optional: true },
+    { key: "refunds_requested", label: "Refunds requested", alert: "warn", optional: true },
+    { key: "outstanding_pending_paise", label: "Cancellation fees owed", kind: "paise", optional: true },
   ],
 }
 
@@ -102,11 +109,12 @@ export interface StatsView {
 export const UNAVAILABLE = "unavailable"
 
 export function statsView(app: StatsApp, result: StatsResult, limit?: number): StatsView {
-  const metrics = STATS_METRICS[app].slice(0, limit)
+  const body = result.status === "ok" ? readObject(result.raw) : null
+  // An optional metric is a tile only once the answer carries it.
+  const metrics = STATS_METRICS[app].filter((m) => !m.optional || (body !== null && body[m.key] !== undefined)).slice(0, limit)
   if (result.status === "loading") {
     return { state: "loading", message: null, generatedAt: null, tiles: metrics.map((m) => tile(m, null, "…")) }
   }
-  const body = result.status === "ok" ? readObject(result.raw) : null
   if (!body) {
     const message = result.status === "error" ? result.message : "The stats answer could not be read."
     return { state: "unavailable", message, generatedAt: null, tiles: metrics.map((m) => tile(m, null, UNAVAILABLE)) }

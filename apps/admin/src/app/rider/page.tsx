@@ -2,8 +2,11 @@
 
 import { AppDashboard } from "@/components/blocks/AppDashboard"
 import { RiderCities, RiderFares } from "@/components/rider/RiderConfig"
+import { RiderCoupons } from "@/components/rider/RiderCoupons"
+import { RiderMoney } from "@/components/rider/RiderMoney"
 import { RiderComplaints, RiderRides } from "@/components/rider/RiderOps"
 import { RiderPartners } from "@/components/rider/RiderPartners"
+import { RiderPricing } from "@/components/rider/RiderPricing"
 import { RiderAudit, RiderReports } from "@/components/rider/RiderReports"
 import { RiderDocuments, RiderPayments, RiderVehicles } from "@/components/rider/RiderReview"
 import { RiderIncidents } from "@/components/rider/RiderSafety"
@@ -13,8 +16,10 @@ import { RIDER_SECTIONS } from "@/lib/admin/sections"
  * Mopedu (rider-service through admin-service). Step-up: suspending or
  * blocking a partner, the document list and decisions (a KYC reveal),
  * verifying or rejecting a subscription payment, cancelling a ride, an
- * incident's contact alerts, and fare rules. Nothing here is two-person: no
- * money leaves the platform. The product stays dormant to the public.
+ * incident's contact alerts, and every pricing write (fare rules, fare
+ * windows, coupons). Two-person: a ride refund and an outstanding-fee
+ * waiver (Money), which wait in the approvals inbox. The product stays
+ * dormant to the public.
  */
 export default function RiderDashboard() {
   return (
@@ -32,6 +37,8 @@ export default function RiderDashboard() {
             return <RiderVehicles />
           case "payments":
             return <RiderPayments />
+          case "money":
+            return <RiderMoney />
           case "rides":
             return <RiderRides />
           case "complaints":
@@ -42,6 +49,10 @@ export default function RiderDashboard() {
             return <RiderCities />
           case "fares":
             return <RiderFares />
+          case "pricing":
+            return <RiderPricing />
+          case "coupons":
+            return <RiderCoupons />
           case "reports":
             return <RiderReports />
           case "audit":

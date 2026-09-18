@@ -21,9 +21,11 @@ export interface RiderRequest {
 /**
  * One mutation for a Mopedu section. Every write goes through
  * useAdminMutation, so a 403 STEP_UP_REQUIRED opens the 2FA prompt and the
- * request is sent once more; the toast names the write that was done.
+ * request is sent once more; the toast names the write that was done. A
+ * 202 (the refund and the waiver, two-person) is "Sent for approval" with a
+ * link to the inbox, and `onDone` sees kind "approval", never "done".
  */
-export function useRiderMutation({ onDone }: { onDone?: (write: RiderWrite) => void } = {}) {
+export function useRiderMutation({ onDone }: { onDone?: (write: RiderWrite, kind: "done" | "approval") => void } = {}) {
   const last = useRef<RiderWrite | null>(null)
   return useAdminMutation<RiderRequest>({
     request: ({ write, url, method = "post", body }) => {
@@ -33,8 +35,8 @@ export function useRiderMutation({ onDone }: { onDone?: (write: RiderWrite) => v
     invalidate: [RIDER_KEY],
     successMessage: () => (last.current ? RIDER_DONE[last.current] : "Done"),
     errorTitle: "Mopedu action failed",
-    onDone: () => {
-      if (last.current) onDone?.(last.current)
+    onDone: (_data, _vars, kind) => {
+      if (last.current) onDone?.(last.current, kind)
     },
   })
 }
@@ -109,6 +111,29 @@ export function StatusFilter({
         )}
       </Field>
     </div>
+  )
+}
+
+/** A bordered panel with a title and an optional note (the pricing, coupon and money forms). */
+export function Panel({ title, note, actions, children }: { title: string; note?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label={title}>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-semibold text-mo-ink">{title}</h3>
+        {actions}
+      </div>
+      {note ? <p className="mb-3 text-xs text-mo-body">{note}</p> : <div className="mb-3" />}
+      {children}
+    </section>
+  )
+}
+
+/** A labelled text input bound to a string state. */
+export function TextField({ label, value, onChange, placeholder, type = "text", hint, disabled, step, min }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; hint?: React.ReactNode; disabled?: boolean; step?: string; min?: string }) {
+  return (
+    <Field label={label} hint={hint}>
+      {(id) => <input id={id} type={type} className={inputClass} value={value} placeholder={placeholder} disabled={disabled} step={step} min={min} onChange={(e) => onChange(e.target.value)} />}
+    </Field>
   )
 }
 

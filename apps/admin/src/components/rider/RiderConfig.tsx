@@ -209,7 +209,7 @@ export function RiderFares() {
 
   return (
     <div className="space-y-4">
-      <ComingNext>rider-service has no admin route that lists fare rules yet. Creating or changing one needs a fresh 2FA code; the change applies to every ride priced after it.</ComingNext>
+      <ComingNext>rider-service has no admin route that lists fare rules yet (peak windows and surge are listed under Pricing, coupons under Coupons). Creating or changing a rule needs a fresh 2FA code; the change applies to every ride priced after it.</ComingNext>
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Create a fare rule" note={RIDER_WRITES["fare_rule.create"].explain}>
           <form

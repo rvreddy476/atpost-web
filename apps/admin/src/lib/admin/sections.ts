@@ -119,20 +119,25 @@ export const CHAT_SECTIONS = [
 ] as const satisfies readonly SectionDef[]
 
 /**
- * Mopedu (admin-service handler_rider.go). Nothing here is two-person; the
- * step-up writes and reveals are listed in lib/admin/rider.ts. Cities, zones
- * and fare rules have no admin list route yet, so those tabs are forms.
+ * Mopedu (admin-service handler_rider.go). Two writes are two-person (a
+ * ride refund and an outstanding-fee waiver, under Money); the step-up
+ * writes and reveals are listed in lib/admin/rider.ts. Cities, zones and
+ * fare rules have no admin list route yet, so those tabs are forms; fare
+ * windows and coupons do, so Pricing and Coupons are lists.
  */
 export const RIDER_SECTIONS = [
   { id: "partners", label: "Partners", anyOf: ["partners.read", "partners.approve", "partners.suspend"] },
   { id: "documents", label: "Documents", anyOf: ["documents.review"] },
   { id: "vehicles", label: "Vehicles", anyOf: ["vehicles.review"] },
   { id: "payments", label: "Payments", anyOf: ["payments.read", "payments.settle", "payments.reject"] },
+  { id: "money", label: "Money", anyOf: ["payments.read"] },
   { id: "rides", label: "Rides", anyOf: ["rides.read", "rides.cancel", "ratings.moderate"] },
   { id: "complaints", label: "Complaints", anyOf: ["complaints.act"] },
   { id: "incidents", label: "Safety incidents", anyOf: ["incidents.read", "incidents.act", "incidents.reveal"] },
   { id: "cities", label: "Cities & zones", anyOf: ["cities.manage"] },
   { id: "fares", label: "Fare rules", anyOf: ["fares.manage"] },
+  { id: "pricing", label: "Pricing", anyOf: ["fares.manage"] },
+  { id: "coupons", label: "Coupons", anyOf: ["fares.manage"] },
   { id: "reports", label: "Reports", anyOf: ["reports.read"] },
   { id: "audit", label: "Audit", anyOf: ["audit.read"] },
 ] as const satisfies readonly SectionDef[]
