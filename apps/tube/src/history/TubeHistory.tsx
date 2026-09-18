@@ -41,8 +41,8 @@ import { useCallback, useEffect, useState } from "react"
 import { useSession } from "@atpost/api-client/session"
 import { History as HistoryIcon, X } from "lucide-react"
 import { BRAND } from "@momentum/brand"
-import { VideoCard } from "@/browse/VideoCard"
-import { VIDEO_GRID } from "@/browse/grid"
+import { VideoGrid } from "@/browse/VideoGrid"
+import { useCardActions } from "@/menu/useCardActions"
 import { BrowseError, BrowseSkeleton } from "@/browse/states"
 import { TUBE_SIGN_IN_HREF } from "@/chrome/links"
 import { clearHistory, fetchHistoryPage, removeFromHistory } from "./api"
@@ -67,6 +67,7 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export function TubeHistory() {
   const session = useSession()
+  const actions = useCardActions()
   const [rows, setRows] = useState<HistoryRow[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -214,17 +215,20 @@ export function TubeHistory() {
               >
                 {group.label}
               </h2>
-              <ul className={VIDEO_GRID}>
-                {group.rows.map((row, at) => (
-                  <VideoCard
-                    key={row.post.id}
-                    item={row.post}
-                    position={at + 1}
-                    total={group.rows.length}
-                    footer={<ResumeFooter row={row} onRemove={() => remove(row)} />}
-                  />
-                ))}
-              </ul>
+              {/* One grid per DAY, each with its own accessible name, so a
+                  screen reader hears which day's list it is walking rather
+                  than "list" four times down the page. The shared
+                  ../browse/VideoGrid.tsx also brings the three-dot menu, which
+                  this page had no way to offer before. */}
+              <VideoGrid
+                label={`Watched ${group.label}`}
+                items={group.rows.map((row) => row.post)}
+                actions={actions}
+                footerFor={(item) => {
+                  const row = group.rows.find((candidate) => candidate.post.id === item.id)
+                  return row ? <ResumeFooter row={row} onRemove={() => remove(row)} /> : null
+                }}
+              />
             </section>
           ))}
 

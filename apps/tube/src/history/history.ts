@@ -65,7 +65,11 @@ function asNumber(value: unknown): number {
  * shows the rows it can. `last_watched_at` falls back to `updated_at`
  * because the table has one column under two names (../watch/api.ts records
  * the rename), and a row from before the alias would otherwise land in no
- * day group at all.
+ * day group at all. The fallthrough is on EMPTINESS, not on absence: a Go
+ * struct field without `omitempty` marshals its zero value, so the older
+ * name arrives as `""` rather than missing, and `??` would have kept the
+ * empty string and dropped the row out of every day group anyway. Same
+ * rule as ../playlists/playlists.ts and ../chrome/suggest.ts.
  */
 export function parseHistoryItem(raw: unknown): HistoryRow | null {
   if (!raw || typeof raw !== "object") return null
@@ -73,13 +77,15 @@ export function parseHistoryItem(raw: unknown): HistoryRow | null {
   const post = row.post
   if (!post || typeof post !== "object") return null
   if (typeof (post as { id?: unknown }).id !== "string") return null
-  const when = row.last_watched_at ?? row.updated_at
+  const when = [row.last_watched_at, row.updated_at].find(
+    (candidate): candidate is string => typeof candidate === "string" && candidate.length > 0,
+  )
   return {
     post: post as FeedItem,
     positionMs: Math.max(0, asNumber(row.position_ms)),
     durationMs: Math.max(0, asNumber(row.duration_ms)),
     completed: row.completed === true,
-    lastWatchedAt: typeof when === "string" ? when : "",
+    lastWatchedAt: when ?? "",
   }
 }
 

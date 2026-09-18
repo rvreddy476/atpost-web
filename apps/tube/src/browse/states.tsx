@@ -32,6 +32,98 @@ function Card({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * The page furniture the six new pages share.
+ *
+ * Exported from here rather than copied into each of them, for the reason
+ * ./VideoGrid.tsx gives about the grid: the sixth copy is where they stop
+ * agreeing, and "the page heading" and "the sign-in card" are precisely the
+ * two things that must read the same on every page or the app looks assembled
+ * from parts.
+ */
+
+/** A page's title and its one sentence, with room for a control on the right. */
+export function PageHeader({
+  title,
+  lede,
+  action,
+}: {
+  title: string
+  lede?: string
+  /** A control that belongs to the whole page — Clear, Create, and so on. */
+  action?: React.ReactNode
+}) {
+  return (
+    <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        {/* The zone's ONE h1 per page. The home page deliberately has none —
+            ./TubeBrowse.tsx explains why — but a page that is about a named
+            thing needs its name as a heading, or a screen-reader user landing
+            on /tube/playlists has no way to know which page they are on. */}
+        <h1 className="font-mo-display text-2xl font-semibold tracking-mo-display text-mo-ink">
+          {title}
+        </h1>
+        {lede && <p className="mt-1 max-w-2xl text-sm text-mo-body">{lede}</p>}
+      </div>
+      {action}
+    </header>
+  )
+}
+
+/**
+ * What a signed-out visitor sees on a page that is about one account.
+ *
+ * NOT a redirect. A redirect to /login from a page somebody typed the address
+ * of loses both the address and any idea of what was there; a card that names
+ * the page and offers the link keeps both. The same decision the history page
+ * made first.
+ */
+export function SignInCard({ what, why }: { what: string; why: string }) {
+  return (
+    <Card>
+      <Tv aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
+      <Title>{what}</Title>
+      <Body>{why}</Body>
+      {/* A plain <a>: /login is served by the shell, a different Next app
+          behind a rewrite, so next/link would ask for /tube/login. */}
+      <a href={TUBE_SIGN_IN_HREF} className={ACTION}>
+        Sign in
+      </a>
+    </Card>
+  )
+}
+
+/**
+ * An honest empty state: what is missing, and the one thing to do about it.
+ *
+ * `action` is a real link or nothing. An empty state whose button does not go
+ * anywhere is worse than one with no button, because it reads as broken rather
+ * than as finished.
+ */
+export function EmptyCard({
+  icon: Icon = Tv,
+  title,
+  body,
+  action,
+}: {
+  icon?: typeof Tv
+  title: string
+  body: string
+  action?: React.ReactNode
+}) {
+  return (
+    <Card>
+      <Icon aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
+      <Title>{title}</Title>
+      <Body>{body}</Body>
+      {action}
+    </Card>
+  )
+}
+
+/** The class an empty state's one link or button wears, so they all match. */
+export const EMPTY_ACTION = ACTION
+
 function Title({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="mt-4 font-mo-display text-xl font-semibold tracking-mo-display text-mo-ink">

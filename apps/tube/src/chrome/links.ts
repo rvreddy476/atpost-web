@@ -32,6 +32,26 @@ export const HOME_PATH = "/social"
 export const EXPLORE_PATH = "/apps"
 
 /**
+ * The shorts app. Also a zone, and the one Tube deliberately does not copy.
+ *
+ * A short is 9:16, it autoplays and it is swiped; apps/reels is an entire
+ * application built for that, with the autoplay coordinator, the dwell
+ * tracker and the watch heartbeat a creator is paid on. Tube's Shorts rail
+ * row and its Home shelf are both DOORS into it — see SHORTS_ITEM in
+ * ./rail.ts — so each one is a plain `<a>` to this absolute path.
+ * `next/link` would ask for `/tube/reels`.
+ *
+ * Stated here rather than imported because apps/reels is a different Next
+ * app: there is nothing to import from.
+ */
+export const REELS_PATH = "/reels"
+
+/** One short, inside the reels zone. Absolute, for a plain `<a>`. */
+export function reelHref(postId: string): string {
+  return `${REELS_PATH}/${encodeURIComponent(postId)}`
+}
+
+/**
  * Where a signed-out browser is sent, and how it gets back HERE.
  *
  * /login is served by the shell, never by a zone, so this is always an

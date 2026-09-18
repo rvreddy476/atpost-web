@@ -184,3 +184,32 @@ describe("parseHistoryPage", () => {
     expect(parseHistoryPage(undefined)).toEqual({ rows: [], nextCursor: null })
   })
 })
+
+describe("an empty timestamp falls through", () => {
+  // A Go struct field without `omitempty` marshals its zero value, so the
+  // older column name arrives as "" rather than missing. `??` kept the empty
+  // string and the row landed in no day group at all — the same class of bug
+  // ../playlists/playlists.ts had in three functions.
+  it("prefers updated_at when last_watched_at is an empty string", () => {
+    const row = parseHistoryItem({
+      post: { id: "p1", title: "One" },
+      last_watched_at: "",
+      updated_at: "2026-09-12T10:00:00Z",
+    })
+    expect(row?.lastWatchedAt).toBe("2026-09-12T10:00:00Z")
+  })
+
+  it("still prefers last_watched_at when it carries a value", () => {
+    const row = parseHistoryItem({
+      post: { id: "p1", title: "One" },
+      last_watched_at: "2026-09-13T10:00:00Z",
+      updated_at: "2026-09-12T10:00:00Z",
+    })
+    expect(row?.lastWatchedAt).toBe("2026-09-13T10:00:00Z")
+  })
+
+  it("answers an empty string when neither name carries one", () => {
+    const row = parseHistoryItem({ post: { id: "p1", title: "One" }, last_watched_at: "", updated_at: "" })
+    expect(row?.lastWatchedAt).toBe("")
+  })
+})

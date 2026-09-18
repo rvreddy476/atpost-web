@@ -94,7 +94,24 @@ export function TubeCategories({
       // list below it, it does not navigate.
       role="group"
       aria-label="Filter videos"
-      className="-mx-1 mb-5 flex gap-2 overflow-x-auto px-1 pb-1"
+      // ── Sticky, under the 56px top bar ─────────────────────────────────
+      // `top-14` is that bar's height, so the rail parks directly beneath it
+      // instead of scrolling away — which is what YouTube does and what makes
+      // the filter reachable from row twelve of an infinite grid rather than
+      // only from the top of the page.
+      //
+      // The opaque background is not decoration: a sticky element over a
+      // scrolling grid with a transparent ground shows the posters sliding
+      // through the chips. `-mx-4 px-4` (and `sm:-mx-6 sm:px-6`) makes that
+      // ground reach the edges of the content track, whose padding the shell
+      // applies outside this component — without it the chips sit on a band
+      // narrower than the page and the gap either side shows the grid moving.
+      //
+      // `z-20` is below the top bar's `z-40` and below the card menu's `z-30`,
+      // so this rail can cover neither. A sticky filter that painted over an
+      // open menu in the first row would be a control eating the control it
+      // just opened.
+      className="sticky top-14 z-20 -mx-4 mb-5 flex gap-2 overflow-x-auto bg-mo-bg px-4 pb-2 pt-1 sm:-mx-6 sm:px-6"
     >
       {chips.map((chip) => {
         const key = chipKey(chip)

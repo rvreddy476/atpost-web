@@ -51,8 +51,8 @@ import { InfiniteFeed } from "@momentum/content"
 import { Users } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useTubeFeed } from "@/tube/useTubeFeed"
-import { VideoCard } from "@/browse/VideoCard"
-import { VIDEO_GRID } from "@/browse/grid"
+import { VideoGrid } from "@/browse/VideoGrid"
+import { useCardActions } from "@/menu/useCardActions"
 import { BrowseError, BrowseSkeleton } from "@/browse/states"
 import { TUBE_SIGN_IN_HREF } from "@/chrome/links"
 
@@ -70,6 +70,7 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export function TubeSubscriptions() {
   const session = useSession()
+  const actions = useCardActions()
 
   // Unlike the home page there is no public fallback, and that is honest
   // rather than lazy: "the channels YOU subscribe to" is not a question the
@@ -158,11 +159,11 @@ export function TubeSubscriptions() {
               </p>
             }
           >
-            <ul className={VIDEO_GRID}>
-              {items.map((item, at) => (
-                <VideoCard key={item.id} item={item} position={at + 1} total={items.length} />
-              ))}
-            </ul>
+            {/* The same grid, the same card and the same three-dot menu as
+                every other list in the zone — ../browse/VideoGrid.tsx, which
+                exists so that adding a row to the menu is one edit rather
+                than nine. */}
+            <VideoGrid label="Videos from your channels" items={items} actions={actions} />
           </InfiniteFeed>
         </>
       )}

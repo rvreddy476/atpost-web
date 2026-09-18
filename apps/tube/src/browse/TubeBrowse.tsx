@@ -60,20 +60,58 @@
  * reads the feed at all instead of `GET /v1/posts/{id}`.
  */
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { useSession } from "@atpost/api-client/session"
 import { InfiniteFeed } from "@momentum/content"
 import { useTubeFeed } from "@/tube/useTubeFeed"
-import { VideoCard } from "./VideoCard"
+import { useCardActions } from "@/menu/useCardActions"
+import { VideoGrid } from "./VideoGrid"
+import { ContinueWatchingShelf } from "./ContinueWatchingShelf"
+import { ShortsShelf } from "./ShortsShelf"
 import { TubeCategories, useCategories } from "./TubeCategories"
 import { ALL_CHIP, chipLabel, chipQuery, type TubeChip } from "./chips"
 import { BrowseEmpty, BrowseEnd, BrowseError, BrowseSkeleton, PublicNotice } from "./states"
-import { VIDEO_GRID } from "./grid"
 
+/**
+ * The home page, behind a Suspense boundary.
+ *
+ * `useSearchParams()` makes any client component that calls it dynamic, and
+ * the boundary keeps that local to this page rather than to the layout. The
+ * fallback is the same skeleton the first page in flight draws, so the only
+ * perceptible difference is which moment it appears in.
+ *
+ * It is read for ONE thing: `?category=` as the initial chip, which is what
+ * makes the Explore page's tiles work. After the first render the chip is
+ * ordinary state — pressing a chip does not rewrite the URL, and that is
+ * deliberate. A chip rail that pushed history would make the back button walk
+ * backwards through filters instead of leaving the page, which is the one
+ * thing a person pressing Back on a home page never means.
+ */
 export function TubeBrowse() {
+  return (
+    <Suspense fallback={<BrowseSkeleton />}>
+      <HomeGrid />
+    </Suspense>
+  )
+}
+
+function HomeGrid() {
   const session = useSession()
   const categories = useCategories()
-  const [chip, setChip] = useState<TubeChip>(ALL_CHIP)
+  const actions = useCardActions()
+  const params = useSearchParams()
+
+  // The slug is NOT validated against the taxonomy here. An unknown one is
+  // `400 INVALID_CATEGORY` from the server, which the error state already
+  // draws honestly, and validating locally would mean this page silently
+  // ignoring a topic the server had just added. `chipLabel` falls back to the
+  // slug itself for the same reason: a raw slug is a worse label and a better
+  // clue.
+  const initialCategory = params.get("category")?.trim() || null
+  const [chip, setChip] = useState<TubeChip>(
+    initialCategory ? { kind: "category", id: initialCategory } : ALL_CHIP
+  )
 
   // `signedOut` and not `!signedIn`: the latter is true while the status is
   // still "unknown", and a page that chose its endpoint from that would read
@@ -110,13 +148,10 @@ export function TubeBrowse() {
         endIndicator={<BrowseEnd count={items.length} ranked={!anonymous} />}
       >
         {/* InfiniteFeed wraps its children in `space-y-4`, which has no effect
-            on a single child. The column count and the gaps are ./grid.ts,
-            because the skeleton has to agree with them. */}
-        <ul className={VIDEO_GRID}>
-          {items.map((item, at) => (
-            <VideoCard key={item.id} item={item} position={at + 1} total={items.length} />
-          ))}
-        </ul>
+            on a single child. The column count, the gaps and the card menu are
+            all ./VideoGrid.tsx now, so every list in the zone draws the same
+            card with the same rows behind its three-dot control. */}
+        <VideoGrid label="Videos" items={items} actions={actions} />
       </InfiniteFeed>
     )
   }
@@ -140,6 +175,32 @@ export function TubeBrowse() {
       />
 
       {anonymous && <PublicNotice />}
+
+      {/* ── The two shelves, and the hero that is not here ──────────────────
+          There is NO featured/hero carousel, and that is a finding rather than
+          an omission. The brief said to build one only if
+          `GET /v1/posts/trending` gives something worth featuring, so it was
+          read: `GetTrendingPosts` hydrates counts and media state and calls
+          neither `attachChannelRefs` nor anything that fills `variants`. A
+          trending row therefore has a title, an age, counts and a duration,
+          and NO poster, no blurhash and no channel name. A hero strip is a
+          picture with words over it; there is no picture to be had, and a
+          full-width band of type on the sunken ground above the grid would
+          push the first real row below the fold to say less than the row it
+          displaced. Trending is a rail row and a page instead, where a list
+          of titles is the honest shape. ../trending/TubeTrending.tsx says the
+          same thing on the page.
+
+          Both shelves are drawn only under the All chip. With a category
+          selected the page is the answer to a narrowing question, and a row of
+          shorts and a row of half-watched videos that ignore the chip are two
+          answers to a question nobody asked. */}
+      {chip.kind === "all" && (
+        <>
+          <ContinueWatchingShelf />
+          <ShortsShelf />
+        </>
+      )}
 
       {/* A page that failed AFTER showing videos keeps the videos and says so
           underneath, rather than replacing a working grid with an apology. */}

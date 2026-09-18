@@ -195,15 +195,37 @@ export async function fetchVideosPage(
     params: {
       limit: PAGE_SIZE,
       ...(cursor ? { cursor } : {}),
-      // `content_type` on the public shelf is what `category` and
-      // `following_only` are on the ranked one: the same page, narrowed by
-      // whatever that endpoint understands. The public shelf understands
-      // neither of the other two, so they are not sent to it — an ignored
-      // parameter is a filter that silently did nothing.
+      // ── What each endpoint understands, and nothing more ────────────────
+      // An ignored parameter is a filter that silently did nothing, so each
+      // branch sends only what its own endpoint reads.
+      //
+      // `content_type` is the public shelf's narrowing, and it is sent as
+      // "long_video,video" rather than "long_video". `/v1/posts/recent` splits
+      // on commas, normalises the legacy spelling "video" to "long_video" and
+      // de-duplicates (`parseContentTypeFilter` → `CanonicalContentType`), so
+      // the two spellings are ONE filter on the wire. Both are sent because a
+      // row written before the rename is still a row, and because the next
+      // person reading this should see that the synonym was considered rather
+      // than wonder whether it was missed. NOTE this is not true of
+      // `/v1/posts/trending`, which REJECTS "video" with a 400 — see
+      // ./discoverApi.ts.
+      //
+      // `category` is sent on BOTH branches, which it was not until
+      // 2026-09-18. `/v1/posts/recent` takes `?category=` — the same exact
+      // taxonomy id, the same `400 INVALID_CATEGORY` for a malformed one — so
+      // the chip rail works for a signed-out visitor too, and a category chip
+      // that quietly did nothing while signed out was the last thing on this
+      // page that behaved differently for an anonymous browser without saying
+      // so.
+      //
+      // `following_only` and `subscribed_only` are the two the public shelf
+      // genuinely cannot serve: it has no viewer, so there is no graph to
+      // narrow by. ../browse/TubeCategories.tsx does not offer the
+      // Subscriptions chip while signed out for the same reason.
+      ...(query.category ? { category: query.category } : {}),
       ...(anonymous
-        ? { content_type: "long_video" }
+        ? { content_type: "long_video,video" }
         : {
-            ...(query.category ? { category: query.category } : {}),
             ...(query.followingOnly ? { following_only: true } : {}),
             ...(query.subscribedOnly ? { subscribed_only: true } : {}),
           }),

@@ -30,8 +30,8 @@ import { useSession } from "@atpost/api-client/session"
 import type { FeedItem } from "@atpost/types/feed"
 import { Bookmark, BookmarkX } from "lucide-react"
 import { BRAND } from "@momentum/brand"
-import { VideoCard } from "@/browse/VideoCard"
-import { VIDEO_GRID } from "@/browse/grid"
+import { VideoGrid } from "@/browse/VideoGrid"
+import { useCardActions } from "@/menu/useCardActions"
 import { BrowseError, BrowseSkeleton } from "@/browse/states"
 import { TUBE_SIGN_IN_HREF } from "@/chrome/links"
 import { setBookmark } from "@/tube/api"
@@ -55,6 +55,7 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export function TubeSaved() {
   const session = useSession()
+  const actions = useCardActions()
   const [items, setItems] = useState<FeedItem[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -165,28 +166,29 @@ export function TubeSaved() {
         </Card>
       ) : (
         <>
-          <ul className={VIDEO_GRID}>
-            {items.map((item, at) => (
-              <VideoCard
-                key={item.id}
-                item={item}
-                position={at + 1}
-                total={items.length}
-                footer={
-                  <div className="mt-2">
-                    <button
-                      type="button"
-                      onClick={() => remove(item)}
-                      className="inline-flex items-center gap-1 rounded-mo-pill px-2 py-1 text-xs font-semibold text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
-                    >
-                      <BookmarkX aria-hidden className="h-3.5 w-3.5" />
-                      Remove from saved
-                    </button>
-                  </div>
-                }
-              />
-            ))}
-          </ul>
+          {/* The shared grid, so this page's cards carry the same three-dot
+              menu as every other list in the zone. The Remove button stays a
+              FOOTER rather than folding into that menu: the menu's Save row
+              toggles the same bookmark, but a page whose whole subject is
+              "your saved videos" should not make removing one a two-press act
+              behind a control that has to be opened first. */}
+          <VideoGrid
+            label="Saved videos"
+            items={items}
+            actions={actions}
+            footerFor={(item) => (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => remove(item)}
+                  className="inline-flex items-center gap-1 rounded-mo-pill px-2 py-1 text-xs font-semibold text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
+                >
+                  <BookmarkX aria-hidden className="h-3.5 w-3.5" />
+                  Remove from saved
+                </button>
+              </div>
+            )}
+          />
 
           {notice ? (
             <p role="status" className="mt-4 text-sm text-mo-body">

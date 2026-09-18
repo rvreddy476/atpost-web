@@ -6,14 +6,25 @@
  * ── The order is YouTube's, because the founder named YouTube ─────────────
  *
  *     Home
+ *     Shorts          <- the reels zone, travelled by a plain <a>
  *     Subscriptions
+ *     Trending        <- RUTUBE's "In the top"
+ *     Explore         <- the topic taxonomy
  *     ───────────────
  *     Subscriptions   <- the channels themselves, with their faces
  *     ───────────────
- *     You             <- History, Your videos, Playlists, Saved videos
+ *     You             <- Your videos, Playlists, Watch later, History,
+ *                        Saved, Linked videos, Upload
  *     ───────────────
  *     Settings
+ *     Explore Momentum
  *     Back to Momentum
+ *
+ * Five discovery rows where there were two, and the three new ones are exactly
+ * the ones somebody uses BEFORE they have subscribed to anything: Shorts,
+ * Trending and Explore are all public, so a signed-out rail is now a rail with
+ * places to go rather than a list of things that need an account. ../chrome/
+ * rail.ts names the endpoint behind every row.
  *
  * The channel list is the row that makes this a video app rather than a feed
  * with a video tab: it is the only place in the product where the people you
@@ -38,8 +49,9 @@
  * out — because a sticky element stops scrolling once it has stuck.
  */
 
-import { Fragment } from "react"
+import { Fragment, useState } from "react"
 import Link from "next/link"
+import { ChevronDown, ChevronUp } from "lucide-react"
 import { Avatar } from "@momentum/content"
 import type { ChannelRef } from "@/tube/channels"
 import { channelHref } from "@/tube/channels"
@@ -80,6 +92,19 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * How many channels the rail shows before it offers "Show more".
+ *
+ * Seven, which is YouTube's own number and worth matching rather than
+ * inventing: it is about the point where a list of faces stops being something
+ * the eye takes in at a glance and becomes something it has to read. It also
+ * keeps the You block and the way out ABOVE the fold on a 900px window for
+ * somebody with thirty subscriptions — which is the failure this control
+ * really exists to prevent, because a rail's bottom rows are the ones a person
+ * cannot find when the middle of it is unbounded.
+ */
+const CHANNELS_BEFORE_MORE = 7
+
 /** One subscribed channel: a face, a name, and a real link to the page. */
 function ChannelRow({ channel, onNavigate }: { channel: ChannelRef; onNavigate?: () => void }) {
   const ref = channel.handle || channel.user_id
@@ -99,6 +124,76 @@ function ChannelRow({ channel, onNavigate }: { channel: ChannelRef; onNavigate?:
         <span className="min-w-0 flex-1 truncate">{channel.name}</span>
       </Link>
     </li>
+  )
+}
+
+/**
+ * The channels, with YouTube's "Show more" pill under the seventh.
+ *
+ * ── Why the extra rows are UNMOUNTED rather than hidden ───────────────────
+ * The opposite call from the drawer below, which uses `hidden` to keep its
+ * markup stable, and the difference is what the two are for. The drawer is one
+ * thing that is open or shut; this is a list whose tail is genuinely not part
+ * of the page until somebody asks for it. Rendering thirty links and hiding
+ * twenty-three would leave them in find-in-page — so Ctrl+F would jump the
+ * page to a channel nobody can see — and would put twenty-three avatars in the
+ * DOM on every route change in the zone, because this rail is in the layout.
+ *
+ * ── The pill is a real disclosure ─────────────────────────────────────────
+ * `aria-expanded` and `aria-controls` pointing at the list, so a screen reader
+ * announces it as a control over something rather than as a link called "Show
+ * more". It is NOT a link: there is no "all subscriptions" page in this zone
+ * for it to go to. /subscriptions is the VIDEOS of those channels, which is a
+ * different question, and sending somebody there when they asked to see more
+ * names would be answering a question they did not ask.
+ *
+ * ── The state is not remembered ───────────────────────────────────────────
+ * Expanding is per-visit, deliberately. `railStorage.ts` keeps the collapsed
+ * PREFERENCE because that is a choice about the shape of the app; how far down
+ * a list somebody scrolled once is not, and restoring it would mean a rail
+ * that is a different height on every reload for reasons the person has
+ * forgotten.
+ */
+function ChannelList({
+  channels,
+  onNavigate,
+}: {
+  channels: ChannelRef[]
+  onNavigate?: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const listId = "tube-rail-channels"
+  const overflow = channels.length - CHANNELS_BEFORE_MORE
+  const shown = expanded ? channels : channels.slice(0, CHANNELS_BEFORE_MORE)
+
+  return (
+    <>
+      <ul id={listId} className="space-y-0.5">
+        {shown.map((channel) => (
+          <ChannelRow key={channel.user_id} channel={channel} onNavigate={onNavigate} />
+        ))}
+      </ul>
+      {overflow > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((was) => !was)}
+          aria-expanded={expanded}
+          aria-controls={listId}
+          className="mt-0.5 flex w-full items-center gap-4 rounded-mo px-3 py-2 text-sm font-semibold text-mo-cyan transition-colors duration-150 ease-mo hover:bg-mo-surface outline-offset-[-2px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo"
+        >
+          {expanded ? (
+            <ChevronUp aria-hidden="true" className="h-5 w-5 shrink-0" />
+          ) : (
+            <ChevronDown aria-hidden="true" className="h-5 w-5 shrink-0" />
+          )}
+          {/* The count is in the word, because "Show more" alone does not say
+              whether it is two more channels or two hundred. */}
+          <span className="min-w-0 flex-1 truncate text-left">
+            {expanded ? "Show fewer" : `Show ${overflow} more`}
+          </span>
+        </button>
+      )}
+    </>
   )
 }
 
@@ -145,11 +240,7 @@ export function TubeRailContent({
             <>
               <SectionLabel>Subscriptions</SectionLabel>
               {channels.length > 0 ? (
-                <ul className="space-y-0.5">
-                  {channels.map((channel) => (
-                    <ChannelRow key={channel.user_id} channel={channel} onNavigate={onNavigate} />
-                  ))}
-                </ul>
+                <ChannelList channels={channels} onNavigate={onNavigate} />
               ) : channelsLoading ? (
                 // Three rows of the right height, so the sections below do not
                 // jump when the list lands.
