@@ -65,22 +65,47 @@ const ACTION =
 export function ReelsLoading() {
   return (
     <Frame>
-      <Body>Loading reels…</Body>
+      <Body>Loading shorts…</Body>
     </Frame>
   )
 }
 
-export function ReelsEmpty() {
+/**
+ * Nothing came back, and the copy says which of three things that means.
+ *
+ * The sentences are ./source.ts's `emptyCopy`, not this component's, because
+ * the reason an answer is empty is a fact about the ENDPOINT — the ranker had
+ * nothing, the people you follow posted nothing, or nothing has been published
+ * — and getting it wrong invents a claim about the platform out of a fact about
+ * one account. A component that composed its own would be a fourth place to
+ * keep the distinction straight.
+ *
+ * The action differs with it too. A signed-out viewer is offered a sign-in,
+ * because "shorts picked for you" is the thing they are actually missing; a
+ * signed-in one is offered their feed.
+ */
+export function ReelsEmpty({
+  title,
+  body,
+  offerSignIn,
+}: {
+  title: string
+  body: string
+  offerSignIn?: boolean
+}) {
   return (
     <Frame>
-      <Title>No reels for you yet</Title>
-      <Body>
-        Reels are ranked for each account, so this fills up as you follow people and watch
-        things. Nothing has been picked for you so far.
-      </Body>
-      <a href={HOME_PATH} className={ACTION}>
-        Go to your feed
-      </a>
+      <Title>{title}</Title>
+      <Body>{body}</Body>
+      {offerSignIn ? (
+        <a href={signInHref(ZONE)} className={ACTION}>
+          Sign in
+        </a>
+      ) : (
+        <a href={HOME_PATH} className={ACTION}>
+          Go to your feed
+        </a>
+      )}
     </Frame>
   )
 }
@@ -88,7 +113,7 @@ export function ReelsEmpty() {
 export function ReelsError({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <Frame>
-      <Title>Reels could not be loaded</Title>
+      <Title>Shorts could not be loaded</Title>
       <Body>{message}</Body>
       {onRetry && (
         <button type="button" onClick={onRetry} className={ACTION}>
@@ -100,17 +125,30 @@ export function ReelsError({ message, onRetry }: { message: string; onRetry?: ()
 }
 
 /**
- * `/v1/feed/reels` is 401 for an anonymous browser — it ranks against a
- * viewer, so there is no signed-out version of it to show.
+ * The sign-in offer, in the header rather than instead of the shorts.
+ *
+ * ── This used to be the whole signed-out surface, and was wrong to be ─────
+ * The zone showed "Sign in to watch reels" to every anonymous browser, on the
+ * correct observation that `/v1/feed/flicks` is 401 for one. What it missed is
+ * that `GET /v1/posts/recent?content_type=flick,reel` is not: there IS a
+ * signed-out surface, it is unranked and newest-first rather than personal, and
+ * a full-screen sign-in wall in front of it was the zone refusing to show
+ * content it was entitled to show. A shared `/reels/{id}` opened by somebody
+ * without an account is the commonest way anybody arrives here at all.
+ *
+ * So the wall is gone and this is what is left: one pill in the chrome, next to
+ * the way back, for the viewer who wants the personal version. `BRAND.name` is
+ * in the accessible name rather than on the pill because the pill is 48px wide
+ * and the sentence is for somebody who cannot see where they are.
  */
-export function ReelsSignedOut() {
+export function ReelsSignInPill() {
   return (
-    <Frame>
-      <Title>Sign in to watch reels</Title>
-      <Body>Reels are ranked for your account, so {BRAND.name} needs to know who you are.</Body>
-      <a href={signInHref(ZONE)} className={ACTION}>
-        Sign in
-      </a>
-    </Frame>
+    <a
+      href={signInHref(ZONE)}
+      aria-label={`Sign in to ${BRAND.name}`}
+      className="ml-auto rounded-mo-pill bg-mo-ink px-3 py-1 text-sm font-semibold text-mo-on-primary transition-colors duration-150 ease-mo hover:bg-white"
+    >
+      Sign in
+    </a>
   )
 }

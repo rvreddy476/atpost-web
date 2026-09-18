@@ -138,6 +138,30 @@ export function tileComments(item: FeedItem): string | null {
   return comments > 0 ? formatCount(comments) : null
 }
 
+/**
+ * The view count, which is the badge a grid of shorts is actually read by.
+ *
+ * ── Why views and not likes are the number on the cell ────────────────────
+ * Both references the founder named put a play count on the cell: YouTube
+ * Shorts' grid is a poster and a view count, RUTUBE's the same. That is not a
+ * style choice — a view count means the same thing to the person browsing (how
+ * many people watched this) as it does to the person who made it, whereas a
+ * like count on a still nobody has played is a verdict on something the reader
+ * has not seen. Likes and comments stay, under it, smaller.
+ *
+ * ── Zero is drawn here, unlike likes ──────────────────────────────────────
+ * "0 views" is a fact about a short that was posted a minute ago and reads as
+ * one. A "0" under a HEART reads as a verdict, which is why `tileLikes`
+ * suppresses it: a view is a thing that happened, a like is a thing somebody
+ * chose. What IS suppressed is the field being absent — `view_count` is
+ * optional on the wire, and "we were not told" must not be rendered as "nobody
+ * watched it".
+ */
+export function tileViews(item: FeedItem): string | null {
+  if (typeof item.view_count !== "number" || item.view_count < 0) return null
+  return `${formatCount(item.view_count)} ${item.view_count === 1 ? "view" : "views"}`
+}
+
 /** Who made it, in the phone's own words: "@handle", else the display name. */
 export function tileAuthor(item: FeedItem): string {
   return reelAuthorLabel(item.author?.username, item.author?.display_name)
@@ -158,7 +182,12 @@ export function tileAuthor(item: FeedItem): string {
  * the link makes it full-screen and playing.
  */
 export function tileLabel(item: FeedItem, position: number, total: number): string {
-  const parts = [`Expand reel ${position} of ${total}`, `by ${tileAuthor(item)}`]
+  const parts = [`Expand short ${position} of ${total}`, `by ${tileAuthor(item)}`]
+  // The badge on the cell is `aria-hidden` decoration like everything else
+  // inside the anchor, so if the count is not folded in here a screen reader
+  // hears nothing about it at all.
+  const views = tileViews(item)
+  if (views) parts.push(`— ${views}`)
   const text = item.text?.trim()
   if (text) parts.push(`— ${text.slice(0, 80)}`)
   return parts.join(" ")

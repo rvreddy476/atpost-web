@@ -41,7 +41,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Maximize2, Heart, MessageCircle } from "lucide-react"
+import { Maximize2, Heart, MessageCircle, Play } from "lucide-react"
 import type { FeedItem } from "@atpost/types/feed"
 import { BlurhashCanvas } from "@momentum/content"
 import {
@@ -54,6 +54,7 @@ import {
   tileLikes,
   tileMedia,
   tilePoster,
+  tileViews,
 } from "./tile"
 
 export function ReelTile({
@@ -76,6 +77,7 @@ export function ReelTile({
   const poster = posterFailed ? null : tilePoster(media)
 
   const duration = tileDuration(media)
+  const views = tileViews(item)
   const likes = tileLikes(item)
   const comments = tileComments(item)
 
@@ -164,6 +166,16 @@ export function ReelTile({
           <span className="truncate text-[12px] font-semibold text-white drop-shadow">
             {tileAuthor(item)}
           </span>
+          {/* The view count, first and largest, because it is the number this
+              grid is read by — see `tileViews`. Folded into the anchor's own
+              accessible name rather than announced separately: everything
+              inside the link is decoration. */}
+          {views && (
+            <span className="flex items-center gap-1 text-[12px] font-semibold text-white drop-shadow">
+              <Play className="h-3 w-3 fill-current" />
+              <span className="tabular-nums">{views}</span>
+            </span>
+          )}
           {(likes || comments) && (
             <span className="flex items-center gap-3 text-[11px] font-semibold text-white/90">
               {likes && (

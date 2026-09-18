@@ -75,32 +75,42 @@
 
 import { useSession } from "@atpost/api-client/session"
 import { InfiniteFeed } from "@momentum/content"
+import { emptyCopy, sourceFor } from "@/reels/source"
 import { useReelsFeed } from "@/reels/useReelsFeed"
 import { ReelTile } from "./ReelTile"
-import {
-  BrowseEmpty,
-  BrowseEnd,
-  BrowseError,
-  BrowseSignedOut,
-  BrowseSkeleton,
-} from "./states"
+import { BrowseEmpty, BrowseEnd, BrowseError, BrowseSkeleton } from "./states"
 
 export function ReelsBrowse() {
   const session = useSession()
-  // Not `session.signedIn`: that is false while the status is still "unknown",
-  // and a page that waited for certainty before its first fetch would add a
-  // round trip to every visit. `signedOut` is the only state known to be
-  // pointless to ask from. Same reasoning, same line, as ReelsViewer.
-  const feed = useReelsFeed(undefined, !session.signedOut)
+  /**
+   * `signedOut` and not `!signedIn`, which is false while the status is still
+   * "unknown" — a page that waited for certainty before its first fetch would
+   * add a round trip to every visit.
+   *
+   * ── There is no sign-in wall on this page any more ──────────────────────
+   * It used to render `BrowseSignedOut` for an anonymous browser, on the
+   * correct observation that the ranked flicks feed 401s for one. What that
+   * missed is that `GET /v1/posts/recent?content_type=flick,reel` does NOT: the
+   * signed-out surface exists, it is newest-first rather than personal, and a
+   * grid of it is a far better answer than a wall. `sourceFor` picks which,
+   * `emptyCopy` explains an empty one, and there are no tabs here because
+   * choosing between two feeds is the immersive viewer's control — this page is
+   * the door, not the surface.
+   */
+  const signedOut = session.signedOut
+  const source = sourceFor(signedOut, "for-you")
+  const feed = useReelsFeed(source)
   const items = feed.items
 
   const body = () => {
-    if (session.signedOut) return <BrowseSignedOut />
     if (feed.loading) return <BrowseSkeleton />
     if (feed.error && items.length === 0) {
       return <BrowseError message={feed.error} onRetry={feed.retry} />
     }
-    if (items.length === 0) return <BrowseEmpty />
+    if (items.length === 0) {
+      const copy = emptyCopy(source)
+      return <BrowseEmpty title={copy.title} body={copy.body} offerSignIn={signedOut} />
+    }
 
     return (
       <InfiniteFeed
@@ -136,7 +146,9 @@ export function ReelsBrowse() {
           Reels
         </h1>
         <p className="mt-1 text-sm text-mo-body">
-          Short video, ranked for you. Expand one to watch full screen.
+          {signedOut
+            ? "Short video, newest first. Expand one to watch full screen."
+            : "Short video, ranked for you. Expand one to watch full screen."}
         </p>
       </header>
 

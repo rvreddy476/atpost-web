@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { formatCount, railControls, railCountLabel, reelAuthorLabel, showsFollow } from "./rail"
+import {
+  applyCount,
+  formatCount,
+  optimisticCount,
+  railControls,
+  railCountLabel,
+  reelAuthorLabel,
+  showsFollow,
+} from "./rail"
 
 describe("railCountLabel", () => {
   it("says the control's own name when there is nothing to count", () => {
@@ -37,34 +45,89 @@ describe("formatCount", () => {
 describe("railControls", () => {
   const base = { likes: 0, comments: 0, liked: false, saved: false }
 
-  it("is like, comment, share, save — in that order", () => {
-    expect(railControls(base).map((c) => c.kind)).toEqual(["like", "comment", "share", "save"])
+  it("is like, comment, share, save, more — in that order", () => {
+    expect(railControls(base).map((c) => c.kind)).toEqual([
+      "like",
+      "comment",
+      "share",
+      "save",
+      "more",
+    ])
   })
 
   it("carries counts on like and comment and nouns on the rest", () => {
     const rail = railControls({ ...base, likes: 1_200, comments: 4 })
-    expect(rail.map((c) => c.label)).toEqual(["1.2K", "4", "Share", "Save"])
+    expect(rail.map((c) => c.label)).toEqual(["1.2K", "4", "Share", "Save", "More"])
   })
 
   it("says whether save is done, rather than counting it", () => {
-    expect(railControls({ ...base, saved: true }).at(-1)?.label).toBe("Saved")
+    const rail = railControls({ ...base, saved: true })
+    expect(rail.find((c) => c.kind === "save")?.label).toBe("Saved")
   })
 
   it("drops share when the author hid it", () => {
     // Not cosmetic: the switch is a permission the SERVER enforces, so a
     // control drawn anyway promises something the client cannot deliver.
     const rail = railControls({ ...base, hideShare: true })
-    expect(rail.map((c) => c.kind)).toEqual(["like", "comment", "save"])
+    expect(rail.map((c) => c.kind)).toEqual(["like", "comment", "save", "more"])
   })
 
   it("drops comment when the author closed comments", () => {
     const rail = railControls({ ...base, noComments: true })
-    expect(rail.map((c) => c.kind)).toEqual(["like", "share", "save"])
+    expect(rail.map((c) => c.kind)).toEqual(["like", "share", "save", "more"])
   })
 
-  it("keeps like and save whatever the author switched off", () => {
+  it("keeps like, save and more whatever the author switched off", () => {
+    // More is never dropped. Report lives behind it, and a surface that hid
+    // the way to report a video under some condition would be hiding it on
+    // exactly the videos most worth reporting.
     const rail = railControls({ ...base, noComments: true, hideShare: true })
-    expect(rail.map((c) => c.kind)).toEqual(["like", "save"])
+    expect(rail.map((c) => c.kind)).toEqual(["like", "save", "more"])
+  })
+
+  it("has no dislike, in any configuration", () => {
+    // `/react` is a two-method pair, not a three-way vote, so a thumb-down
+    // would have nothing to call.
+    for (const input of [base, { ...base, liked: true }, { ...base, noComments: true }]) {
+      expect(railControls(input).map((c) => c.kind)).not.toContain("dislike")
+    }
+  })
+})
+
+describe("optimisticCount", () => {
+  it("moves by one in the direction pressed", () => {
+    expect(optimisticCount(41, true)).toBe(42)
+    expect(optimisticCount(42, false)).toBe(41)
+  })
+
+  it("never goes below zero", () => {
+    // An unlike of a short whose count has not hydrated yet would otherwise
+    // show "-1", which is the kind of number people screenshot.
+    expect(optimisticCount(0, false)).toBe(0)
+  })
+})
+
+describe("applyCount", () => {
+  it("takes the server's number over our guess", () => {
+    // Other people have been liking this too, so the ±1 was a fast
+    // approximation rather than the truth.
+    expect(applyCount(42, 57)).toBe(57)
+  })
+
+  it("KEEPS our guess when the server sent no count", () => {
+    // The failure this exists to prevent: `body.count ?? 0` wipes a real
+    // figure off a creator's short every time the server answers with a bare
+    // {liked:true}.
+    expect(applyCount(42, null)).toBe(42)
+  })
+
+  it("clamps a negative from either side", () => {
+    expect(applyCount(-1, null)).toBe(0)
+    expect(applyCount(42, -3)).toBe(0)
+  })
+
+  it("accepts a genuine zero from the server", () => {
+    expect(applyCount(1, 0)).toBe(0)
   })
 })
 

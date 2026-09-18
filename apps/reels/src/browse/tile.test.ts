@@ -10,6 +10,7 @@ import {
   tileLikes,
   tileMedia,
   tilePoster,
+  tileViews,
 } from "./tile"
 
 /**
@@ -156,17 +157,47 @@ describe("tileLabel", () => {
   it("names the act, the position and the author in one string", () => {
     // The whole tile is one link, so this is the ONLY thing announced — every
     // visible mark inside it is aria-hidden.
-    expect(tileLabel(reel(), 1, 4)).toBe("Expand reel 1 of 4 by raghu varan")
+    expect(tileLabel(reel(), 1, 4)).toBe("Expand short 1 of 4 by raghu varan")
   })
 
   it("includes the caption when there is one", () => {
     expect(tileLabel(reel({ text: "My bangaram" }), 2, 4)).toBe(
-      "Expand reel 2 of 4 by raghu varan — My bangaram"
+      "Expand short 2 of 4 by raghu varan — My bangaram"
     )
   })
 
   it("does not read out a whole essay", () => {
     const long = reel({ text: "x".repeat(400) })
     expect(tileLabel(long, 1, 1).length).toBeLessThan(140)
+  })
+
+  it("folds the view count in, because the badge itself is aria-hidden", () => {
+    expect(tileLabel(reel({ view_count: 1_200 }), 1, 4)).toBe(
+      "Expand short 1 of 4 by raghu varan — 1.2K views"
+    )
+  })
+})
+
+describe("tileViews", () => {
+  it("is the number this grid is read by, compacted", () => {
+    expect(tileViews(reel({ view_count: 1_200 }))).toBe("1.2K views")
+    expect(tileViews(reel({ view_count: 934 }))).toBe("934 views")
+  })
+
+  it("draws a genuine zero, unlike likes", () => {
+    // "0 views" is a fact about a short posted a minute ago. A "0" under a
+    // HEART reads as a verdict, which is why tileLikes suppresses that one.
+    expect(tileViews(reel({ view_count: 0 }))).toBe("0 views")
+    expect(tileLikes(reel({ counts: { likes: 0, comments: 0 } }))).toBeNull()
+  })
+
+  it("says view, singular, for one", () => {
+    expect(tileViews(reel({ view_count: 1 }))).toBe("1 view")
+  })
+
+  it("draws NOTHING when the field is absent", () => {
+    // `view_count` is optional on the wire, and "we were not told" must not be
+    // rendered as "nobody watched it".
+    expect(tileViews(reel())).toBeNull()
   })
 })

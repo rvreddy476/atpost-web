@@ -14,16 +14,21 @@
  * a `no_comments` post is a 403 COMMENTS_DISABLED), so rendering the control
  * anyway would be promising something the client cannot deliver.
  *
- * ── Two deliberate differences from the Android list ──────────────────────
- * Mute is not here on either client, but for different reasons. On Android it
- * sits under the rail, unlabelled, as the session's one mute. On the web the
- * player owns sound — see the note in ReelsViewer.tsx — so there is no mute
- * control in this zone at all.
+ * ── Three deliberate differences from the Android list ────────────────────
+ * Mute is not on this rail and must not be put on it. It is a TRANSPORT
+ * control, it belongs with the playhead, and it is drawn top-right over the
+ * picture where every video player on the web puts it — see ./ReelTransport.
+ * A speaker wedged between a heart and a bookmark is a control that moves
+ * whenever the count above it changes width.
  *
- * There is no More. It left the Android rail for the header's hamburger
- * (founder, 2026-09-05) and there is nothing for it to open here yet; an
- * entry that opened nothing would be the "header glyph that does nothing"
- * ReelsScreen.kt's own signature warns about.
+ * There IS a More now, because there is something for it to open: Not
+ * interested, Don't recommend this account, Report and Copy link, each of
+ * which calls a real endpoint (./menu.ts has the mapping). While those did not
+ * exist the entry was deliberately absent — an entry that opens nothing is the
+ * "header glyph that does nothing" ReelsScreen.kt's own signature warns about.
+ *
+ * There is no dislike. `POST|DELETE /v1/reels/{id}/react` is a two-method pair
+ * and not a three-way vote, so a thumb-down would have nothing to call.
  *
  * No JSX and no React in this file, so the rule can be asserted without a
  * browser — which is the assertion that actually matters.
@@ -33,7 +38,7 @@
 // See the note beside the re-export at the bottom of this file.
 import { formatCount } from "@momentum/content"
 
-export type RailKind = "like" | "comment" | "share" | "save"
+export type RailKind = "like" | "comment" | "share" | "save" | "more"
 
 export interface RailControl {
   kind: RailKind
@@ -91,7 +96,43 @@ export function railControls(input: RailInput): RailControl[] {
     out.push({ kind: "share", label: "Share" })
   }
   out.push({ kind: "save", label: input.saved ? "Saved" : "Save" })
+  // Always last, and always present. Report lives behind it, and a surface
+  // that hid the way to report a video under some condition would be hiding
+  // the way to report the videos most worth reporting.
+  out.push({ kind: "more", label: "More" })
   return out
+}
+
+/**
+ * The count to show after a toggle, given what the server said.
+ *
+ * ── Why `null` is a case and not a zero ───────────────────────────────────
+ * An optimistic ±1 is already on screen by the time the response lands. When
+ * the body carries a `count` it REPLACES that guess rather than being
+ * reconciled with it — other people have been liking this too, so our ±1 was
+ * never the truth, only a fast approximation of it. When the body carries no
+ * count at all the guess is the best number available and must be kept: a
+ * caller that read `body.count ?? 0` would wipe a real figure off a creator's
+ * short every time the server answered with a bare `{liked:true}`.
+ *
+ * Negative counts are clamped because a rollback and a slow response can
+ * cross, and "-1 likes" is the kind of number people screenshot.
+ */
+export function applyCount(optimistic: number, serverCount: number | null): number {
+  if (serverCount === null) return Math.max(0, optimistic)
+  return Math.max(0, serverCount)
+}
+
+/**
+ * Where an optimistic like lands before anything has been sent.
+ *
+ * Split out from the handler so the arithmetic — and specifically the floor,
+ * which stops an unlike of a short whose count has not hydrated yet from
+ * showing "-1" — is a testable rule rather than an expression inside a
+ * callback nothing can reach.
+ */
+export function optimisticCount(current: number, on: boolean): number {
+  return Math.max(0, current + (on ? 1 : -1))
 }
 
 /**

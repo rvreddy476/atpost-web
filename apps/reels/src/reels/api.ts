@@ -10,56 +10,53 @@
  * `@atpost/api-client` is a plain axios instance with a cookie/CSRF request
  * interceptor and a 401-refresh response interceptor; it does not touch the
  * body. Every gateway response is `{data, error, meta}`, so a caller reads
- * `res.data.data` — with ONE exception, `relationshipsBatch` below, which the
+ * `res.data.data` — with ONE exception, `fetchFollowStates` below, which the
  * graph service answers unenveloped. That exception is not a mistake here; it
  * is a mistake on the server, and it is recorded rather than smoothed over.
  *
- * ── Routes verified against the running gateway on 2026-09-09 ─────────────
- *   GET  /v1/feed/reels        ?limit&cursor&following_only -> [item], meta
- *   GET  /v1/feed/flicks       identical — see the note on REELS_PATH
- *   POST /v1/graph/follow      {user_id}   -> {status:"followed"|"requested"}
- *   POST /v1/graph/unfollow    {user_id}   -> {status:"unfollowed"}
- *   POST /v1/graph/relationships/batch {viewer_id,target_ids} -> UNENVELOPED
- *   POST /v1/posts/{id}/like       no body, TOGGLES -> {liked, count}
- *   POST /v1/posts/{id}/bookmark   no body, SETS    -> {bookmarked:true}
- *   DELETE /v1/posts/{id}/bookmark                  -> {bookmarked:false}
- *   POST /v1/analytics/events  {events:[...]}       -> 202 {accepted,duplicate}
+ * ── The routes, as verified against the running gateway ───────────────────
+ *   GET    /v1/feed/flicks     ?limit&cursor&following_only  AUTH REQUIRED
+ *   GET    /v1/posts/recent    ?content_type=flick,reel&limit&cursor
+ *   POST   /v1/reels/{id}/react     DELETE the same          -> {liked,count}
+ *   POST   /v1/reels/{id}/save      DELETE the same          -> {saved}
+ *   POST   /v1/reels/{id}/share                              -> {count?}
+ *   GET    /v1/reels/{id}/comments  ?limit&cursor            -> [Comment]
+ *   POST   /v1/reels/{id}/comments  {text}                   -> the new row
+ *   POST   /v1/comments/{id}/reply  {text}                   -> the new row
+ *   POST   /v1/comments/{id}/like                            -> {liked,count}
+ *   PATCH  /v1/comments/{id}        {text}                   -> the row
+ *   DELETE /v1/comments/{id}
+ *   POST   /v1/feed/feedback   {post_id|author_id, signal}
+ *   POST   /v1/feed/mute       {author_id}
+ *   POST   /v1/reports         {entity_type,entity_id,reason,details}
+ *   POST   /v1/graph/follow|unfollow   {user_id}
+ *   POST   /v1/graph/relationships/batch {viewer_id,target_ids} UNENVELOPED
+ *   GET    /v1/audio/{id}                                    -> {title,…}
+ *   POST   /v1/analytics/events {events:[…]}  -> 202 {accepted,duplicate}
  *
- * The like/bookmark/analytics shapes are lifted from apps/social's api.ts
- * rather than rediscovered: they are the same endpoints against the same
- * gateway, and two zones disagreeing about them is the failure that file's
- * header exists to prevent.
+ * ── There is no dislike, and there must not be one ────────────────────────
+ * `/react` is a two-method pair, not a three-way vote. A thumb-down drawn on
+ * this rail would have nothing to call, so it is absent from the rail, from
+ * `./rail.ts` and from this file.
  */
 
 import api from "@atpost/api-client"
 import type { FeedItem } from "@atpost/types/feed"
 import type { AnalyticsEvent, SendOutcome } from "@momentum/analytics"
+import type { CommentPage, CommentRow } from "@momentum/content"
 import type { FollowState } from "@momentum/interactions"
+import type { FeedSource } from "./source"
 
 /**
- * `/reels`, not `/flicks`, and it makes no difference which.
- *
- * feed-service registers both and `GetReelFeedPage` is a one-line alias that
- * calls `GetFlickFeedPage` (internal/service/feed.go). They read the same
- * Scylla timeline for the same content types (`flick`, `reel`) and return
- * byte-identical bodies; the only difference on the wire is the informational
- * `X-Feed-Surface` response header, `reels` versus `flicks`.
- *
- * Verified live: the same two calls returned the same items and the same
- * `meta.next_cursor`. `/reels` is chosen because it is the name of this zone
- * and of the surface a person thinks they are on.
- */
-const REELS_PATH = "/v1/feed/reels"
-
-/**
- * The server clamps `limit` to 50 on this endpoint — NOT 100, which is the
- * home feed's ceiling (`rankedPageParams` in feed-service's handler.go:
- * `if limit > 50 { limit = 50 }`). A page of 12 is a deliberate choice below
- * both: a reel is a video, every page is prefetched into a scroller that will
- * try to paint posters for all of it, and asking for fifty means fifty
- * blurhashes decoded for content most people will never swipe to.
+ * The server clamps `limit` to 50 on the flicks endpoint. A page of 12 is a
+ * deliberate choice below that: a short is a video, every page is prefetched
+ * into a scroller that will try to paint posters for all of it, and asking for
+ * fifty means fifty blurhashes decoded for content most people never reach.
  */
 const PAGE_SIZE = 12
+
+/** post-service reads `if limit <= 0 || limit > 50 { limit = 20 }`. */
+const COMMENT_PAGE_SIZE = 20
 
 interface Envelope<T> {
   data?: T
@@ -70,37 +67,50 @@ interface Envelope<T> {
 export interface ReelsPage {
   items: FeedItem[]
   /**
-   * `base64url("v1:" + timeuuid)`, passed back verbatim as `?cursor=`.
-   *
-   * NOT the home feed's cursor format. `/v1/feed/home` returns an RFC3339Nano
-   * timestamp; this returns an opaque base64 token wrapping a UUID **version
-   * 1**, and feed-service rejects anything else with `400 INVALID_CURSOR`.
-   * Nothing here should ever construct or parse one.
+   * Passed back verbatim as `?cursor=`. Never constructed and never parsed —
+   * the two sources below hand out different formats (an opaque base64 token
+   * from feed-service, an RFC3339Nano timestamp from post-service) and the
+   * only correct thing to do with either is to give it straight back.
    */
   nextCursor: string | null
 }
 
 /**
- * One page of reels.
+ * One page of shorts, from whichever source this viewer is entitled to.
  *
- * ── `following_only` is deliberately not sent ─────────────────────────────
- * The parameter exists on this endpoint and it fails CLOSED: it filters the
- * candidate set to authors the viewer follows and returns an EMPTY array for
- * an account that follows nobody, rather than backfilling with strangers.
- * That is the correct behaviour and it is exactly why this surface must not
- * ask for it — mobile's Reels has no For You / Following tabs (see the header
- * of ReelsScreen.kt: "No For You / Following tabs: Reels is one surface"), so
- * there is no control that would let somebody turn it back off. A zone that
- * silently sent `following_only=true` would show a new account an empty Reels
- * for ever with nothing on screen to explain it.
+ * ── `/v1/feed/flicks` is 401 for an anonymous browser ─────────────────────
+ * It ranks against a viewer, so there is no signed-out version of it — asking
+ * without a session is not a request that might work, it is a guaranteed 401
+ * with a failed token refresh behind it. `/v1/posts/recent` is the signed-out
+ * surface: unranked, newest first, and filtered to the two content types this
+ * zone plays. It is genuinely a different product (recency, not relevance),
+ * which is why the source is named rather than hidden.
+ *
+ * ── `following_only` fails CLOSED, and that is why it needs a tab ─────────
+ * It filters the candidate set to authors the viewer follows and returns an
+ * EMPTY array for an account that follows nobody, rather than backfilling
+ * with strangers. Correct behaviour, and exactly why it may only ever be sent
+ * from a control the viewer can see and switch back off — which is what the
+ * Following tab is. A zone that sent it silently would show a new account an
+ * empty surface for ever with nothing on screen to explain it.
  */
-export async function fetchReelsPage(cursor?: string | null): Promise<ReelsPage> {
-  const res = await api.get<Envelope<FeedItem[]>>(REELS_PATH, {
-    params: {
-      limit: PAGE_SIZE,
-      ...(cursor ? { cursor } : {}),
-    },
-  })
+export async function fetchReelsPage(
+  source: FeedSource,
+  cursor?: string | null
+): Promise<ReelsPage> {
+  const page = cursor ? { cursor } : {}
+  const res =
+    source === "recent"
+      ? await api.get<Envelope<FeedItem[]>>("/v1/posts/recent", {
+          params: { content_type: "flick,reel", limit: PAGE_SIZE, ...page },
+        })
+      : await api.get<Envelope<FeedItem[]>>("/v1/feed/flicks", {
+          params: {
+            limit: PAGE_SIZE,
+            ...(source === "following" ? { following_only: true } : {}),
+            ...page,
+          },
+        })
 
   return {
     items: res.data?.data ?? [],
@@ -117,42 +127,27 @@ export async function fetchReelsPage(cursor?: string | null): Promise<ReelsPage>
  * The viewer's edge toward each of a page's authors.
  *
  * ── Why this endpoint and not the two more obvious ones ───────────────────
- * A reel item carries NO follow state. `HydratedPost.Author` is four fields —
- * id, display_name, username, avatar_media_id — and nothing in feed-service's
- * hydration path calls graph-service. So the state has to be fetched, and
- * there were three candidates:
+ * A short carries NO follow state. `HydratedPost.Author` is four fields — id,
+ * display_name, username, avatar_media_id — and nothing in feed-service's
+ * hydration path calls graph-service. So the state has to be fetched:
  *
- *   · `GET /v1/graph/relationship?user_id&other_id` — one call PER AUTHOR.
- *     This is what the Android client does (`FollowGraph.ensureKnown` fires
- *     one `async` per unknown id), and on a scrolling surface it is the
- *     classic N+1. It works; it is just needlessly N calls.
+ *   · `GET /v1/graph/relationship?user_id&other_id` is one call PER AUTHOR —
+ *     the classic N+1 on a scrolling surface.
+ *   · `GET /v1/graph/{userId}/following-ids` is hard-capped at 500 newest
+ *     edges, so past the cap it answers "not following" for everyone — a
+ *     Follow button that reappears on somebody you already follow.
+ *   · `POST /v1/graph/relationships/batch` asks about exactly the authors on
+ *     screen and has no cap problem. Used.
  *
- *   · `GET /v1/graph/{userId}/following-ids` — the route named in the brief.
- *     It is real but it is NOT what it sounds like: the id is a PATH
- *     parameter (there is no viewer-implicit `/v1/graph/following-ids`; that
- *     path 404s, verified), it cannot be filtered to a candidate set, it does
- *     not paginate, and it is hard-capped at 500 newest edges. For an account
- *     that follows more than 500 people it answers "not following" for
- *     everyone past the cap — a Follow button that reappears on someone you
- *     already follow, which is the exact failure the state is fetched to
- *     avoid.
- *
- *   · `POST /v1/graph/relationships/batch` — one call for the whole page,
- *     asks about exactly the authors on screen, and has no cap problem. Used.
- *
- * ── Two things about it that will bite ────────────────────────────────────
- * It answers with a BARE MAP and no `{data}` envelope: the handler calls
- * gin's `c.JSON` directly instead of the shared `api.JSON`, unlike every
- * neighbouring route including the singular `/v1/graph/relationship`. That is
- * a server inconsistency, it is load-bearing here, and reading `res.data.data`
- * would silently produce "nobody is followed".
- *
- * And a target ABSENT from the map means "no relationship" rather than an
- * error — the map only carries what the store found.
+ * It answers with a BARE MAP and no `{data}` envelope: the handler calls gin's
+ * `c.JSON` directly instead of the shared `api.JSON`. That is a server
+ * inconsistency, it is load-bearing here, and reading `res.data.data` would
+ * silently produce "nobody is followed". A target ABSENT from the map means
+ * "no relationship" rather than an error.
  *
  * The cap is 100 targets (`store.MaxRelationshipBatch`); over it the request
  * is rejected with `400 BATCH_TOO_LARGE` rather than truncated, so the caller
- * must chunk. A page is 12, and this chunks anyway rather than relying on that.
+ * must chunk. A page is 12, and this chunks anyway rather than relying on it.
  */
 const RELATIONSHIP_BATCH_MAX = 100
 
@@ -213,16 +208,6 @@ export function followStateOf(row: WireRelationship): FollowState {
  * Not `target_id`, not `followee_id`. graph-service binds
  * `type UserIDRequest struct { UserID string \`json:"user_id" binding:"required"\` }`
  * and the ACTOR comes from the authenticated session, never from the body.
- * A wrong field name produces `400 INVALID_REQUEST` from the binding, and a
- * previous attempt at this reported `WRONG_ENTITY_TYPE` from sending the
- * right shape to the wrong place. Verified live, both directions:
- *   POST /v1/graph/follow   {"user_id":"<uuid>"} -> {"data":{"status":"followed"}}
- *   POST /v1/graph/unfollow {"user_id":"<uuid>"} -> {"data":{"status":"unfollowed"}}
- *
- * `X-Graph-Write-Source` is required by graph-service on its mutations, and
- * the api-gateway stamps it on proxied `/v1/graph` traffic — so a browser
- * going through the gateway, which is the only way this zone ever calls it,
- * does not send it. A direct service-to-service caller would have to.
  *
  * The returned state is the SERVER's, never a guess: "followed" and
  * "requested" are different outcomes of the same button press and only the
@@ -242,35 +227,260 @@ export async function setFollow(
   throw new Error(`Unexpected follow status: ${String(status)}`)
 }
 
-/* ── The action bar ─────────────────────────────────────────────────────── */
+/* ── The rail ───────────────────────────────────────────────────────────── */
 
 /**
- * Like, or unlike. A TOGGLE that takes no body, so what the caller wanted is
- * not sent — the response carries the truth for both the state and the count,
- * and the count is the interesting half: other people have been liking this
- * too, so the server's number replaces our optimistic ±1 rather than being
- * reconciled with it.
+ * The server's own number, when it sent one.
+ *
+ * `null` and not a fallback zero, and the distinction is the whole reason this
+ * type exists. An optimistic ±1 is already on screen; replacing it with the
+ * server's count is right, and replacing it with a zero invented here because
+ * the body had no `count` field would wipe a real number off a creator's reel.
+ * `applyCount` in ./rail.ts is where that rule is written down and tested.
  */
-export async function toggleLike(postId: string): Promise<{ on: boolean; count: number }> {
-  const res = await api.post<Envelope<{ liked: boolean; count: number }>>(
-    `/v1/posts/${postId}/like`
-  )
-  const body = res.data?.data
-  return { on: Boolean(body?.liked), count: body?.count ?? 0 }
+export interface ToggleResult {
+  on: boolean
+  count: number | null
+}
+
+interface WireToggle {
+  liked?: boolean
+  reacted?: boolean
+  saved?: boolean
+  bookmarked?: boolean
+  count?: number
+  like_count?: number
+}
+
+function toggleResultOf(body: WireToggle | undefined, wanted: boolean): ToggleResult {
+  const on = body?.liked ?? body?.reacted ?? body?.saved ?? body?.bookmarked ?? wanted
+  const count = body?.count ?? body?.like_count
+  return { on: Boolean(on), count: typeof count === "number" ? count : null }
 }
 
 /**
- * Save, or unsave. Not a toggle, unlike like: two idempotent routes, so the
- * desired state picks the method. POSTing twice leaves it saved rather than
- * toggling it back off, which is what you want from a control that might be
- * double-pressed.
+ * Like, or unlike.
+ *
+ * Two idempotent methods on one path rather than a toggle, so the DESIRED
+ * state picks the verb: POSTing twice leaves it liked rather than flipping it
+ * back off, which is what you want from a control people double-press and from
+ * one bound to a double-tap on the picture.
  */
-export async function setBookmark(postId: string, saved: boolean): Promise<{ on: boolean }> {
-  const path = `/v1/posts/${postId}/bookmark`
-  const res = saved
-    ? await api.post<Envelope<{ bookmarked: boolean }>>(path)
-    : await api.delete<Envelope<{ bookmarked: boolean }>>(path)
-  return { on: Boolean(res.data?.data?.bookmarked) }
+export async function setReaction(reelId: string, on: boolean): Promise<ToggleResult> {
+  const path = `/v1/reels/${reelId}/react`
+  const res = on
+    ? await api.post<Envelope<WireToggle>>(path)
+    : await api.delete<Envelope<WireToggle>>(path)
+  return toggleResultOf(res.data?.data, on)
+}
+
+/** Save, or unsave. The same two-idempotent-methods shape, same reasoning. */
+export async function setSaved(reelId: string, on: boolean): Promise<ToggleResult> {
+  const path = `/v1/reels/${reelId}/save`
+  const res = on
+    ? await api.post<Envelope<WireToggle>>(path)
+    : await api.delete<Envelope<WireToggle>>(path)
+  return toggleResultOf(res.data?.data, on)
+}
+
+/**
+ * Tell the server a share happened.
+ *
+ * Fired AFTER the link has actually left — a clipboard write that succeeded or
+ * a share sheet that was not dismissed — because this is a count a creator
+ * sees, and crediting one for a dialog somebody closed would be a number that
+ * does not correspond to anything. A failure here is swallowed: the person's
+ * link is already on their clipboard and a toast about analytics would be
+ * telling them about our problem.
+ */
+export async function recordShare(reelId: string): Promise<void> {
+  try {
+    await api.post(`/v1/reels/${reelId}/share`)
+  } catch {
+    // Deliberately silent. See above.
+  }
+}
+
+/* ── Comments ───────────────────────────────────────────────────────────── */
+
+/**
+ * One page of a short's comments, newest first.
+ *
+ * The cursor is handed back verbatim; there is no sort parameter and no way to
+ * ask for oldest-first. `meta.next_cursor` is absent at the end of the list,
+ * which is the terminating condition rather than a missing field.
+ *
+ * Reads succeed unauthenticated — the handler treats the viewer as optional
+ * and only uses it to reveal your own held-for-review rows — so the panel
+ * opens for a signed-out browser and shows the thread it cannot write to.
+ */
+export async function fetchComments(reelId: string, cursor: string | null): Promise<CommentPage> {
+  const res = await api.get<Envelope<CommentRow[]>>(`/v1/reels/${reelId}/comments`, {
+    params: { limit: COMMENT_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+  })
+  return {
+    items: res.data?.data ?? [],
+    nextCursor: res.data?.meta?.next_cursor || null,
+  }
+}
+
+function requiredRow(row: CommentRow | undefined, what: string): CommentRow {
+  if (!row) throw new Error(`The server accepted the ${what} but did not return it.`)
+  return row
+}
+
+/**
+ * Write one. The row the server made, not the one we sent.
+ *
+ * The id, the timestamp and the counts are all the server's to assign, and a
+ * client that invented any of them would show a comment that does not match
+ * the one everybody else can see. What the row does NOT carry is a hydrated
+ * `author` — verified on the live gateway, the create response has `author_id`
+ * and no `author` while the list has both — so the panel is told who the
+ * viewer is and names the row itself. See `commentAuthorName`.
+ */
+export async function createComment(reelId: string, text: string): Promise<CommentRow> {
+  const res = await api.post<Envelope<CommentRow>>(`/v1/reels/${reelId}/comments`, { text })
+  return requiredRow(res.data?.data, "comment")
+}
+
+/**
+ * Reply to a comment.
+ *
+ * A separate route from the create, and it has to be: post-service caps the
+ * thread at one reply per comment (`REPLY_EXISTS`), refuses a reply to a reply
+ * (`CANNOT_REPLY_TO_REPLY`), and — the one that shapes the UI — allows it only
+ * for the POST'S AUTHOR (`REPLY_OWNER_ONLY`). This is a creator-response
+ * model, not a discussion thread, which is why `canReply` in ./comments.ts
+ * offers the control to exactly one person.
+ */
+export async function replyToComment(commentId: string, text: string): Promise<CommentRow> {
+  const res = await api.post<Envelope<CommentRow>>(`/v1/comments/${commentId}/reply`, { text })
+  return requiredRow(res.data?.data, "reply")
+}
+
+/**
+ * Like a comment.
+ *
+ * A TOGGLE — one method, no desired state to send — so unlike the reel's own
+ * like there is nothing to make idempotent and the server's answer is the only
+ * thing that knows which way it went.
+ */
+export async function likeComment(commentId: string): Promise<ToggleResult> {
+  const res = await api.post<Envelope<WireToggle>>(`/v1/comments/${commentId}/like`)
+  const body = res.data?.data
+  const count = body?.count ?? body?.like_count
+  return {
+    on: Boolean(body?.liked ?? body?.reacted),
+    count: typeof count === "number" ? count : null,
+  }
+}
+
+/** Edit your own. `text`, the same field the create takes. */
+export async function editComment(commentId: string, text: string): Promise<CommentRow> {
+  const res = await api.patch<Envelope<CommentRow>>(`/v1/comments/${commentId}`, { text })
+  return requiredRow(res.data?.data, "edit")
+}
+
+/** Delete your own. No body, and nothing useful in the response. */
+export async function deleteComment(commentId: string): Promise<void> {
+  await api.delete(`/v1/comments/${commentId}`)
+}
+
+/* ── The overflow menu ──────────────────────────────────────────────────── */
+
+/**
+ * "Not interested".
+ *
+ * The endpoint takes `post_id` OR `author_id` and rejects both together and
+ * neither with the same 400, so the target is a discriminated argument here
+ * rather than two optional fields and the body cannot be built wrong.
+ */
+export async function sendFeedback(
+  target: { kind: "post" | "author"; id: string },
+  signal: "interested" | "not_interested"
+): Promise<void> {
+  await api.post("/v1/feed/feedback", {
+    ...(target.kind === "post" ? { post_id: target.id } : { author_id: target.id }),
+    signal,
+  })
+}
+
+/**
+ * "Don't recommend this account".
+ *
+ * A stronger thing than `not_interested` on an author and a different route:
+ * feedback is a ranking SIGNAL that decays, mute is a standing instruction.
+ * The menu row says "Don't recommend this account" rather than "Mute" because
+ * that is what it does — it does not stop you seeing them on their own page.
+ */
+export async function muteAuthor(authorId: string): Promise<void> {
+  await api.post("/v1/feed/mute", { author_id: authorId })
+}
+
+/**
+ * Take one short out of this viewer's feed.
+ *
+ * Called alongside the feedback signal, and it is not a duplicate of it: the
+ * signal teaches the ranker, this removes THIS post from the queue the ranker
+ * has already built. Without it the reel comes back on the next page of a feed
+ * that was scored before the signal landed, which reads as the button having
+ * done nothing.
+ */
+export async function hidePost(postId: string): Promise<void> {
+  await api.post(`/v1/feed/hide/${postId}`)
+}
+
+/**
+ * File a report against a short.
+ *
+ * The create answers **200** rather than 201, and a second report of the same
+ * post by the same person answers **409 ACTIVE_REPORT_EXISTS** — which means
+ * their report is already open in the moderation queue. That is the state they
+ * were trying to reach, so the caller treats it as a confirmation rather than
+ * a failure; see `reportOutcome` in ./menu.ts.
+ *
+ * `reason` is the server's own allowlist (`REPORT_REASONS` in
+ * @momentum/content mirrors trust-safety-service's `validReportCategories`)
+ * and is not free text.
+ */
+export async function fileReport(
+  postId: string,
+  reason: string,
+  details: string
+): Promise<void> {
+  await api.post("/v1/reports", {
+    entity_type: "post",
+    entity_id: postId,
+    reason,
+    details,
+  })
+}
+
+/* ── Audio ──────────────────────────────────────────────────────────────── */
+
+export interface AudioTrack {
+  id: string
+  title?: string
+  artist?: string
+  artist_name?: string
+}
+
+/**
+ * The track a short was made with.
+ *
+ * Fetched only when the post carries an `audio_track_id`, and only for the
+ * short on screen — the line is one row of text and is not worth a request per
+ * neighbour. A failure is not reported: the audio line simply does not appear,
+ * which is the same thing a short with no track looks like.
+ */
+export async function fetchAudioTrack(audioId: string): Promise<AudioTrack | null> {
+  try {
+    const res = await api.get<Envelope<AudioTrack>>(`/v1/audio/${audioId}`)
+    return res.data?.data ?? null
+  } catch {
+    return null
+  }
 }
 
 /* ── Analytics ──────────────────────────────────────────────────────────── */
@@ -299,11 +509,23 @@ export async function sendAnalytics(events: AnalyticsEvent[]): Promise<SendOutco
     const status = err.response?.status
     if (status === 401) return { kind: "unauthenticated" }
     // The content projection has not caught up with the post yet. Retrying is
-    // right; dropping the watch time of a brand-new reel is not.
+    // right; dropping the watch time of a brand-new short is not.
     if (status === 422 && err.response?.data?.error?.code === "CONTENT_NOT_READY") {
       return { kind: "transient" }
     }
     if (!status || status === 429 || status >= 500) return { kind: "transient" }
     return { kind: "permanent" }
   }
+}
+
+/**
+ * An axios failure, flattened to the two things every caller here asks about.
+ *
+ * The status and the envelope's `error.code` live in different places and
+ * neither @momentum/content nor this zone's pure modules may know that axios
+ * exists, so this is the one place the shape is unpicked.
+ */
+export function failureOf(error: unknown): { status?: number; code?: string } {
+  const err = error as { response?: { status?: number; data?: Envelope<unknown> } }
+  return { status: err.response?.status, code: err.response?.data?.error?.code }
 }

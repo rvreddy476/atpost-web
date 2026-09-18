@@ -21,7 +21,6 @@
  */
 
 import { AlertTriangle, Film } from "lucide-react"
-import { BRAND } from "@momentum/brand"
 import { HOME_PATH, signInHref } from "@momentum/chrome"
 import { ZONE } from "@/zone"
 
@@ -68,21 +67,42 @@ export function BrowseSkeleton({ count = 6 }: { count?: number }) {
   )
 }
 
-export function BrowseEmpty() {
+/**
+ * Nothing came back, and the copy says which of three things that means.
+ *
+ * The sentences come from `@/reels/source`'s `emptyCopy` rather than being
+ * written here, because the reason an answer is empty is a fact about the
+ * ENDPOINT — the ranker had nothing, the people you follow posted nothing, or
+ * nothing has been published at all — and it is the same fact on this page as
+ * in the viewer. Two components composing their own would be two places to keep
+ * one distinction straight.
+ */
+export function BrowseEmpty({
+  title,
+  body,
+  offerSignIn,
+}: {
+  title: string
+  body: string
+  offerSignIn?: boolean
+}) {
   return (
     <Card>
       <Film aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
-      <Title>No reels for you yet</Title>
-      <Body>
-        Reels are ranked for each account, so this fills up as you follow people and watch
-        things. Nothing has been picked for you so far.
-      </Body>
-      {/* A plain <a> and an absolute path: /social is a different Next app
-          behind the shell's rewrite table, and next/link would prefix this
-          zone's basePath and ask for /reels/social. */}
-      <a href={HOME_PATH} className={ACTION}>
-        Go to your feed
-      </a>
+      <Title>{title}</Title>
+      <Body>{body}</Body>
+      {/* A plain <a> and an absolute path either way: /social and /login are
+          different Next apps behind the shell's rewrite table, and next/link
+          would prefix this zone's basePath and ask for /reels/social. */}
+      {offerSignIn ? (
+        <a href={signInHref(ZONE)} className={ACTION}>
+          Sign in
+        </a>
+      ) : (
+        <a href={HOME_PATH} className={ACTION}>
+          Go to your feed
+        </a>
+      )}
     </Card>
   )
 }
@@ -104,31 +124,26 @@ export function BrowseError({ message, onRetry }: { message: string; onRetry?: (
   )
 }
 
-/**
- * `/v1/feed/reels` ranks against a viewer and is 401 for an anonymous browser,
- * so there is no signed-out version of this page to show.
+/*
+ * `BrowseSignedOut` used to live here and has been deleted rather than left
+ * unused.
  *
- * The chrome around it is still drawn, and still says "Sign in" in two places
- * of its own — this is the third, and the only one that explains why.
+ * It was a full-page sign-in wall, on the correct observation that the ranked
+ * flicks feed 401s for an anonymous browser. What it missed is that
+ * `GET /v1/posts/recent?content_type=flick,reel` does not — there IS a
+ * signed-out surface — so the wall was this zone refusing to show content it
+ * was entitled to show, to the visitor most likely to be arriving on a shared
+ * link. `BrowseEmpty` with `offerSignIn` is what is left of it: the offer,
+ * where there genuinely is nothing else to say.
  */
-export function BrowseSignedOut() {
-  return (
-    <Card>
-      <Film aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
-      <Title>Sign in to watch reels</Title>
-      <Body>Reels are ranked for your account, so {BRAND.name} needs to know who you are.</Body>
-      <a href={signInHref(ZONE)} className={ACTION}>
-        Sign in
-      </a>
-    </Card>
-  )
-}
 
 /** The end of the grid. Said once, quietly, rather than spinning forever. */
 export function BrowseEnd({ count }: { count: number }) {
   return (
     <p className="py-8 text-center text-sm text-mo-body">
-      {count === 1 ? "That is the only reel ranked for you right now." : `That is all ${count} reels ranked for you right now.`}
+      {count === 1
+        ? "That is the only short here right now."
+        : `That is all ${count} shorts here right now.`}
     </p>
   )
 }
