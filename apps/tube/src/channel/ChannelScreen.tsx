@@ -3,234 +3,120 @@
 /**
  * `/tube/@{handle}` — a channel.
  *
- * The banner, the avatar, the name, the handle, the subscriber count, the
- * subscribe control, and Videos / Playlists / About.
+ * The banner, the avatar, the name, the handle, the counts, the subscribe
+ * control, and Videos / Shorts / Playlists / About.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * FOUR REQUESTS, AND EACH ONE FAILS ALONE
+ * SEVEN REQUESTS, AND EACH ONE FAILS ALONE
  *
- *   GET /v1/channels/{ref}                 the channel itself, which is the
- *                                          page, and its subscriber_count
- *   GET /v1/posts/by-author/{id}?type=…    the videos
- *   GET /v1/creators/{user_id}/playlists   the playlists tab
- *   GET /v1/channels/{ref}/subscription    is the viewer subscribed, and
- *                                          are they being notified
+ *   GET /v1/channels/{ref}                    the channel itself, which IS
+ *                                             the page, with subscriber_count
+ *   GET /v1/posts/by-author/{id}?type=…       the Videos tab (long_video)
+ *   GET /v1/posts/by-author/{id}?type=…       the Shorts tab (flick,reel)
+ *   GET /v1/posts/by-author/{id}/counts       the numbers on the tabs
+ *   GET /v1/creators/{user_id}/playlists      the Playlists tab
+ *   GET /v1/profiles/{user_id}                a banner, and a joined date
+ *   GET /v1/channels/{ref}/subscription       am I subscribed, and notified
  *
  * Only the FIRST can take the page down, because it is the page: without a
- * channel there is nothing to draw a header for, and a 404 from it is a
- * genuine "no such channel". The other three are each a section that says
- * less when it fails rather than a page that fails. A subscriber count the
- * row did not carry renders as nothing at all rather than as "No subscribers
- * yet", because printing a zero for a number we could not read would state
- * something false about somebody's channel.
+ * channel there is nothing to draw a header for. Every other one is a section
+ * that says less when it fails rather than a page that fails. A subscriber
+ * count the row did not carry renders as nothing at all rather than as "No
+ * subscribers yet", because printing a zero for a number we could not read
+ * would state something false about somebody's channel.
  *
- * The count used to be a fifth request, the owner's `follower_count` off a
- * profile, because subscribing was a follow with different words on it and
- * there was no other number. Since 2026-09-12 a channel subscription is its
- * own edge and the channel row carries its own count.
+ * Four of the seven are deferred until something asks for them: the two grids
+ * fetch when their tab is first SHOWN, and playlists when that tab is opened.
+ * A channel page opened at Videos costs the channel, the videos, the counts,
+ * the profile and the subscription — not the whole page's worth.
+ *
+ * A confirmed 404 does not reach this component any more: the server route
+ * resolves it and calls `notFound()`, so an unknown handle is a real 404
+ * status with `app/channel/[handle]/not-found.tsx` under it. The `missing`
+ * branch below stays because a CLIENT-side navigation — the rail, a card's
+ * channel link — reaches this component without that server check.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * ONE THING THE BRIEF ASKED FOR THAT THIS API DOES NOT HAVE
+ * THE TABS ARE LINKS AND TABS AT THE SAME TIME
  *
- * Recorded here as well as in ../tube/channels.ts, because this is the file
- * where somebody will look for it.
+ * `?tab=` keeps each section shareable and back-button-able; `role="tablist"`
+ * with arrow-key movement is what the founder asked for and what the role
+ * promises. ./ChannelTabs.tsx holds both and explains how they coexist.
  *
- *   · NO BANNER IMAGE. There is no cover, header or banner field on a channel
- *     and none on the profile either. The band across the top is a gradient
- *     derived from the handle — stable per channel, different between
- *     channels, and openly decorative. `bannerImage` is the one function that
- *     changes the day the API grows a real one.
+ * Both content tabs are MOUNTED and one is enabled — see ./useChannelFeed.ts.
+ * Switching Videos → Shorts → Videos does not re-fetch page one, and a reader
+ * who had paged three deep into Videos finds it as they left it.
  *
  * ── Subscribe is one button that does two things ──────────────────────────
  * The founder's decision: pressing Subscribe follows the owner AND turns
- * notifications on; Unsubscribe removes both; every subscriber is notified
- * by default and the bell beside the button is the per-channel exception.
- * The button and the bell are ./SubscribeControls.tsx, drawn from the edge
+ * notifications on; Unsubscribe removes both; every subscriber is notified by
+ * default and the bell beside the button is the per-channel exception. The
+ * button and the bell are ./SubscribeControls.tsx, drawn from the edge
  * ../tube/useSubscription.ts holds, and that hook is where the optimistic
  * update, the rollback and the visible failure live once for the three
  * surfaces that draw this control.
+ *
+ * ── The owner sees their own unlisted and private rows, marked ────────────
+ * `/v1/posts/by-author` filters by viewer, so those rows only ever appear in
+ * the owner's own response — a badge here cannot leak anything. What it
+ * prevents is a creator reading their own channel page as "what the world
+ * sees" and concluding a private cut is live. ./visibility.ts has the whole
+ * argument.
  */
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { AlertTriangle, Tv } from "lucide-react"
+import { Clapperboard, ListVideo, Tv } from "lucide-react"
 import { useSession } from "@atpost/api-client/session"
-import { BRAND } from "@momentum/brand"
-import { Avatar, InfiniteFeed, absoluteTime } from "@momentum/content"
+import { InfiniteFeed, absoluteTime } from "@momentum/content"
 import type { FeedItem } from "@atpost/types/feed"
-import {
-  fetchAuthorVideos,
-  fetchChannel,
-  fetchCreatorPlaylists,
-  type TubePlaylist,
-} from "@/tube/channelApi"
-import {
-  atHandle,
-  bannerImage,
-  subscribersLabel,
-  videosLabel,
-  type TubeChannel,
-} from "@/tube/channels"
-import { useSubscription, type SubscriptionEdge } from "@/tube/useSubscription"
+import { fetchChannel } from "@/tube/channelApi"
+import { atHandle, videosLabel, type TubeChannel } from "@/tube/channels"
+import { videoMedia, videoPoster } from "@/tube/video"
+import { useSubscription } from "@/tube/useSubscription"
 import { VideoCard } from "@/browse/VideoCard"
 import { VIDEO_GRID } from "@/browse/grid"
-import { BrowseSkeleton } from "@/browse/states"
-import { SubscribeControls } from "./SubscribeControls"
+// The id rule and the href, imported rather than restated: ../playlists/
+// playlists.ts paid for the `??`-vs-first-non-empty bug and owns the route.
+import { playlistHref, playlistId } from "@/playlists/playlists"
 import {
-  CHANNEL_TABS,
-  CHANNEL_TAB_LABEL,
-  channelTabHref,
-  type ChannelTab,
-} from "./tabs"
+  fetchAuthorCounts,
+  fetchChannelPlaylists,
+  fetchChannelProfileExtras,
+  playlistCoverPost,
+  NO_COUNTS,
+  NO_PROFILE_EXTRAS,
+  type AuthorCounts,
+  type ChannelPlaylist,
+  type ChannelProfileExtras,
+} from "./api"
+import { ChannelHeader } from "./ChannelHeader"
+import { ChannelTabPanel, ChannelTabs } from "./ChannelTabs"
+import { SHORTS_GRID, ShortCard } from "./ShortCard"
+import {
+  ChannelGridSkeleton,
+  ChannelHeaderSkeleton,
+  ChannelLoadError,
+  ChannelNotFound,
+  TabEmpty,
+  TabError,
+} from "./states"
+import { useChannelFeed, type ChannelFeed } from "./useChannelFeed"
+import { visibilityBadge } from "./visibility"
+import type { ChannelTab } from "./tabs"
 
-/* ── Page-level states ────────────────────────────────────────────────────── */
-
-function Plate({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mx-auto max-w-xl rounded-mo border border-mo bg-mo-surface p-8 text-center shadow-mo">
-      {children}
-    </div>
-  )
-}
-
-function PlateTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <h1 className="mt-4 font-mo-display text-xl font-semibold tracking-mo-display text-mo-ink">
-      {children}
-    </h1>
-  )
-}
-
-/* ── The header ───────────────────────────────────────────────────────────── */
-
-function ChannelHeader({
-  channel,
-  subscription,
-}: {
-  channel: TubeChannel
-  subscription: SubscriptionEdge
-}) {
-  const handle = atHandle(channel.handle)
-  // The edge's count and not the row's: they are the same number until the
-  // viewer presses Subscribe, and from then on the edge's is the one that
-  // moved with the press and was replaced by the server's answer.
-  const subscribers = subscription.subscriberCount
-
-  return (
-    <header className="mb-6">
-      {/* Decorative and labelled as such: it is a derived gradient, not a
-          picture this creator chose, so it carries no alt text and no role. */}
-      <div
-        aria-hidden="true"
-        className="h-28 w-full rounded-mo sm:h-40"
-        style={{ backgroundImage: bannerImage(channel.handle || channel.user_id) }}
-      />
-
-      <div className="mt-4 flex flex-wrap items-start gap-4 sm:mt-5">
-        {/* `avatar_url` is a real signed URL when the channel has one — unlike
-            an `avatar_media_id`, which is not a URL and whose derivable one is
-            unsigned and 403s. Every channel on the dev stack has null here, so
-            what is drawn today is the initial. */}
-        <Avatar name={channel.name} id={channel.user_id} src={channel.avatar_url} />
-
-        <div className="min-w-0 flex-1">
-          <h1 className="font-mo-display text-2xl font-semibold tracking-mo-display text-mo-ink">
-            {channel.name || handle || "Channel"}
-          </h1>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-mo-body">
-            {handle && <span>{handle}</span>}
-            {handle && <span aria-hidden>·</span>}
-            {/* Null means "we could not read it", which is not zero. See the
-                header — a failed side request must not state a number. */}
-            {subscribers !== null && <span>{subscribersLabel(subscribers)}</span>}
-            {subscribers !== null && <span aria-hidden>·</span>}
-            <span>{videosLabel(channel.video_count)}</span>
-          </p>
-          {channel.about && (
-            <p className="mt-2 line-clamp-2 max-w-2xl text-sm text-mo-body">{channel.about}</p>
-          )}
-        </div>
-
-        {/* Absent, not disabled, while the edge is UNKNOWN: the edge is
-            undefined until `…/subscription` answers, and it is undefined
-            forever for the viewer's own channel and for a signed-out browser.
-            A Subscribe button that appears and then flips to Subscribed is
-            worse than one that arrives late: the person in between has been
-            told something false about their own subscriptions.
-            `SubscribeControls` renders nothing on an unknown edge, so the
-            rule is in one place and not in three. */}
-        <SubscribeControls edge={subscription} name={channel.name} className="shrink-0" />
-      </div>
-    </header>
-  )
-}
-
-/* ── The tabs ─────────────────────────────────────────────────────────────── */
-
-/**
- * The tabs are LINKS, not buttons, and the tab is in the URL.
- *
- * Which means a channel's Playlists tab can be linked to, bookmarked, opened
- * in a new tab and reached with the back button — and it is what lets the
- * rail's own "Playlists" row point at `/@you?tab=playlists` with no extra
- * machinery. `next/link` because this is a route of this same app, so the
- * transition is client-side and the header above does not re-fetch.
- *
- * `role="tab"` is deliberately NOT used. The ARIA tab pattern promises arrow
- * keys move between tabs and that the panel is controlled by them; these are
- * navigation, they change the URL, and announcing them as tabs would promise
- * a keyboard behaviour they do not have. `aria-current="page"` says the true
- * thing instead.
- */
-function ChannelTabs({ base, current }: { base: string; current: ChannelTab }) {
-  return (
-    <nav aria-label="Channel sections" className="mb-6 border-b border-mo">
-      <ul className="-mb-px flex gap-1">
-        {CHANNEL_TABS.map((tab) => {
-          const active = tab === current
-          return (
-            <li key={tab}>
-              <Link
-                href={channelTabHref(base, tab)}
-                aria-current={active ? "page" : undefined}
-                className={[
-                  "inline-block border-b-2 px-4 py-3 text-sm font-semibold transition-colors duration-150 ease-mo",
-                  "outline-offset-[-2px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo",
-                  active ? "text-mo-ink" : "border-transparent text-mo-body hover:text-mo-ink",
-                ].join(" ")}
-                // The underline is cyan — the palette's interactive colour —
-                // and there is no `border-mo-cyan` utility: @momentum/tokens
-                // names cyan under `colors`, not under `borderColor`, whose
-                // four entries are line / line-strong / focus / gold. An
-                // inline style is the honest way to reach the variable rather
-                // than adding a fifth border token for one underline.
-                style={active ? { borderBottomColor: "rgb(var(--mo-cyan))" } : undefined}
-              >
-                {CHANNEL_TAB_LABEL[tab]}
-              </Link>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
-  )
-}
-
-/* ── The screen ───────────────────────────────────────────────────────────── */
+/** Named in the Shorts empty state, because a short leaves Tube when opened. */
+const SHORTS_APP = "Momentum Reels"
 
 export function ChannelScreen({ channelRef, tab }: { channelRef: string; tab: ChannelTab }) {
   const { user } = useSession()
 
   const [channel, setChannel] = useState<TubeChannel | null>(null)
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading")
-
-  const [videos, setVideos] = useState<FeedItem[]>([])
-  const [videosCursor, setVideosCursor] = useState<string | null>(null)
-  const [videosLoading, setVideosLoading] = useState(true)
-  const [videosMore, setVideosMore] = useState(false)
-  const [videosFailed, setVideosFailed] = useState(false)
-
-  const [playlists, setPlaylists] = useState<TubePlaylist[] | null>(null)
+  const [counts, setCounts] = useState<AuthorCounts>(NO_COUNTS)
+  const [extras, setExtras] = useState<ChannelProfileExtras>(NO_PROFILE_EXTRAS)
+  const [playlists, setPlaylists] = useState<ChannelPlaylist[] | null>(null)
+  const [playlistsFailed, setPlaylistsFailed] = useState(false)
 
   /* The channel. Everything else hangs off its user_id, so it goes first. */
   useEffect(() => {
@@ -254,42 +140,48 @@ export function ChannelScreen({ channelRef, tab }: { channelRef: string; tab: Ch
     }
   }, [channelRef])
 
-  /* The videos and the playlists, once the owner is known. */
   const ownerId = channel?.user_id ?? null
+  const isOwner = Boolean(user?.id && ownerId && user.id === ownerId)
+
+  /* The two decorations: what the tabs are worth, and what the banner is.
+     Neither call throws — see ./api.ts — so neither needs a catch here. */
   useEffect(() => {
     if (!ownerId) return
     let live = true
-
-    setVideos([])
-    setVideosCursor(null)
-    setVideosFailed(false)
-    setVideosLoading(true)
-    fetchAuthorVideos(ownerId)
-      .then((page) => {
-        if (!live) return
-        setVideos(page.items)
-        setVideosCursor(page.nextCursor)
-      })
-      .catch(() => {
-        if (live) setVideosFailed(true)
-      })
-      .finally(() => {
-        if (live) setVideosLoading(false)
-      })
-
-    setPlaylists(null)
-    fetchCreatorPlaylists(ownerId)
-      .then((rows) => {
-        if (live) setPlaylists(rows)
-      })
-      .catch(() => {
-        if (live) setPlaylists([])
-      })
-
+    setCounts(NO_COUNTS)
+    setExtras(NO_PROFILE_EXTRAS)
+    void fetchAuthorCounts(ownerId).then((rows) => {
+      if (live) setCounts(rows)
+    })
+    void fetchChannelProfileExtras(ownerId).then((row) => {
+      if (live) setExtras(row)
+    })
     return () => {
       live = false
     }
   }, [ownerId])
+
+  /* Playlists, only once the tab is actually asked for. A channel page opened
+     at Videos should not fetch a list nobody has looked at. */
+  useEffect(() => {
+    if (!ownerId || tab !== "playlists" || playlists !== null) return
+    let live = true
+    setPlaylistsFailed(false)
+    fetchChannelPlaylists(ownerId)
+      .then((rows) => {
+        if (live) setPlaylists(rows)
+      })
+      .catch(() => {
+        if (!live) return
+        // An empty list and a failed list are DIFFERENT sentences, so the
+        // failure is recorded rather than collapsed into "no playlists".
+        setPlaylists([])
+        setPlaylistsFailed(true)
+      })
+    return () => {
+      live = false
+    }
+  }, [ownerId, tab, playlists])
 
   /* Am I subscribed? The hook never asks for my own channel or while signed
      out, and it leaves the edge unknown on a failed lookup; the header draws
@@ -301,208 +193,417 @@ export function ChannelScreen({ channelRef, tab }: { channelRef: string; tab: Ch
     typeof channel?.subscriber_count === "number" ? channel.subscriber_count : null
   )
 
-  const loadMoreVideos = useCallback(() => {
-    if (!ownerId || !videosCursor || videosMore) return
-    setVideosMore(true)
-    fetchAuthorVideos(ownerId, videosCursor)
-      .then((page) => {
-        setVideos((prev) => {
-          // The author feed is newest-first over a stable list, so duplicates
-          // are not expected the way they are on a ranked feed — but a page
-          // boundary that repeats one row would give React two children with
-          // one key, which is a crash rather than a cosmetic problem.
-          const seen = new Set(prev.map((item) => item.id))
-          return [...prev, ...page.items.filter((item) => !seen.has(item.id))]
-        })
-        setVideosCursor(page.nextCursor)
-      })
-      .catch(() => setVideosFailed(true))
-      .finally(() => setVideosMore(false))
-  }, [ownerId, videosCursor, videosMore])
+  const videos = useChannelFeed(ownerId, "videos", tab === "videos")
+  const shorts = useChannelFeed(ownerId, "shorts", tab === "shorts")
+
+  /**
+   * The number beside each tab.
+   *
+   * The counts endpoint where it answered, and the channel row's own
+   * `video_count` as the fallback for Videos — that field is on every channel
+   * row and is the number this page has always printed. Playlists borrows the
+   * length of the list once the list is in hand and says nothing before then:
+   * a count that appears when you open a tab is better than a zero nobody
+   * asked for. About never carries a number.
+   */
+  const videoCount = counts.videos ?? (typeof channel?.video_count === "number" ? channel.video_count : null)
+  const tabCounts = useMemo(
+    (): Partial<Record<ChannelTab, number | null>> => ({
+      videos: videoCount,
+      shorts: counts.shorts,
+      playlists: playlists === null ? null : playlists.length,
+    }),
+    [videoCount, counts.shorts, playlists]
+  )
 
   if (status === "loading") {
     return (
       <div>
-        <div aria-hidden className="mb-6 animate-pulse">
-          <div className="h-28 w-full rounded-mo bg-mo-raised sm:h-40" />
-          <div className="mt-4 flex items-center gap-4">
-            <div className="h-10 w-10 shrink-0 rounded-mo-pill bg-mo-raised" />
-            <div className="min-w-0 flex-1">
-              <div className="h-5 w-48 rounded bg-mo-raised" />
-              <div className="mt-2 h-3 w-64 rounded bg-mo-raised" />
-            </div>
-          </div>
-        </div>
-        <BrowseSkeleton />
+        <ChannelHeaderSkeleton />
+        <ChannelGridSkeleton kind="videos" />
       </div>
     )
   }
 
-  if (status === "missing") {
-    return (
-      <Plate>
-        <Tv aria-hidden="true" className="mx-auto h-8 w-8 text-mo-purple" />
-        <PlateTitle>No such channel</PlateTitle>
-        <p className="mx-auto mt-2 max-w-sm text-mo-body">
-          Nothing on {BRAND.name} answers to {atHandle(channelRef) ?? channelRef}. The handle may
-          have changed, or the channel may have been removed.
-        </p>
-      </Plate>
-    )
-  }
-
-  if (status === "error" || !channel) {
-    return (
-      <div role="alert">
-        <Plate>
-          <AlertTriangle aria-hidden="true" className="mx-auto h-8 w-8 text-mo-warn" />
-          <PlateTitle>This channel could not be loaded</PlateTitle>
-          <p className="mx-auto mt-2 max-w-sm text-mo-body">
-            The request did not come back. Reloading usually works.
-          </p>
-        </Plate>
-      </div>
-    )
-  }
+  // Reachable only on a client-side navigation now; the server route resolves
+  // a 404 before this mounts. See the header.
+  if (status === "missing") return <ChannelNotFound channelRef={channelRef} />
+  if (status === "error" || !channel) return <ChannelLoadError />
 
   const base = `/@${channel.handle || channel.user_id}`
+  const name = channel.name?.trim() || atHandle(channel.handle) || "This channel"
 
   return (
     <div>
-      <ChannelHeader channel={channel} subscription={subscription} />
-      <ChannelTabs base={base} current={tab} />
+      <ChannelHeader
+        channel={channel}
+        subscription={subscription}
+        coverUrl={extras.coverUrl}
+        isOwner={isOwner}
+        videoCount={videoCount}
+      />
+      <ChannelTabs base={base} current={tab} counts={tabCounts} />
 
-      {tab === "videos" && (
-        <>
-          {videosLoading ? (
-            <BrowseSkeleton />
-          ) : videos.length === 0 ? (
-            <p className="py-10 text-center text-mo-body">
-              {videosFailed
-                ? "This channel's videos could not be loaded."
-                : `${channel.name} has not published a long video yet.`}
-            </p>
-          ) : (
-            <InfiniteFeed
-              hasMore={Boolean(videosCursor) && !videosFailed}
-              loading={videosMore}
-              onLoadMore={loadMoreVideos}
-              loadingIndicator={
-                <p className="py-6 text-center text-sm text-mo-body">Loading more videos…</p>
-              }
-              endIndicator={
-                <p className="py-8 text-center text-sm text-mo-body">
-                  That is every video on this channel.
-                </p>
-              }
-            >
-              <ul className={VIDEO_GRID}>
-                {videos.map((item, at) => (
-                  <VideoCard
-                    key={item.id}
-                    item={item}
-                    position={at + 1}
-                    total={videos.length}
-                    // The whole page is this channel, and these rows are bare
-                    // `PostDetail` with no `channel` on them — so the card's
-                    // own name lookup would print "Someone" under every one.
-                    hideCreator
-                  />
-                ))}
-              </ul>
-            </InfiniteFeed>
-          )}
-        </>
-      )}
+      <ChannelTabPanel tab={tab}>
+        {tab === "videos" && (
+          <FeedTab
+            feed={videos}
+            kind="videos"
+            showVisibility={isOwner}
+            what="Videos"
+            emptyTitle={`${name} hasn't posted a video yet`}
+            emptyBody="When this channel publishes a long video, it will appear here."
+          />
+        )}
 
-      {tab === "playlists" && <PlaylistsTab playlists={playlists} channelName={channel.name} />}
+        {tab === "shorts" && (
+          <FeedTab
+            feed={shorts}
+            kind="shorts"
+            showVisibility={isOwner}
+            what="Shorts"
+            emptyTitle={`${name} hasn't posted a short yet`}
+            emptyBody={`Shorts are the vertical videos that play in ${SHORTS_APP}. When this channel posts one, it will appear here.`}
+          />
+        )}
 
-      {tab === "about" && (
-        <dl className="max-w-2xl space-y-5">
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">About</dt>
-            <dd className="mt-1 whitespace-pre-wrap text-mo-ink">
-              {channel.about || "This channel has not written a description."}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">Handle</dt>
-            <dd className="mt-1 text-mo-ink">{atHandle(channel.handle) ?? "No handle"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">Videos</dt>
-            <dd className="mt-1 text-mo-ink">{videosLabel(channel.video_count)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">Joined</dt>
-            {/* `absoluteTime` and not `relativeTime`: "3 months ago" is the
-                right form for a video's age on a card and the wrong one for
-                the date a channel was created, which is a fact rather than a
-                recency. */}
-            <dd className="mt-1 text-mo-ink">
-              {channel.created_at ? absoluteTime(channel.created_at) : "Unknown"}
-            </dd>
-          </div>
-        </dl>
-      )}
+        {tab === "playlists" && (
+          <PlaylistsTab
+            playlists={playlists}
+            failed={playlistsFailed}
+            channelName={name}
+            showVisibility={isOwner}
+            onRetry={() => setPlaylists(null)}
+          />
+        )}
+
+        {tab === "about" && <AboutTab channel={channel} joinedAt={extras.joinedAt} />}
+      </ChannelTabPanel>
     </div>
   )
 }
 
+/* ── The two content tabs ─────────────────────────────────────────────────── */
+
+/**
+ * Videos and Shorts, which differ in three things — the card, the grid class
+ * and the sentence when there is nothing — and share everything else.
+ *
+ * The error branch comes BEFORE the empty branch, and that ordering is the
+ * point: a failed request falling through to "this channel hasn't posted a
+ * video yet" would be the page inventing a fact about somebody's channel out
+ * of its own network trouble.
+ */
+function FeedTab({
+  feed,
+  kind,
+  showVisibility,
+  what,
+  emptyTitle,
+  emptyBody,
+}: {
+  feed: ChannelFeed
+  kind: "videos" | "shorts"
+  showVisibility: boolean
+  what: string
+  emptyTitle: string
+  emptyBody: string
+}) {
+  if (feed.loading) return <ChannelGridSkeleton kind={kind} />
+  if (feed.failed && feed.items.length === 0) return <TabError what={what} onRetry={feed.retry} />
+  if (feed.items.length === 0) {
+    return (
+      <TabEmpty icon={kind === "shorts" ? Clapperboard : Tv} title={emptyTitle} body={emptyBody} />
+    )
+  }
+
+  return (
+    <InfiniteFeed
+      hasMore={feed.hasMore}
+      loading={feed.loadingMore}
+      onLoadMore={feed.loadMore}
+      loadingIndicator={<p className="py-6 text-center text-sm text-mo-body">Loading more…</p>}
+      endIndicator={
+        <p className="py-8 text-center text-sm text-mo-body">
+          {feed.failed
+            ? "More could not be loaded."
+            : `That is every ${kind === "shorts" ? "short" : "video"} on this channel.`}
+        </p>
+      }
+    >
+      <ul className={kind === "shorts" ? SHORTS_GRID : VIDEO_GRID}>
+        {feed.items.map((item, at) =>
+          kind === "shorts" ? (
+            <ShortCard key={item.id} item={item} showVisibility={showVisibility} />
+          ) : (
+            <VideoCard
+              key={item.id}
+              item={item}
+              position={at + 1}
+              total={feed.items.length}
+              // The whole page is this channel, and these rows are bare
+              // `PostDetail` with no `channel` on them — so the card's own
+              // name lookup would print "Someone" under every one.
+              hideCreator
+              footer={showVisibility ? <VisibilityNote item={item} /> : undefined}
+            />
+          )
+        )}
+      </ul>
+    </InfiniteFeed>
+  )
+}
+
+/**
+ * "Unlisted — only people with the link", under one of your own videos.
+ *
+ * Drawn in `VideoCard`'s `footer` slot rather than over the poster, which is
+ * the only place a channel page may add to that card without editing it — and
+ * the slot exists for exactly this: a row's own line, outside both of the
+ * card's anchors, so a badge is never a control inside a control.
+ *
+ * Real text rather than `aria-hidden` decoration, because the card's
+ * accessible name is built by `cardLabel` from the item and cannot be extended
+ * from out here. A short line announced after the title is the honest way to
+ * say it.
+ */
+function VisibilityNote({ item }: { item: FeedItem }) {
+  const badge = visibilityBadge(item.visibility)
+  if (!badge) return null
+  return (
+    <p className="mt-2 inline-flex items-center rounded-mo-sm bg-mo-raised px-2 py-0.5 text-[11px] font-semibold text-mo-ink">
+      {badge.description}
+    </p>
+  )
+}
+
+/* ── Playlists ────────────────────────────────────────────────────────────── */
+
 /**
  * The Playlists tab.
  *
- * ── The one place in this zone where the wire shape is unverified ─────────
- * `GET /v1/creators/{user_id}/playlists` is real and answers 200, but every
- * creator on this dev stack has zero playlists — checked for a live creator
- * id and for a nonexistent one, both `{"data":[]}` — so a playlist ROW has
- * never been seen. ../tube/channelApi.ts types it accordingly.
+ * ── No client-side visibility filter, because the server decides ──────────
+ * `GET /v1/creators/{id}/playlists` returns public playlists to everyone and
+ * public + unlisted + private to the creator themselves. So on somebody
+ * else's channel every row that arrives is one a stranger may see, and on the
+ * viewer's OWN channel the narrower rows arrive too — which is exactly the
+ * video grid's situation and gets exactly the video grid's answer: show them,
+ * and mark them, so a creator reading their own page does not mistake a
+ * private playlist for something the world can open. A filter here would be a
+ * second, weaker copy of the server's rule that could only ever disagree with
+ * it, over rows that had already crossed the wire.
  *
- * What that means for rendering: a row with no title is not drawn as
- * "undefined", it is counted and reported. A tab that prints six lines of
- * "undefined" looks like a broken page; a tab that says it received rows it
- * could not read is a bug report somebody can act on.
+ * ── A row with no title is reported, not drawn as "undefined" ─────────────
+ * A tab that prints six lines of "undefined" looks like a broken page; one
+ * that says it received rows it could not read is a bug report somebody can
+ * act on. Kept from the version of this tab that was written before any
+ * playlist row had ever been observed.
  */
 function PlaylistsTab({
   playlists,
+  failed,
   channelName,
+  showVisibility,
+  onRetry,
 }: {
-  playlists: TubePlaylist[] | null
+  playlists: ChannelPlaylist[] | null
+  failed: boolean
   channelName: string
+  /** The viewer owns this channel, so unlisted and private rows are marked. */
+  showVisibility: boolean
+  onRetry: () => void
 }) {
   if (playlists === null) {
-    return <p className="py-10 text-center text-mo-body">Loading playlists…</p>
+    return (
+      <ul aria-hidden="true" className="max-w-2xl space-y-2">
+        {Array.from({ length: 4 }, (_, i) => (
+          <li key={i} className="h-16 animate-pulse rounded-mo bg-mo-raised" />
+        ))}
+      </ul>
+    )
   }
+
+  if (failed) return <TabError what="Playlists" onRetry={onRetry} />
 
   const readable = playlists.filter((row) => (row.title ?? row.name ?? "").trim().length > 0)
 
   if (readable.length === 0) {
     return (
-      <p className="py-10 text-center text-mo-body">
-        {playlists.length === 0
-          ? `${channelName} has no playlists.`
-          : `${playlists.length} playlists came back in a shape this page cannot read yet.`}
-      </p>
+      <TabEmpty
+        icon={ListVideo}
+        title={
+          playlists.length === 0
+            ? `${channelName} has no playlists`
+            : "These playlists could not be read"
+        }
+        body={
+          playlists.length === 0
+            ? "A playlist is a set of videos in an order its owner chose. This channel has not made one."
+            : `${playlists.length} playlists came back in a shape this page cannot read yet. That is a bug on our side, not on this channel's.`
+        }
+      />
     )
   }
 
   return (
-    <ul className="max-w-2xl space-y-2">
-      {readable.map((row, at) => {
-        const title = (row.title ?? row.name ?? "").trim()
-        const count = row.video_count ?? row.item_count
-        return (
-          <li
-            key={row.id ?? row.playlist_id ?? `${title}-${at}`}
-            className="rounded-mo border border-mo bg-mo-surface px-4 py-3"
-          >
-            <p className="font-semibold text-mo-ink">{title}</p>
-            <p className="mt-0.5 text-sm text-mo-body">
-              {typeof count === "number" ? videosLabel(count) : "Playlist"}
-            </p>
-          </li>
-        )
-      })}
+    <ul className="max-w-2xl space-y-3">
+      {readable.map((row, at) => (
+        <PlaylistRow
+          key={row.id ?? row.playlist_id ?? `${(row.title ?? row.name ?? "").trim()}-${at}`}
+          playlist={row}
+          showVisibility={showVisibility}
+        />
+      ))}
     </ul>
+  )
+}
+
+/**
+ * One playlist: a cover, a title, a count, and — on your own channel — who can
+ * see it.
+ *
+ * ── The cover comes from the row itself, with no second request ───────────
+ * Each item now arrives with its `post` hydrated, so the first watchable one
+ * is the cover. That is the whole reason this row has a picture: a batch call
+ * per playlist to fetch thumbnails for a list nobody may scroll would be four
+ * requests to decorate one tab.
+ *
+ * A playlist with no hydrated post — empty, or all of its first entries gone —
+ * gets the stacked-list glyph rather than an empty well, for the reason
+ * ./ShortCard.tsx gives: an empty well reads as an image that failed to load.
+ *
+ * ── It opens, and the id is picked by a LOOP rather than by `??` ─────────
+ * `/tube/playlists/{id}` is a real route in this same app, so the row is a
+ * `next/link` — same zone, so Next adds the basePath itself and
+ * `playlistHref` is correctly zone-relative ("/playlists/{id}"). Both the id
+ * rule and the href are imported from ../playlists/playlists.ts rather than
+ * restated, because that file paid for the rule: `row.id ?? row.playlist_id`
+ * falls through only on null and undefined, and a Go struct field with no
+ * `omitempty` marshals `""` — a present, falsy string — so
+ * `{id: "", playlist_id: "b"}` yields "" and loses a playlist that has a
+ * perfectly good id sitting beside it. `playlistId` takes the first NON-EMPTY
+ * candidate.
+ *
+ * A row with neither id stays inert rather than linking to
+ * `/playlists/undefined`. It is still DRAWN: the title, the count and the
+ * cover are real, and hiding somebody's playlist over a missing field would
+ * be a worse answer than showing one that cannot be opened.
+ *
+ * ── One anchor, wrapping the whole row ───────────────────────────────────
+ * There is one destination here, so there is one tab stop. The visibility
+ * line lives inside it and is real text rather than `aria-hidden`, so the
+ * link's own name ends with "Private — only you" and a screen-reader user is
+ * told before they open it. That is the opposite case from
+ * ../browse/VideoCard.tsx, which is two anchors because it genuinely has two
+ * places to go.
+ */
+function PlaylistRow({
+  playlist,
+  showVisibility,
+}: {
+  playlist: ChannelPlaylist
+  showVisibility: boolean
+}) {
+  const title = (playlist.title ?? playlist.name ?? "").trim()
+  const count = playlist.video_count ?? playlist.item_count
+  const cover = playlistCoverPost(playlist)
+  const poster = cover ? videoPoster(videoMedia(cover)) : null
+  const badge = showVisibility ? visibilityBadge(playlist.visibility) : null
+  const id = playlistId(playlist)
+
+  const row = (
+    <>
+      <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-mo-sm bg-mo-sunken">
+        {poster ? (
+          // eslint-disable-next-line @next/next/no-img-element -- signed, pre-sized URL.
+          <img
+            src={poster}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <span aria-hidden="true" className="absolute inset-0 grid place-items-center text-mo-body">
+            <ListVideo className="h-5 w-5" />
+          </span>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold text-mo-ink">{title}</p>
+        <p className="mt-0.5 text-sm text-mo-body">
+          {typeof count === "number" ? videosLabel(count) : "Playlist"}
+        </p>
+        {/* Real text, not a decorative chip: on your own channel this is the
+            one thing on the row that tells you a stranger cannot open it. */}
+        {badge && (
+          <p className="mt-1 inline-flex items-center rounded-mo-sm bg-mo-raised px-2 py-0.5 text-[11px] font-semibold text-mo-ink">
+            {badge.description}
+          </p>
+        )}
+      </div>
+    </>
+  )
+
+  const SHELL = "flex items-center gap-4 rounded-mo border border-mo bg-mo-surface p-3"
+
+  // No id, no page to open. Inert, and still drawn — see the header.
+  if (!id) return <li className={SHELL}>{row}</li>
+
+  return (
+    <li>
+      <Link
+        href={playlistHref(id)}
+        className={`${SHELL} transition-colors duration-150 ease-mo hover:bg-mo-raised outline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-mo`}
+      >
+        {row}
+      </Link>
+    </li>
+  )
+}
+
+/* ── About ────────────────────────────────────────────────────────────────── */
+
+/**
+ * The About tab.
+ *
+ * ── Two possible join dates, and the profile's wins ───────────────────────
+ * `channel.created_at` is when the CHANNEL row was made, which for most
+ * accounts is the day they first published rather than the day they joined.
+ * `created_at` on `GET /v1/profiles/{user_id}` is the account itself, and
+ * YouTube's "Joined" means the latter. So the profile's date is preferred, the
+ * channel's is the fallback, and the LABEL changes with it — "Joined" over a
+ * channel-creation date would be a small false statement repeated on every
+ * channel page in the product.
+ */
+function AboutTab({ channel, joinedAt }: { channel: TubeChannel; joinedAt: string | null }) {
+  const joined = joinedAt ?? channel.created_at
+  return (
+    <dl className="max-w-2xl space-y-5">
+      <div>
+        <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">About</dt>
+        <dd className="mt-1 whitespace-pre-wrap text-mo-ink">
+          {channel.about?.trim() || "This channel has not written a description."}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">Handle</dt>
+        <dd className="mt-1 text-mo-ink">{atHandle(channel.handle) ?? "No handle"}</dd>
+      </div>
+      <div>
+        <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">Videos</dt>
+        <dd className="mt-1 text-mo-ink">{videosLabel(channel.video_count)}</dd>
+      </div>
+      <div>
+        <dt className="text-xs font-semibold uppercase tracking-wide text-mo-body">
+          {joinedAt ? "Joined" : "Channel created"}
+        </dt>
+        {/* `absoluteTime` and not `relativeTime`: "3 months ago" is the right
+            form for a video's age on a card and the wrong one for the date a
+            channel was created, which is a fact rather than a recency. */}
+        <dd className="mt-1 text-mo-ink">{joined ? absoluteTime(joined) : "Unknown"}</dd>
+      </div>
+    </dl>
   )
 }

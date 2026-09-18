@@ -5,6 +5,8 @@ import { ChannelScreen } from "@/channel/ChannelScreen"
 // `"use client"`, and a function exported from a client module reaches a
 // server component as a client reference that throws when called.
 import { parseTab } from "@/channel/tabs"
+import { channelMetadata, unknownChannelMetadata } from "@/channel/metadata"
+import { fetchChannelOnServer } from "@/channel/serverChannel"
 import { bareHandle } from "@/tube/channels"
 
 /**
@@ -41,6 +43,39 @@ import { bareHandle } from "@/tube/channels"
  * alternative — `useSearchParams()` in the client component — would make the
  * whole page dynamic and need its own Suspense boundary, for a value the
  * server already has in its hand.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * THE CHANNEL IS NOW FETCHED ON THE SERVER, AND THE OLD NOTE WAS TOO SMALL
+ *
+ * What stood in `generateMetadata` was a title built from the handle alone,
+ * with a note saying the channel's real name "would be better and is
+ * deliberately not fetched: it would be a blocking request on every render of
+ * this page to change a browser tab."
+ *
+ * The reasoning was sound and its premise was wrong. `generateMetadata` is
+ * not about the tab. This page is `"use client"` from its first element down,
+ * so everything that unfurls a link — a chat client, a message preview, a
+ * search crawler, a post embed — read the server's HTML and found a bare
+ * title, no description and no card. A shared channel previewed as nothing.
+ * One short, cached, public, cookie-free request is a fair price for that,
+ * and it cannot hurt the page: `fetchChannelOnServer` answers `error` for
+ * every failure and this route renders anyway.
+ *
+ * ── The three-way answer, and what each one does ──────────────────────────
+ *
+ *   found    real metadata, and the page renders with the header it describes
+ *   missing  `notFound()` — a real 404 for a handle that belongs to nobody,
+ *            with the status code to match, instead of a 200 whose body
+ *            apologises
+ *   error    the page renders. The client fetch runs and draws either the
+ *            channel or its own "could not be loaded" plate. A gateway hiccup
+ *            must never tell a creator their channel is gone.
+ *
+ * `missing` is checked in the PAGE and not only in `generateMetadata`,
+ * because Next may call the two independently and a metadata function that
+ * threw `notFound()` alone would leave a 200 rendering underneath it. Both
+ * call the same fetch and it is cached (`next: { revalidate }`), so the
+ * second call is not a second request.
  */
 export async function generateMetadata({
   params,
@@ -48,12 +83,13 @@ export async function generateMetadata({
   params: Promise<{ handle: string }>
 }): Promise<Metadata> {
   const { handle } = await params
-  const bare = bareHandle(decodeURIComponent(handle))
-  // The channel's real NAME would be better and is deliberately not fetched:
-  // it would be a blocking request on every render of this page to change a
-  // browser tab. The handle is the thing in the URL and is what somebody
-  // recognises in a tab strip.
-  return { title: bare ? `@${bare}` : "Channel" }
+  const ref = bareHandle(decodeURIComponent(handle))
+  if (!ref) return unknownChannelMetadata("")
+
+  const result = await fetchChannelOnServer(ref)
+  // `missing` and `error` both fall back. The difference is the page's job,
+  // not the head's — see the header.
+  return result.status === "found" ? channelMetadata(result.channel) : unknownChannelMetadata(ref)
 }
 
 export default async function ChannelPage({
@@ -73,5 +109,11 @@ export default async function ChannelPage({
   // now, with no request and no skeleton — the same discipline the watch page
   // applies to an id that is not a UUID.
   if (!ref) notFound()
+
+  const result = await fetchChannelOnServer(ref)
+  // ONLY on a confirmed 404. An unreachable gateway renders the page and lets
+  // the client try — see the header.
+  if (result.status === "missing") notFound()
+
   return <ChannelScreen channelRef={ref} tab={parseTab(tab)} />
 }
