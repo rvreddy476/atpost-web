@@ -54,14 +54,82 @@
  * reverse is just as true.
  */
 
-import { Suspense, useCallback } from "react"
+import { Suspense, useCallback, useEffect, useRef } from "react"
 import { Search } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { BRAND } from "@momentum/brand"
 import { SEARCH_PATH, normalizeQuery, searchHref, zoneRelative } from "./zone"
 
-function SearchForm({ basePath, initialQuery }: { basePath: string; initialQuery: string }) {
+/**
+ * The two places one search box is drawn, and the only thing that differs.
+ *
+ * ── Why a variant and not a second component ──────────────────────────────
+ * The founder's reference puts a full-width search field in the LEFT RAIL,
+ * under the product lockup — and the header keeps its own, because the rail is
+ * gone below 1024px and the header is what a phone has. Two boxes, one index,
+ * one results page, and therefore one submit handler, one no-JavaScript
+ * fallback, one `zoneRelative` decision and one prefill. Copying the form to
+ * change a width and add a chip would be a second implementation of every one
+ * of those, and the second one is always the one that stops agreeing about
+ * what an empty query is.
+ *
+ * So the ONLY difference is presentation: the header's is a 260px pill that
+ * appears at `sm:`, the rail's is full width and always shown (the rail is
+ * itself hidden below `lg`, so it has no breakpoint of its own to keep).
+ */
+type SearchVariant = "header" | "rail"
+
+/**
+ * The keyboard-shortcut chip the reference puts at the right of the rail field.
+ *
+ * ── It is a real shortcut, not a decoration ───────────────────────────────
+ * A chip that does not focus anything is exactly the fault the founder
+ * objected to elsewhere, so the key is bound: "/" anywhere outside a field
+ * puts focus in this box. "/" rather than ⌘K because ⌘K is the browser's own
+ * search shortcut in Chrome and Firefox and cannot be taken without breaking
+ * it, and because one unmodified key needs no platform text — the chip reads
+ * the same on a Mac, a PC and a Chromebook.
+ *
+ * The binding ignores the key while a field, a textarea or any
+ * `contenteditable` has focus: typing "/" into the composer must type a "/".
+ */
+const SEARCH_HOTKEY = "/"
+
+function useSearchHotkey(ref: React.RefObject<HTMLInputElement | null>, enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || typeof window === "undefined") return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== SEARCH_HOTKEY) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+      if (target?.isContentEditable) return
+      const input = ref.current
+      if (!input) return
+      // Without this the "/" lands in the box it has just focused.
+      event.preventDefault()
+      input.focus()
+      input.select()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [ref, enabled])
+}
+
+function SearchForm({
+  basePath,
+  initialQuery,
+  variant = "header",
+}: {
+  basePath: string
+  initialQuery: string
+  variant?: SearchVariant
+}) {
   const router = useRouter()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const rail = variant === "rail"
+  useSearchHotkey(inputRef, rail)
 
   const onSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
@@ -103,7 +171,12 @@ function SearchForm({ basePath, initialQuery }: { basePath: string; initialQuery
       method="get"
       onSubmit={onSubmit}
       className={[
-        "hidden h-10 w-full max-w-[260px] items-center gap-2 rounded-mo-pill border border-mo bg-mo-sunken px-3.5 sm:flex",
+        "w-full items-center gap-2 rounded-mo-pill border border-mo bg-mo-sunken",
+        // The rail's is full width and 44px — a real pointer target, because
+        // on a tablet the rail is open and this is the only search there is.
+        // The header's keeps the shape it had: 40px, capped, and absent below
+        // `sm:` where there is no room for it beside seven destinations.
+        rail ? "flex h-11 px-4" : "hidden h-10 max-w-[260px] px-3.5 sm:flex",
         // The ring is on the wrapper because the wrapper is what looks like
         // the control; the input inside it has no border of its own to ring.
         "focus-within:border-mo-focus focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-mo",
@@ -117,6 +190,7 @@ function SearchForm({ basePath, initialQuery }: { basePath: string; initialQuery
           recessed without needing a border at all. */}
       <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-mo-muted-lg" />
       <input
+        ref={inputRef}
         type="search"
         name="q"
         // Remounted when the URL's query changes, which is what makes an
@@ -134,8 +208,31 @@ function SearchForm({ basePath, initialQuery }: { basePath: string; initialQuery
         // `text-mo-ink` for what is typed; --mo-body for the placeholder,
         // which is 6.22 on the card ground and higher again on this sunken
         // well. Small text, so never --mo-muted-lg.
-        className="min-w-0 flex-1 bg-transparent text-sm text-mo-ink outline-none placeholder:text-mo-body"
+        className="peer min-w-0 flex-1 bg-transparent text-sm text-mo-ink outline-none placeholder:text-mo-body"
       />
+      {/*
+        The shortcut chip. `aria-hidden` because it is a sighted affordance for
+        a key that is already bound — a screen-reader user reaches this field
+        by its landmark and its label, and announcing "slash" after the field's
+        name would be a third thing said about one box.
+
+        Hidden while the field has focus (`peer-focus:`, off the input above):
+        it says how to GET here, so it has nothing to say once you have
+        arrived, and leaving it there would crowd the right end of a field
+        somebody is typing in.
+
+        --mo-body on --mo-raised is small text and has to clear 4.5: #46554D on
+        #F1F4F2 is 6.02 light, #A19CB9 on #2A2745 is 5.20 dark. --mo-muted-lg
+        is 2.61 on raised and is barred there outright.
+      */}
+      {rail && (
+        <kbd
+          aria-hidden="true"
+          className="shrink-0 rounded-mo-sm border border-mo bg-mo-raised px-1.5 py-0.5 font-mo-sans text-[11px] font-semibold leading-none text-mo-body peer-focus:hidden"
+        >
+          {SEARCH_HOTKEY}
+        </kbd>
+      )}
       {/*
         A real submit control, hidden but not removed.
 
@@ -167,15 +264,46 @@ function SearchForm({ basePath, initialQuery }: { basePath: string; initialQuery
  * that local: the fallback is the identical form with an empty box, so the
  * only difference anyone can perceive is that the field fills in.
  */
-function PrefilledSearchForm({ basePath }: { basePath: string }) {
+function PrefilledSearchForm({
+  basePath,
+  variant,
+}: {
+  basePath: string
+  variant?: SearchVariant
+}) {
   const params = useSearchParams()
-  return <SearchForm basePath={basePath} initialQuery={normalizeQuery(params.get("q"))} />
+  return (
+    <SearchForm
+      basePath={basePath}
+      variant={variant}
+      initialQuery={normalizeQuery(params.get("q"))}
+    />
+  )
 }
 
 export function SearchBox({ basePath }: { basePath: string }) {
   return (
     <Suspense fallback={<SearchForm basePath={basePath} initialQuery="" />}>
       <PrefilledSearchForm basePath={basePath} />
+    </Suspense>
+  )
+}
+
+/**
+ * The same box, drawn full width under the rail's product lockup.
+ *
+ * Mounted by ./LeftRail, which means it is rendered TWICE on a page between
+ * 1024px and the drawer's own breakpoint — once in the sticky column and once
+ * inside the drawer, if that were open. It is not: the drawer is `lg:hidden`
+ * and the column is `hidden lg:block`, and the drawer is UNMOUNTED while shut,
+ * so at no width are two of these in the document at once. That matters here
+ * more than it looks, because the hotkey binds a window listener: two live
+ * copies would both take "/" and the second would win at random.
+ */
+export function RailSearchBox({ basePath }: { basePath: string }) {
+  return (
+    <Suspense fallback={<SearchForm basePath={basePath} variant="rail" initialQuery="" />}>
+      <PrefilledSearchForm basePath={basePath} variant="rail" />
     </Suspense>
   )
 }

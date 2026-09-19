@@ -44,12 +44,37 @@
  * a URL that already carries parameters this feature knows nothing about.
  */
 
+/**
+ * Every place the feed can be, as a URL spells it.
+ *
+ * ── "hashtag" is in this list and is NOT in the tab strip any more ────────
+ * The founder's third change: exactly two tabs, For You and Following. The
+ * third was a tab and is not one now — but it was never a third timeline (see
+ * the note at the top of this file), it is a list of the day's tags, and it
+ * has a URL people may already have sent each other:
+ * `?tab=hashtag&tag=momentum`. Dropping the id would land every one of those
+ * links on the default tab with no explanation, which is the one outcome
+ * worse than an extra tab.
+ *
+ * So the VOCABULARY keeps three and the STRIP draws two. `FEED_TABS` below is
+ * the strip; this is what a URL may say. The tag browser is reached from the
+ * control beside the tabs — see ./FeedTabs.tsx — which is what it actually is:
+ * a way of browsing, not a section of the timeline.
+ */
 export const FEED_TAB_IDS = ["for-you", "following", "hashtag"] as const
 
 export type FeedTabId = (typeof FEED_TAB_IDS)[number]
 
 /** The tab a URL with no `tab=` means, and the one an unreadable value falls to. */
 export const DEFAULT_TAB: FeedTabId = "for-you"
+
+/** The tag browser: a view of this page, reachable by URL, and not a tab. */
+export const HASHTAG_VIEW: FeedTabId = "hashtag"
+
+/** True when a route is one of the two the strip actually draws. */
+export function isStripTab(tab: FeedTabId): boolean {
+  return FEED_TABS.some((t) => t.id === tab)
+}
 
 export interface FeedTabDef {
   id: FeedTabId
@@ -63,10 +88,16 @@ export interface FeedTabDef {
   accessibleLabel: string
 }
 
+/**
+ * THE STRIP. Two entries, and the founder's third change is that it is two.
+ *
+ * The labels are still Android's, character for character — the ask that the
+ * sections be the same sections has not changed, only how many of them are a
+ * tab. `HashTag` left this list and stayed in `FEED_TAB_IDS` above.
+ */
 export const FEED_TABS: readonly FeedTabDef[] = [
   { id: "for-you", label: "For You", accessibleLabel: "For You — recommended posts" },
   { id: "following", label: "Following", accessibleLabel: "Following — posts from accounts you follow" },
-  { id: "hashtag", label: "HashTag", accessibleLabel: "HashTag — trending tags" },
 ]
 
 /** Where the feed is: which tab, and — on HashTag — which tag is open. */

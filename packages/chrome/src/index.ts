@@ -60,8 +60,19 @@ export { LeftRail, LeftRailDrawer } from "./LeftRail"
 export type { LeftRailProps } from "./LeftRail"
 export { RightRail } from "./RightRail"
 export { ProfileMenu } from "./ProfileMenu"
-export { SearchBox } from "./SearchBox"
-export { HeaderNavIcon, RailNavItem } from "./NavItem"
+export { RailSearchBox, SearchBox } from "./SearchBox"
+/**
+ * The nav rows, and the fill their selected state is painted with.
+ *
+ * `SOLID_ACTION_FILL` is exported because it is a RULE, not a convenience: the
+ * founder's first change is that every button in this product is green, and
+ * this package is mounted in one light zone and two dark ones where "green" is
+ * a different colour with a different legal ink. A surface that paints its own
+ * solid action has to paint it the same way or it has quietly shipped a 4.03
+ * label. Its own note carries the measurements.
+ */
+export { HeaderNavIcon, RailNavItem, SOLID_ACTION_FILL } from "./NavItem"
+export type { NavMark } from "./NavItem"
 
 /**
  * The places this product has, as data.
@@ -96,8 +107,27 @@ export {
   zoneRelative,
 } from "./zone"
 
-/** The viewer, as the rail reads them. */
+/**
+ * The viewer, as the rail reads them — and the one request that fetches them.
+ *
+ * `fetchViewerProfile` is exported for the zone that passes
+ * `AppFrameProps.viewerProfile` down. It has to be the SAME request rather
+ * than a second one shaped like it, or the prop that exists to remove a
+ * duplicate fetch has quietly introduced one.
+ */
+export { fetchViewerProfile } from "./api"
 export type { Suggestion, ViewerProfile } from "./api"
+
+/**
+ * The follow edge, and the three answers the graph gives for it.
+ *
+ * Exported so a zone that draws its own person row writes to the same edge
+ * through the same function, rather than growing a second opinion about what
+ * `requested` means. `followStatusOf` is the pure half, so the mapping from a
+ * wire string to a state is a table test.
+ */
+export { followStatusOf, setFollow } from "./api"
+export type { FollowStatus } from "./api"
 
 /**
  * Why a suggested person is in the rail, in this product's own words.

@@ -29,6 +29,42 @@ import { useId } from "react"
 import { Smartphone } from "lucide-react"
 import { isActionable, type AppDestination } from "./destinations"
 
+/**
+ * A SOLID, pressable fill whose label is legal as small text in BOTH scopes.
+ *
+ * ── Why this is not simply `bg-mo-primary text-mo-on-primary` ─────────────
+ * Because this package is mounted in one light zone (apps/social) and two dark
+ * ones (apps/reels, apps/kwit), and `--mo-primary` is a different colour in
+ * each: #0B6B37 green under `.mo-light`, #DC2626 ember red in `:root`. The ink
+ * that goes on it flips too — #FFFFFF there, #0D0C14 here — and the dark pair
+ * measures **4.03**, which tokens.css states in as many words is
+ * LARGE-TEXT-ONLY (>=18.66px bold). A nav row's label is 14px. Writing the
+ * obvious two classes would ship an accessibility failure in two zones to buy
+ * a filled pill in a third.
+ *
+ * So the fill is scope-aware. The dark scope keeps the treatment it already
+ * had — a raised wash carrying the interactive colour — and the light scope
+ * gets the founder's solid green pill with white type:
+ *
+ *   light:  #FFFFFF on #0B6B37 ............ 6.53   (AA at any size)
+ *   dark:   #06B6D4 on #2A2745 ............ 5.86   (AA at any size)
+ *
+ * `[.mo-light_&]` is an arbitrary Tailwind variant, compiled into whichever
+ * zone's stylesheet scans this file — the same mechanism ./AppHeader.tsx uses
+ * for the scrollbar, and for the same reason: a package that ships source
+ * cannot declare a class in a zone's globals.css. `.mo-light` is a SCOPE and
+ * tokens.css documents three places it may sit (html, body, or a section), so
+ * a descendant selector is the form that survives all three.
+ *
+ * Hover is stated twice for the same reason the fill is: a green pill darkens
+ * to `--mo-primary-hover`, and a raised wash must not try to.
+ */
+export const SOLID_ACTION_FILL = [
+  "bg-mo-raised text-brand-accent",
+  "[.mo-light_&]:bg-mo-primary [.mo-light_&]:text-mo-on-primary",
+  "[.mo-light_&]:hover:bg-mo-primary-hover",
+].join(" ")
+
 /* ── The header strip: glyph only, name in the tooltip and the a11y tree ──── */
 
 export function HeaderNavIcon({
@@ -126,9 +162,90 @@ export function HeaderNavIcon({
 
 /* ── The left rail: glyph and word, with the reason visible ───────────────── */
 
+/**
+ * The trailing mark on a rail row — a pill, a count, or a dot.
+ *
+ * ── It is a SLOT, and it is empty until something real fills it ───────────
+ * The reference the founder supplied carries three of these: a "LIVE" pill on
+ * one destination, a count bubble on Messages and a dot on Notifications.
+ * Every one of them is a claim about the world, and this client cannot make
+ * two of the three today:
+ *
+ *   · LIVE — live-service has no web client and nothing on the wire tells a
+ *     rail which destination is broadcasting.
+ *   · Messages — the destination has no web zone at all (see ./destinations),
+ *     and there is no unread-conversation count on any route this client can
+ *     reach. A bubble there would be a number nobody computed.
+ *   · Notifications — real, and the only one of the three that is: the inbox
+ *     is `@momentum/notifications` and its unread count is a live number. It
+ *     is not a rail ROW though; it is the bell in ./AppHeader, which already
+ *     wears the count. Adding a second copy on a row that navigates nowhere
+ *     would be one number with two homes.
+ *
+ * So the mechanism exists and the rail passes what it has. That is the same
+ * bargain ./RightRail keeps about invented people: the shape is ready, and
+ * nothing is put in it to fill the space.
+ *
+ * `tone` decides the colour, and the two are not interchangeable:
+ *   · "attention" is --mo-accent as a FILL under --mo-on-accent, which is the
+ *     one form legal at any size in both scopes (4.72 light, 8.01 dark).
+ *     Orange as TEXT is 3.77 on white and is barred below 19px/700.
+ *   · "quiet" is a fact rather than an alert — the phone glyph on an app-only
+ *     row is one — and takes --mo-muted-lg, which is non-text-only and legal
+ *     on the page ground this rail sits on (3.93 light, 3.56 dark).
+ */
+export interface NavMark {
+  kind: "pill" | "count" | "dot"
+  /** The pill's word, or the count. Ignored by "dot". */
+  text?: string
+  tone: "attention" | "quiet"
+  /** What a screen reader is told, when the glyph alone would say nothing. */
+  srLabel?: string
+}
+
+function RailMark({ mark }: { mark: NavMark }) {
+  const attention = mark.tone === "attention"
+
+  if (mark.kind === "dot") {
+    return (
+      <>
+        <span
+          aria-hidden="true"
+          className={[
+            "h-2 w-2 shrink-0 rounded-mo-pill",
+            attention ? "bg-mo-accent" : "bg-mo-muted-lg",
+          ].join(" ")}
+        />
+        {mark.srLabel && <span className="sr-only">{mark.srLabel}</span>}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className={[
+          "shrink-0 rounded-mo-pill px-1.5 py-0.5 text-[11px] font-bold leading-none",
+          mark.kind === "count" ? "tabular-nums" : "uppercase tracking-mo-eyebrow",
+          attention
+            ? // The FILL form. See the note on NavMark: orange may not carry
+              // small text, and this is small text — so it is the ground.
+              "bg-mo-accent text-mo-on-accent"
+            : "bg-mo-raised text-mo-body",
+        ].join(" ")}
+      >
+        {mark.text}
+      </span>
+      {mark.srLabel && <span className="sr-only">{mark.srLabel}</span>}
+    </>
+  )
+}
+
 export function RailNavItem({
   destination,
   current,
+  mark,
   /**
    * The id of the rail's one shared "these live in the app" note.
    *
@@ -144,15 +261,37 @@ export function RailNavItem({
 }: {
   destination: AppDestination
   current: boolean
+  /** The trailing mark, when there is a real one. See `NavMark`. */
+  mark?: NavMark
   reasonId?: string
 }) {
   const Icon = destination.icon
-  // `min-h-[44px]`: a rail row is two lines of text and already taller than
-  // that at the default font, but a destination whose description is empty is
-  // one line and was 38px. The floor makes the row height independent of the
-  // copy, which is also what keeps the list's rhythm even.
+  /**
+   * A full-width pill — ONE LINE, an icon and a label, and nothing else.
+   *
+   * ── The description under each label is gone ──────────────────────────
+   * "Your feed", "Short video", "Long video", "Questions and answers". Each
+   * row was two lines and about 75px tall, so eight destinations came to 600px
+   * of rail. The founder's word for them is the right one: in a rail, beside a
+   * labelled icon, they are noise. "Reels / Short video" tells somebody who
+   * does not already know almost nothing, and somebody who does know reads the
+   * label alone.
+   *
+   * `AppDestination.description` STAYS in ./destinations.ts rather than being
+   * deleted with the markup that drew it. It is real copy about what each zone
+   * is, the mini-app launcher and a future empty state are plausible homes for
+   * it, and a data file is where it costs nothing to keep.
+   *
+   * `min-h-[44px]` is the pointer floor and now also the height: one line of
+   * 14px text at `py-2.5` lands there exactly, which is what makes eight rows
+   * read as a list rather than as eight cards.
+   *
+   * `rounded-mo-pill` rather than `rounded-mo`: the reference makes every
+   * control fully rounded and keeps the card radius for cards, so a row and a
+   * card are told apart by their corners rather than by a border.
+   */
   const row =
-    "flex min-h-[44px] items-center gap-3 rounded-mo px-3 py-2.5 text-sm transition-colors duration-150 ease-mo"
+    "flex min-h-[44px] items-center gap-3 rounded-mo-pill px-3 py-2.5 text-sm transition-colors duration-150 ease-mo"
 
   if (!isActionable(destination)) {
     return (
@@ -172,7 +311,11 @@ export function RailNavItem({
           <span className="min-w-0 flex-1 truncate font-semibold text-mo-muted-lg">
             {destination.label}
           </span>
-          <Smartphone aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-mo-muted-lg" />
+          {mark ? (
+            <RailMark mark={mark} />
+          ) : (
+            <Smartphone aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-mo-muted-lg" />
+          )}
         </span>
       </li>
     )
@@ -183,28 +326,26 @@ export function RailNavItem({
       <a
         href={destination.href as string}
         aria-current={current ? "page" : undefined}
-        // Same two swaps as the header strip above, for the same two reasons:
-        // --mo-surface is the page's own white in a light zone, so the "here"
-        // row had no fill; and cyan is not the interactive colour there.
-        // --brand-accent is #06B6D4 in :root and #0B6B37 under `.mo-light`.
-        //   dark:  #06B6D4 on #2A2745 raised ... 5.86
-        //   light: #0B6B37 on #F1F4F2 raised ... 5.97
+        // The row you are on is a SOLID pill now, not a wash — the founder's
+        // one correction to the reference is that every filled thing is green,
+        // and the selected destination is one of them. `SOLID_ACTION_FILL`
+        // carries the whole argument, including why the dark zones keep the
+        // wash rather than taking a red fill a 14px label cannot sit on.
         className={`${row} ${
           current
-            ? "bg-mo-raised font-semibold text-brand-accent"
+            ? `${SOLID_ACTION_FILL} font-semibold`
             : "font-semibold text-mo-ink hover:bg-mo-raised"
         }`}
       >
         <Icon
           aria-hidden="true"
-          className={`h-5 w-5 shrink-0 ${current ? "text-brand-accent" : "text-mo-body"}`}
+          // On the solid pill the glyph is the label's own colour — white in a
+          // light zone — so `currentColor` rather than a second token, which
+          // is also what stops the two disagreeing when the scope changes.
+          className={`h-5 w-5 shrink-0 ${current ? "" : "text-mo-body"}`}
         />
-        <span className="min-w-0">
-          <span className="block truncate">{destination.label}</span>
-          <span className="block truncate text-xs font-normal text-mo-body">
-            {destination.description}
-          </span>
-        </span>
+        <span className="min-w-0 flex-1 truncate">{destination.label}</span>
+        {mark && <RailMark mark={mark} />}
       </a>
     </li>
   )

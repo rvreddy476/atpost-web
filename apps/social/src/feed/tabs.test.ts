@@ -10,7 +10,10 @@
 import { describe, expect, it } from "vitest"
 import {
   DEFAULT_TAB,
+  FEED_TAB_IDS,
   FEED_TABS,
+  HASHTAG_VIEW,
+  isStripTab,
   listKey,
   normalizeTag,
   readRoute,
@@ -19,11 +22,26 @@ import {
 } from "./tabs"
 
 describe("the tab set", () => {
-  it("is the three Android ships, in Android's order", () => {
-    // If this fails, the web and the phone have drifted apart and one of them
-    // is showing a section the other does not. See the note in ./tabs.ts.
-    expect(FEED_TABS.map((t) => t.id)).toEqual(["for-you", "following", "hashtag"])
-    expect(FEED_TABS.map((t) => t.label)).toEqual(["For You", "Following", "HashTag"])
+  it("is EXACTLY two — For You and Following, in that order", () => {
+    // The founder's third change. A third entry here is a regression rather
+    // than a feature: if this fails, somebody has put HashTag back in the
+    // strip. See the note in ./tabs.ts.
+    expect(FEED_TABS.map((t) => t.id)).toEqual(["for-you", "following"])
+    expect(FEED_TABS.map((t) => t.label)).toEqual(["For You", "Following"])
+  })
+
+  it("still KNOWS the hashtag view, so the URLs people already have keep working", () => {
+    // The id left the strip and stayed in the vocabulary. A link somebody has
+    // already sent — `?tab=hashtag&tag=momentum` — has to land where it
+    // always did rather than silently on the front door.
+    expect(FEED_TAB_IDS).toContain(HASHTAG_VIEW)
+    expect(readRoute("?tab=hashtag&tag=momentum").tab).toBe(HASHTAG_VIEW)
+  })
+
+  it("tells a strip tab from the browsing view", () => {
+    expect(isStripTab("for-you")).toBe(true)
+    expect(isStripTab("following")).toBe(true)
+    expect(isStripTab(HASHTAG_VIEW)).toBe(false)
   })
 
   it("opens on For You", () => {

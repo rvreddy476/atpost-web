@@ -56,7 +56,8 @@ import { FeedTabs, panelId, tabId } from "./FeedTabs"
 import type { Notice } from "./outcomes"
 import { SignedOutInvite } from "./SignedOutInvite"
 import { AuthorsUnresolved, NextPageError, SectionEmpty, SectionError } from "./TabStates"
-import { listKey, type FeedTabId } from "./tabs"
+import { onPublish } from "@/composer/published"
+import { DEFAULT_TAB, HASHTAG_VIEW, listKey, type FeedTabId } from "./tabs"
 import { TrendingTags } from "./TrendingTags"
 import { useFeedAnalytics } from "./useFeedAnalytics"
 import { useFeedRoute } from "./useFeedRoute"
@@ -115,23 +116,42 @@ export function HomeFeed() {
   const [route, go] = useFeedRoute()
   const key = listKey(route)
   const feed = useTabbedFeed(key, signedIn && sessionStatus !== "unknown")
-  const trending = useTrendingTags(route.tab === "hashtag" && signedIn)
+  const trending = useTrendingTags(route.tab === HASHTAG_VIEW && signedIn)
   const items = feed.list.items
 
   const selectTab = useCallback(
     (tab: FeedTabId) => {
       // A tab switch is a change of view, not a navigation — see the note on
-      // `useFeedRoute`. Returning to HashTag returns to the TAG LIST rather
-      // than to whichever tag was last open: the tab's own name is the list,
-      // and re-entering a tag silently would make the strip's third label mean
-      // two different screens depending on history.
+      // `useFeedRoute`.
       go({ tab, tag: null }, "replace")
     },
     [go]
   )
 
-  const openTag = useCallback((tag: string) => go({ tab: "hashtag", tag }, "push"), [go])
-  const closeTag = useCallback(() => go({ tab: "hashtag", tag: null }, "replace"), [go])
+  /**
+   * Into the tag browser, and back out of it.
+   *
+   * Two functions rather than one toggle, because the control that opens it
+   * and the control that closes it are now in two different VIEWS — the strip
+   * is not drawn while the browser is open, so there is nothing there to be
+   * pressed a second time. That is the whole of the fix for a strip that
+   * showed neither tab marked; see the render.
+   *
+   * Opening always lands on the TAG LIST rather than on whichever tag was last
+   * open: re-entering a tag silently would make one control mean two screens.
+   * Leaving returns to `DEFAULT_TAB` rather than to whichever tab was last
+   * open — this is `replace`, so there is no history entry to read a previous
+   * tab out of, and remembering it in state would make one control land
+   * somewhere different depending on something invisible.
+   */
+  const openTagBrowser = useCallback(
+    () => go({ tab: HASHTAG_VIEW, tag: null }, "replace"),
+    [go]
+  )
+  const leaveTagBrowser = useCallback(() => go({ tab: DEFAULT_TAB, tag: null }, "replace"), [go])
+
+  const openTag = useCallback((tag: string) => go({ tab: HASHTAG_VIEW, tag }, "push"), [go])
+  const closeTag = useCallback(() => go({ tab: HASHTAG_VIEW, tag: null }, "replace"), [go])
 
   /**
    * Read once, on mount.
@@ -325,6 +345,49 @@ export function HomeFeed() {
     },
     [mutate]
   )
+
+  /* ── A post written in the composer ───────────────────────────────────── */
+
+  /**
+   * The three things that can happen to a post somebody has just written, and
+   * what this list does about each.
+   *
+   * ── Why it prepends to WHATEVER list is open ──────────────────────────
+   * There is one subscriber and it is this component, so the list that gets
+   * the row is the one currently mounted. That is the right answer for For You
+   * and for Following — your own post belongs at the top of both — and it is
+   * also right for a tag's list in the one case that matters: you cannot be
+   * looking at a tag list and have written a post with that tag in the same
+   * breath without the text containing it, and if it does not, the row is
+   * removed again by the next fetch rather than being wrong for ever. A
+   * cache-wide insert would be worse: it would put the post into lists that
+   * are not on screen, where nothing would ever reconcile it.
+   *
+   * ── The confirmation REPLACES rather than merges ──────────────────────
+   * The temporary id has to become the real one: every action on a card —
+   * like, save, report, comment — is keyed on the post id, so a row left
+   * holding `pending-…` is a card whose every control 404s. `confirmedItem`
+   * builds the replacement and ./published.ts carries why the id cannot
+   * simply be patched in.
+   *
+   * ── A withdrawal is silent HERE and loud in the dialog ────────────────
+   * The row leaves and this component says nothing, because the composer is
+   * still open with the draft in it and the reason on screen. Two messages
+   * about one failure, one of them behind a modal, is worse than one.
+   */
+  useEffect(() => {
+    return onPublish((event) => {
+      if (event.kind === "optimistic") {
+        mutate((prev) => [event.item, ...prev])
+        return
+      }
+      if (event.kind === "confirmed") {
+        mutate((prev) => prev.map((i) => (i.id === event.tempId ? event.item : i)))
+        return
+      }
+      mutate((prev) => prev.filter((i) => i.id !== event.tempId))
+    })
+  }, [mutate])
 
   const onLike = useCallback(
     // `_next` is ignored on purpose: the route is a TOGGLE with no body, so
@@ -640,8 +703,8 @@ export function HomeFeed() {
   /**
    * Signed out, and no strip.
    *
-   * The tabs are three ways of asking a question that needs a session; showing
-   * them over a sign-in message would be three controls that all do the same
+   * The tabs are two ways of asking a question that needs a session; showing
+   * them over a sign-in message would be two controls that do the same
    * nothing. This is the one branch that renders no `tablist` at all.
    *
    * What it used to render was `FeedError` — a `role="alert"` under a warning
@@ -658,112 +721,148 @@ export function HomeFeed() {
     )
   }
 
+  /** Whether the centre column is showing tags rather than a timeline. */
+  const browsingTags = route.tab === HASHTAG_VIEW
+
+  /**
+   * One post, wherever it is listed.
+   *
+   * This was an inline arrow in `FeedBody`'s `render` prop while there was one
+   * call site. There are two now — the timeline and a tag's posts, which are
+   * no longer the same branch — and two copies of twenty props is two places
+   * for a handler to be forgotten. Declared here rather than hoisted out of
+   * the component because it closes over eleven of them.
+   */
+  const renderCard = (item: FeedItem, index: number) => {
+    const session = activeId === item.id ? analytics.sessionFor(item, index + 1) : undefined
+    return (
+      <PostCard
+        key={item.id}
+        item={item}
+        // Both trackers bind to the same element and the same stable id,
+        // through ONE cached callback — see `cardRef`.
+        containerRef={cardRef(item.id)}
+        active={activeId === item.id}
+        // The value every player on this card STARTS from. Nothing above a
+        // player can change its sound any more; see `STARTS_MUTED`.
+        muted={STARTS_MUTED}
+        session={session}
+        onWatchEvent={
+          session ? (event) => analytics.recordWatch(item, session, event) : undefined
+        }
+        resolveUrl={resolveUrl}
+        /*
+          What turns an author's `avatar_media_id` into a face. See API_BASE at
+          the top of this file, and the note on the prop in @momentum/content.
+        */
+        apiBase={API_BASE}
+        onLike={onLike}
+        onSave={onSave}
+        onRepost={onRepost}
+        onShare={onShare}
+        onStale={handleStale}
+        /*
+          The comment surface. `comments` is what makes the bar's comment
+          control appear at all — the card drops it when nothing is wired
+          rather than leaving the dead glyph this feed shipped with — and
+          `onComment` is deliberately NOT passed, because that prop means
+          "navigate somewhere instead" and this zone has nowhere to go.
+        */
+        comments={comments}
+        viewerId={userId ?? undefined}
+        onCommentCreated={onCommentCreated}
+        commentError={commentFailureMessage}
+        /*
+          Voting. `viewerId` above is what tells the card whether anybody is
+          signed in — a viewer who has not voted and a viewer who is not there
+          send the same empty `viewer_votes`, and the two want different cards.
+        */
+        onVote={onVote}
+        pollError={pollFailureMessage}
+        /*
+          The overflow menu. `permalink` stays absent for the reason its own
+          note gives — there is no post detail route in this zone, so "Copy
+          link" would copy a link to a page that does not exist and the menu
+          drops the row instead.
+        */
+        isOwnPost={isOwnPost}
+        onFeedback={onFeedback}
+        onReport={onReport}
+      />
+    )
+  }
+
   return (
     <Shell notice={notice}>
-      <FeedTabs
-        selected={route.tab}
-        onSelect={selectTab}
-        top={headerInset}
-        onHeightChange={setTabsHeight}
-      />
-      <div
-        role="tabpanel"
-        id={panelId(route.tab)}
-        aria-labelledby={tabId(route.tab)}
-        /*
-          Focusable because a panel is allowed to be, and this one sometimes
-          has to be: the skeleton and two of the empty states contain no
-          focusable element at all, and a panel with no way into it is a panel
-          a keyboard reader cannot reach.
-        */
-        tabIndex={0}
-        className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mo"
-      >
-        {route.tab === "hashtag" && !route.tag ? (
-          <TrendingTags
-            status={trending.status}
-            tags={trending.tags}
-            onOpen={openTag}
-            onRetry={trending.reload}
-          />
-        ) : (
-          <>
-            {route.tag && <TagHeading tag={route.tag} onBack={closeTag} />}
+      {/*
+        ── The tag browser REPLACES the strip; it is never under it ──────────
+        This used to render the strip at every route and then swap the panel
+        under it, which meant that at `?tab=hashtag` the strip was on screen
+        with neither tab marked — a tab control that looked like it had lost
+        its state, which is exactly how the founder read it.
+
+        A tab strip whose panel is not one of its tabs is a lie about what the
+        strip controls. So browsing tags is its own view: no `tablist`, a
+        heading naming what you are looking at, and one control back to the
+        timeline. The strip, when it IS rendered, always marks exactly one tab.
+      */}
+      {browsingTags ? (
+        <section aria-label={route.tag ? `Posts tagged ${route.tag}` : "Trending tags"}>
+          <TagHeading tag={route.tag} onBack={route.tag ? closeTag : leaveTagBrowser} />
+          {route.tag ? (
             <FeedBody
               tab={route.tab}
               tag={route.tag}
               feed={feed}
-              onBrowseForYou={() => selectTab("for-you")}
-              render={(item, index) => {
-                const session =
-                  activeId === item.id ? analytics.sessionFor(item, index + 1) : undefined
-                return (
-                  <PostCard
-                    key={item.id}
-                    item={item}
-                    // Both trackers bind to the same element and the same
-                    // stable id, through ONE cached callback — see `cardRef`.
-                    containerRef={cardRef(item.id)}
-                    active={activeId === item.id}
-                    // The value every player on this card STARTS from. Nothing
-                    // above a player can change its sound any more; see
-                    // `STARTS_MUTED`.
-                    muted={STARTS_MUTED}
-                    session={session}
-                    onWatchEvent={
-                      session ? (event) => analytics.recordWatch(item, session, event) : undefined
-                    }
-                    resolveUrl={resolveUrl}
-                    /*
-                      What turns an author's `avatar_media_id` into a face.
-                      See API_BASE at the top of this file, and the note on
-                      the prop in @momentum/content.
-                    */
-                    apiBase={API_BASE}
-                    onLike={onLike}
-                    onSave={onSave}
-                    onRepost={onRepost}
-                    onShare={onShare}
-                    onStale={handleStale}
-                    /*
-                      The comment surface. `comments` is what makes the bar's
-                      comment control appear at all — the card drops it when
-                      nothing is wired rather than leaving the dead glyph this
-                      feed shipped with — and `onComment` is deliberately NOT
-                      passed, because that prop means "navigate somewhere
-                      instead" and this zone has nowhere to go.
-                    */
-                    comments={comments}
-                    viewerId={userId ?? undefined}
-                    onCommentCreated={onCommentCreated}
-                    commentError={commentFailureMessage}
-                    /*
-                      Voting. `viewerId` above is what tells the card whether
-                      anybody is signed in — a viewer who has not voted and a
-                      viewer who is not there send the same empty
-                      `viewer_votes`, and the two want different cards.
-                    */
-                    onVote={onVote}
-                    pollError={pollFailureMessage}
-                    /*
-                      The overflow menu. `permalink` stays absent for the reason
-                      its own note gives — there is no post detail route in this
-                      zone, so "Copy link" would copy a link to a page that does
-                      not exist and the menu drops the row instead.
-                    */
-                    isOwnPost={isOwnPost}
-                    onFeedback={onFeedback}
-                    onReport={onReport}
-                  />
-                )
-              }}
+              onBrowseForYou={() => selectTab(DEFAULT_TAB)}
+              render={renderCard}
             />
-          </>
-        )}
-      </div>
+          ) : (
+            <TrendingTags
+              status={trending.status}
+              tags={trending.tags}
+              onOpen={openTag}
+              onRetry={trending.reload}
+            />
+          )}
+        </section>
+      ) : (
+        <>
+          <FeedTabs
+            selected={route.tab}
+            onSelect={selectTab}
+            onBrowseTags={openTagBrowser}
+            onSay={(text) => setNotice({ tone: "good", text })}
+            top={headerInset}
+            onHeightChange={setTabsHeight}
+          />
+          <div
+            role="tabpanel"
+            id={panelId(route.tab)}
+            aria-labelledby={tabId(route.tab)}
+            /*
+              Focusable because a panel is allowed to be, and this one
+              sometimes has to be: the skeleton and two of the empty states
+              contain no focusable element at all, and a panel with no way into
+              it is a panel a keyboard reader cannot reach.
+            */
+            tabIndex={0}
+            className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mo"
+          >
+            <FeedBody
+              tab={route.tab}
+              tag={route.tag}
+              feed={feed}
+              onBrowseForYou={() => selectTab(DEFAULT_TAB)}
+              render={renderCard}
+            />
+          </div>
+        </>
+      )}
     </Shell>
   )
 }
+
 
 /**
  * One section's list: its skeleton, its own empty and error states, its posts.
@@ -911,19 +1010,22 @@ function FeedBody({
  * that the browser's own Back still lands on the tag list exactly once instead
  * of walking back through list, tag, list.
  */
-function TagHeading({ tag, onBack }: { tag: string; onBack: () => void }) {
+function TagHeading({ tag, onBack }: { tag: string | null; onBack: () => void }) {
   return (
     <div className="mb-4 flex items-center gap-2">
       <button
         type="button"
         onClick={onBack}
-        aria-label="Back to trending tags"
+        // The one control back, and where it goes depends on where you are:
+        // out of a tag to the tag list, out of the tag list to the timeline.
+        // The caller decides; this names it.
+        aria-label={tag ? "Back to trending tags" : "Back to your feed"}
         className="inline-flex h-8 w-8 shrink-0 cursor-default items-center justify-center rounded-mo-pill text-mo-body transition-colors duration-150 ease-mo hover:bg-mo-raised hover:text-mo-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo"
       >
         <ArrowLeft aria-hidden="true" className="h-4 w-4" />
       </button>
-      <h2 className="min-w-0 truncate font-mo-display text-lg font-semibold tracking-mo-display text-mo-ink">
-        #{tag}
+      <h2 className="min-w-0 truncate font-mo-display text-base font-semibold tracking-mo-display text-mo-ink">
+        {tag ? `#${tag}` : "Trending tags"}
       </h2>
     </div>
   )
@@ -1058,17 +1160,35 @@ function useTopChromeInset(): number {
  * they were watching. Both are worse than the button not being there, and the
  * per-player control is the one that is actually where the sound is.
  *
- * What is left is what only the feed can decide: what the column is called,
- * and the answer to the last thing that was asked of it.
+ * ── The visible "Home" heading is gone, and the name is not ───────────────
+ * The reference goes straight from the top of the column into the tab strip,
+ * and the founder wants that: a page title over a tab strip that already says
+ * "For You" is a word doing no work, and it was the largest thing in the
+ * column, so it set the type scale for everything under it.
+ *
+ * The `<header>` around it went with it rather than being left empty — an
+ * empty block with a 20px bottom margin is exactly the "something was cut out
+ * here" gap the founder would have seen next.
+ *
+ * What did NOT go is the page's accessible NAME. A heading is how a screen
+ * reader's rotor finds a region, and a column whose only label was the visible
+ * `h1` becomes an unnamed `<div>` inside `<main>` the moment it is deleted —
+ * one of the two things this file is careful about (see the note above on why
+ * there is no nested `<main>`). So the column is a `<section>` with an
+ * `aria-label`. That is announced, it is navigable, it costs no pixels, and it
+ * is the same word the heading used.
+ *
+ * `aria-label` rather than an `sr-only` <h1>: a hidden heading of a DIFFERENT
+ * level from the tag view's own `<h2>` would leave the outline with a gap
+ * nobody can see to fix, and there is no second heading in this column to
+ * order against.
+ *
+ * What is left is what only the feed can decide: the answer to the last thing
+ * that was asked of it.
  */
 function Shell({ children, notice }: { children: React.ReactNode; notice: Notice | null }) {
   return (
-    <div>
-      <header className="mb-5 flex items-center justify-between">
-        <h1 className="font-mo-display text-2xl font-semibold tracking-mo-display text-mo-ink">
-          Home
-        </h1>
-      </header>
+    <section aria-label="Home">
       {/*
         Always rendered, so a screen reader has a live region to announce INTO
         — a `role="status"` that appears at the same moment as its text is a
@@ -1093,6 +1213,6 @@ function Shell({ children, notice }: { children: React.ReactNode; notice: Notice
         )}
       </div>
       {children}
-    </div>
+    </section>
   )
 }

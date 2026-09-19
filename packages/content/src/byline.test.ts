@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { UNNAMED_AUTHOR, authorLabel } from "./byline"
+import { MAX_ROLE_CHARS, UNNAMED_AUTHOR, authorLabel, authorRole } from "./byline"
 
 describe("authorLabel", () => {
   it("prefers the channel, because a channel post is BY the channel", () => {
@@ -66,5 +66,56 @@ describe("authorLabel", () => {
 
   it("survives a row with neither an author nor a channel", () => {
     expect(authorLabel({}).name).toBe(UNNAMED_AUTHOR)
+  })
+})
+
+/**
+ * The second line of the byline — the reference's "role or bio".
+ *
+ * Absent on every `/v1/feed/home` row, because feed-service's `Author` struct
+ * carries neither field. These cases are about the OTHER source: a hashtag row
+ * this zone re-hydrates from `/v1/profiles/batch`, whose public card does carry
+ * both. See @atpost/types.
+ */
+describe("authorRole", () => {
+  it("is absent when the wire said nothing, which is the home feed's normal case", () => {
+    expect(authorRole({})).toBeUndefined()
+    expect(authorRole({ author: { id: "u1" } })).toBeUndefined()
+    // Never "" — a caller's `{role && …}` is the whole of the decision about
+    // whether the middle dot beside it is drawn.
+    expect(authorRole({ author: { id: "u1", bio: "   " } })).toBeUndefined()
+  })
+
+  it("prefers the profession over the bio", () => {
+    // The shorter, more factual of the two, on a line that already has a
+    // handle on it.
+    expect(
+      authorRole({ author: { id: "u1", profession: "Potter", bio: "I make things." } })
+    ).toBe("Potter")
+  })
+
+  it("falls back to the bio when there is no profession", () => {
+    expect(authorRole({ author: { id: "u1", bio: "I make things." } })).toBe("I make things.")
+  })
+
+  it("collapses a multi-line bio onto one line", () => {
+    // A bio is free text and this is a single line beside a handle.
+    expect(authorRole({ author: { id: "u1", bio: "Potter.\n\n  Cyclist." } })).toBe(
+      "Potter. Cyclist."
+    )
+  })
+
+  it("caps a long bio rather than letting it push the post off the fold", () => {
+    const long = `${"word ".repeat(60)}end`
+    const role = authorRole({ author: { id: "u1", bio: long } })
+    expect(role).toBeDefined()
+    expect(role!.length).toBeLessThanOrEqual(MAX_ROLE_CHARS + 1)
+    expect(role!.endsWith("…")).toBe(true)
+    // Cut on a word boundary, so the line does not break mid-word.
+    expect(role).not.toMatch(/\wo…$/)
+  })
+
+  it("does not add an ellipsis to something that fits", () => {
+    expect(authorRole({ author: { id: "u1", profession: "Potter" } })).toBe("Potter")
   })
 })

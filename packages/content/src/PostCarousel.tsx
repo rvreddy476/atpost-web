@@ -577,15 +577,20 @@ export function PostCarousel({
         frame, the way Instagram overlays them, so the frame is the same height
         with or without a carousel.
 
-        ── Why top-left rather than Android's top-right ────────────────────
-        Because the player's speaker lives in the top-right corner now, and a
-        page counter has to give way to a control. The pill is a LABEL: it is
-        `aria-hidden`, it cannot be pressed, and it says something the person
-        can also see from the pips. The speaker is the control people reach for
-        most on a video, and a control that moved to a different corner
-        depending on whether the post happened to have a second photograph
-        would be the worst of both. So the label moved, once, and the transport
-        keeps the same geometry everywhere it is mounted.
+        ── Bottom-left, which is neither Android's corner nor the one before ─
+        Android puts it top-right. That corner is the player's speaker here,
+        and a page counter has to give way to a control: the pill is a LABEL —
+        `aria-hidden`, unpressable, saying something the pips also say — while
+        the speaker is the control people reach for most on a video, and a
+        transport that moved corner depending on whether the post happened to
+        have a second photograph would be the worst of both.
+
+        It then sat top-LEFT, and the founder's reference puts the counter in a
+        BOTTOM corner. Bottom-left is the one corner still free: the pips are
+        bottom-CENTRE and the duration badge is bottom-right (see PostCard),
+        and the arrows own the vertical middle of both edges. So it moved once
+        more, to the corner the reference asks for and the only one where it
+        collides with nothing.
 
         Both sit on PHOTOGRAPHY, which can be any colour, so neither may rely
         on a theme colour alone — white pips on a white sky are invisible and a
@@ -622,7 +627,7 @@ export function PostCarousel({
       */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute left-3 top-3 rounded-mo-pill bg-mo-scrim/70 px-2 py-0.5 text-xs font-medium tabular-nums text-mo-on-scrim backdrop-blur-sm"
+        className="pointer-events-none absolute bottom-3 left-3 rounded-mo-pill bg-mo-scrim/70 px-2 py-0.5 text-xs font-medium tabular-nums text-mo-on-scrim backdrop-blur-sm"
       >
         {pillLabel(page, count)}
       </span>
@@ -631,7 +636,7 @@ export function PostCarousel({
         ── The arrows ──────────────────────────────────────────────────────
 
         Vertically centred on the left and right edges, which is the one band
-        of the frame nothing else wants: the pill has top-left, the player's
+        of the frame nothing else wants: the pill has bottom-left, the player's
         speaker has top-right, the pips have bottom-centre and the duration
         badge has bottom-right.
 

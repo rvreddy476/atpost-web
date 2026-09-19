@@ -46,7 +46,7 @@
  */
 
 import { useState } from "react"
-import { Radio, Video } from "lucide-react"
+import { BadgeCheck, Radio, Video } from "lucide-react"
 import type { FeedItem, FeedPoll } from "@atpost/types/feed"
 import type { WatchEvent, WatchSessionInfo } from "@momentum/player"
 import { primaryVideo } from "@momentum/player"
@@ -54,7 +54,7 @@ import { ActionBar } from "@momentum/interactions"
 import type { ToggleResult } from "@momentum/interactions"
 import { Avatar } from "./Avatar"
 import { avatarSrc } from "./avatarUrl"
-import { authorLabel } from "./byline"
+import { authorLabel, authorRole } from "./byline"
 import { CommentSheet } from "./CommentSheet"
 import type { CommentApi, CommentRow } from "./comments"
 import { PostCarousel } from "./PostCarousel"
@@ -198,6 +198,12 @@ export function PostCard({
   // "Someone" on this line, and on the hashtag tab that was the normal path.
   const { name, handle } = authorLabel(item)
   /**
+   * What goes after the handle on the second line — the reference's "role or
+   * bio". Undefined on every home-feed row, because feed-service's author
+   * block carries neither field; see ./byline.ts and @atpost/types.
+   */
+  const role = authorRole(item)
+  /**
    * The face. Two shapes on one row, reconciled by `avatarSrc`.
    *
    * A channel-published post carries `channel.avatar_url` — absolute, signed,
@@ -218,30 +224,87 @@ export function PostCard({
   return (
     <article
       ref={containerRef}
-      // The surface sits only 1.19:1 above the ground, so the hairline and the
-      // shadow are what make it a card at all — not decoration. See tokens.css.
-      className="rounded-mo border border-mo bg-mo-surface shadow-mo"
+      // The surface sits only 1.19:1 above the ground — and in a light zone it
+      // is the page's own white, 1.00:1 — so the hairline and the shadow are
+      // what make it a card at all, not decoration. See tokens.css.
+      //
+      // `rounded-mo-lg` (22px), not `rounded-mo` (14px): the reference rounds a
+      // card generously and 22 is the nearest thing the palette has. A third
+      // radius between the two would be a new token, and @momentum/tokens is
+      // not this change's to edit.
+      className="rounded-mo-lg border border-mo bg-mo-surface shadow-mo"
       aria-labelledby={`post-${item.id}-author`}
     >
+      {/*
+        ── The byline is TWO lines now, which is the reference's shape ───────
+        Line one is the name, the tick and the time; line two is the handle and
+        what this person does. It used to be one wrapping row of four things,
+        and at 360px that row broke into three lines whose order nobody could
+        predict — the time could end up above the handle.
+
+        `items-start` with the avatar, so a two-line byline does not push the
+        face off centre.
+      */}
       <header className="flex items-start gap-3 p-4 pb-3">
         <Avatar name={name} id={item.author_id} src={avatar} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2">
+          <div className="flex min-w-0 items-center gap-1.5">
             <span id={`post-${item.id}-author`} className="truncate font-semibold text-mo-ink">
               {name}
             </span>
-            {handle && <span className="truncate text-sm text-mo-body">{handle}</span>}
-            <span aria-hidden="true" className="text-mo-body">
+            {/*
+              The tick, drawn ONLY when the wire said so.
+
+              `is_verified` is on user-service's public profile card and is NOT
+              on feed-service's `Author`, so today it arrives on hashtag rows
+              (which this zone re-hydrates from `/v1/profiles/batch`) and never
+              on a home-feed row. That asymmetry is the honest one: a tick on
+              every card would be a claim about who is verified, and a tick on
+              none would throw away a fact the server did send. See the note on
+              the fields in @atpost/types.
+
+              --brand-accent, which is the interactive colour of the scope —
+              and a verification tick is not pressable, so the reason it takes
+              that token rather than orange is narrower: it is the product's
+              own mark, and --mo-accent is reserved for attention. As a
+              non-text mark it needs 3.0; it measures 6.61 light and 6.74 dark
+              on a card.
+            */}
+            {item.author?.is_verified && (
+              <>
+                <BadgeCheck
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 text-brand-accent"
+                />
+                <span className="sr-only">Verified account</span>
+              </>
+            )}
+            <span aria-hidden="true" className="shrink-0 text-mo-body">
               ·
             </span>
             <time
               dateTime={item.created_at}
               title={absoluteTime(item.created_at)}
-              className="text-sm text-mo-body"
+              className="shrink-0 text-sm text-mo-body"
             >
               {relativeTime(item.created_at)}
             </time>
           </div>
+
+          {/* The handle, and the role or bio after a middle dot — absent, both
+              of them, on a row that carried neither. `authorRole` is the rule
+              and it is a table test; see ./byline.ts. */}
+          {(handle || role) && (
+            <p className="flex min-w-0 items-center gap-1.5 text-sm text-mo-body">
+              {handle && <span className="shrink-0 truncate">{handle}</span>}
+              {handle && role && (
+                <span aria-hidden="true" className="shrink-0">
+                  ·
+                </span>
+              )}
+              {role && <span className="truncate">{role}</span>}
+            </p>
+          )}
 
           {item.reason_text && (
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-mo-body">
@@ -286,9 +349,12 @@ export function PostCard({
       </header>
 
       <div className="space-y-3 px-4 pb-3">
-        {/* A long video's title is its headline, not a caption. */}
+        {/* A long video's title is its headline, not a caption — and
+            `text-base` rather than `text-lg` is enough to say so. At 18px it
+            was competing with the page's own heading; at 16px semibold over
+            16px regular body copy the hierarchy is still unambiguous. */}
         {item.title && (
-          <h2 className="font-mo-display text-lg font-semibold leading-snug tracking-mo-display text-mo-ink">
+          <h2 className="font-mo-display text-base font-semibold leading-snug tracking-mo-display text-mo-ink">
             {item.title}
           </h2>
         )}
@@ -313,59 +379,85 @@ export function PostCard({
             ))}
           </ul>
         )}
+      </div>
 
-        {/*
-          Two or more attachments are ONE frame you swipe through, not a
-          column. PostCarousel owns which page is in view and therefore which
-          page may play; the single-attachment branch below is untouched by it.
+      {/*
+        ── The media is the full width of the card now ───────────────────────
+        The reference puts it edge to edge under the header with its own
+        rounded corners, and that is not only a look: an image inset by 16px on
+        each side loses 32 of the 600px the column has, which on a 4:3
+        photograph is 24px of height as well. It sat inside the text block's
+        `px-4` before, so it was inset on both.
 
-          The single branch stays for the same reason it stays on Android: not
-          every attachment is a carousel, and rewriting the one-picture path to
-          go through a scroller would put a scroll container, a pill and a row
-          of pips around every photograph on the platform to no purpose.
-        */}
-        {attachments.length > 1 && (
-          <PostCarousel
-            item={item}
-            media={attachments}
-            // The POST's activeness. The carousel intersects it with the page
-            // in view before any media is told it may play.
-            active={active}
-            // The starting value only. Every player owns its own sound.
-            muted={muted}
-            session={session}
-            onWatchEvent={onWatchEvent}
-            sessionPageId={video?.media_id}
-            onStale={onStale}
-            resolveUrl={resolveUrl}
-          />
-        )}
+        `px-3` rather than 0: a card with a 20px radius and a picture flush to
+        its edges has the picture's square corners poking through the card's
+        round ones on the two sides. Three pixels of ground is enough to keep
+        the card's corner and is a quarter of what it was giving up.
+      */}
+      {attachments.length > 0 && (
+        <div className="px-3 pb-3">
+          {/*
+            Two or more attachments are ONE frame you swipe through, not a
+            column. PostCarousel owns which page is in view and therefore which
+            page may play; the single-attachment branch below is untouched by
+            it — including the counter, which the carousel draws for itself
+            because only it knows which page you are on.
 
-        {attachments.length === 1 && (
-          <div className="relative">
-            <PostMedia
+            The single branch stays for the same reason it stays on Android:
+            not every attachment is a carousel, and rewriting the one-picture
+            path to go through a scroller would put a scroll container, a pill
+            and a row of pips around every photograph on the platform to no
+            purpose.
+          */}
+          {attachments.length > 1 && (
+            <PostCarousel
               item={item}
-              media={attachments[0]}
-              // Only a video plays, and only on an active card.
-              active={active && attachments[0].media_id === video?.media_id}
+              media={attachments}
+              // The POST's activeness. The carousel intersects it with the page
+              // in view before any media is told it may play.
+              active={active}
+              // The starting value only. Every player owns its own sound.
               muted={muted}
-              session={attachments[0].media_id === video?.media_id ? session : undefined}
-              onWatchEvent={attachments[0].media_id === video?.media_id ? onWatchEvent : undefined}
+              session={session}
+              onWatchEvent={onWatchEvent}
+              sessionPageId={video?.media_id}
               onStale={onStale}
               resolveUrl={resolveUrl}
             />
-            {/* On the scrim, not on the page: a duration sits over a video
-                frame, and --mo-bg / --mo-ink both flip with the scope while a
-                photograph does not. --mo-on-scrim on scrim @ .80 is 10.02 over
-                pure white media and better over everything darker. */}
-            {duration && (
-              <span className="pointer-events-none absolute bottom-2 right-2 rounded-mo-sm bg-mo-scrim/80 px-1.5 py-0.5 text-xs tabular-nums text-mo-on-scrim">
-                {duration}
-              </span>
-            )}
-          </div>
-        )}
+          )}
 
+          {attachments.length === 1 && (
+            // `overflow-hidden` with the card's own radius: this is what makes
+            // the picture's corners round rather than the box around it.
+            <div className="relative overflow-hidden rounded-mo">
+              <PostMedia
+                item={item}
+                media={attachments[0]}
+                // Only a video plays, and only on an active card.
+                active={active && attachments[0].media_id === video?.media_id}
+                muted={muted}
+                session={attachments[0].media_id === video?.media_id ? session : undefined}
+                onWatchEvent={
+                  attachments[0].media_id === video?.media_id ? onWatchEvent : undefined
+                }
+                onStale={onStale}
+                resolveUrl={resolveUrl}
+              />
+              {/* On the scrim, not on the page: a duration sits over a video
+                  frame, and --mo-bg / --mo-ink both flip with the scope while a
+                  photograph does not. --mo-on-scrim on scrim @ .80 is 10.02 over
+                  pure white media and better over everything darker. */}
+              {duration && (
+                <span className="pointer-events-none absolute bottom-2 right-2 rounded-mo-sm bg-mo-scrim/80 px-1.5 py-0.5 text-xs tabular-nums text-mo-on-scrim">
+                  {duration}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-3 px-4 pb-3">
         {/* A long_video that arrived without media. It is not a text post and
             must not be dressed as one. */}
         {item.content_type === "long_video" && attachments.length === 0 && (

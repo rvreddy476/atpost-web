@@ -85,6 +85,34 @@ export interface FeedAuthor {
    * See the note in @momentum/content/Avatar for why the feed draws initials.
    */
   avatar_media_id?: string
+
+  /* ── Three fields the HOME feed does not send, and one route does ───────
+   *
+   * feed-service's `Author` struct (`internal/service/hydration.go`) is a
+   * deliberately small public identity: id, display_name, username,
+   * avatar_media_id, avatar_url. It carries none of the three below, so on
+   * `/v1/feed/home` they are always undefined and the card draws neither a
+   * tick nor a role line.
+   *
+   * They are not invented here either. user-service's public profile allowlist
+   * — the one `POST /v1/profiles/batch` answers from, which is what
+   * apps/social re-hydrates hashtag rows with — names `is_verified`, `bio` and
+   * `profession` among the public card's keys, and the shipped Android client
+   * already reads them. So they are real fields of a real profile that ONE of
+   * this feed's two sources happens to send.
+   *
+   * Optional, therefore, and drawn only when present. A tick that appears on
+   * some rows and not others is a fact about what the server told us; a tick
+   * invented for every row would be a claim about who is verified. When
+   * feed-service's Author grows them, every surface picks them up with no
+   * client change at all. */
+
+  /** Verified account. Absent on a home-feed row; see above. */
+  is_verified?: boolean
+  /** What they do — the reference's role line. Absent on a home-feed row. */
+  profession?: string
+  /** Their own description; the fallback when there is no `profession`. */
+  bio?: string
 }
 
 export interface FeedChannel {

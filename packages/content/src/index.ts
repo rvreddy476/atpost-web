@@ -123,7 +123,7 @@ export type { AvatarProps } from "./Avatar"
  */
 export { AVATAR_VARIANT, avatarMediaPath, avatarSrc } from "./avatarUrl"
 export type { AvatarSource } from "./avatarUrl"
-export { UNNAMED_AUTHOR, authorLabel } from "./byline"
+export { MAX_ROLE_CHARS, UNNAMED_AUTHOR, authorLabel, authorRole } from "./byline"
 export type { Byline } from "./byline"
 
 export { BlurhashCanvas } from "./BlurhashCanvas"

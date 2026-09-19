@@ -192,3 +192,51 @@ export async function sendConnectionRequest(userId: string): Promise<ConnectionS
   })
   return res.data?.data?.status === "request_sent" ? "request_sent" : "unknown"
 }
+
+/* ── Follow ───────────────────────────────────────────────────────────────── */
+
+/**
+ * The state the graph says is now true.
+ *
+ * `POST /v1/graph/follow   {"user_id":"<uuid>"}` -> 200 {"status":"followed"}
+ * `POST /v1/graph/unfollow {"user_id":"<uuid>"}` -> 200 {"status":"unfollowed"}
+ *
+ * Both verified against the running gateway — the correction above
+ * `sendConnectionRequest` is what established it, and apps/reels' `setFollow`
+ * records the same live check from the other side. Follow takes a USER; the
+ * WRONG_ENTITY_TYPE in this file's history came from sending the right shape
+ * to the wrong place, not from following a person.
+ *
+ * `requested` is a real answer and is NOT "following": a private account turns
+ * a follow into a request somebody has to accept, and a button that says
+ * "Following" on a `requested` is telling someone they are seeing posts they
+ * will not see. @momentum/interactions' `FollowButton` models the same three
+ * states for the same reason.
+ *
+ * ── Why the rail follows now, and did not before ──────────────────────────
+ * The founder's right column is "People to follow" and Follow is its primary
+ * action. A follow is one-sided and takes effect at once, which is what makes
+ * an optimistic flip honest; a connection request is mutual and can only be
+ * optimistic about having been sent. The rows are still the ranker's
+ * `type=friend` candidates, because that is the only bucket with candidates
+ * behind it — and a friend candidate is a person, which is exactly what a
+ * follow takes. `sendConnectionRequest` stays for the surface that asks.
+ *
+ * "unknown" is not success and is not mapped to one: the service answers a
+ * literal status, and anything else means we do not know what happened.
+ */
+export type FollowStatus = "followed" | "requested" | "unfollowed" | "unknown"
+
+export function followStatusOf(value: unknown): FollowStatus {
+  return value === "followed" || value === "requested" || value === "unfollowed"
+    ? value
+    : "unknown"
+}
+
+export async function setFollow(userId: string, next: boolean): Promise<FollowStatus> {
+  const res = await api.post<Envelope<{ status?: string }>>(
+    next ? "/v1/graph/follow" : "/v1/graph/unfollow",
+    { user_id: userId }
+  )
+  return followStatusOf(res.data?.data?.status)
+}

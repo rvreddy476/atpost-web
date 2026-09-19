@@ -87,3 +87,39 @@ export function authorLabel(source: {
     unnamed: true,
   }
 }
+
+/**
+ * The one line under a name: what this person does, or what they say they are.
+ *
+ * ── The reference's second line, and the honest version of it ─────────────
+ * The founder's mockup puts the handle and "the author's role or bio" on one
+ * line, separated by a middle dot. The role is `profession` on user-service's
+ * public profile card and the bio is `bio`; `profession` wins because it is
+ * the shorter, more factual of the two and the line has a handle on it
+ * already. Both are ABSENT on a `/v1/feed/home` row — feed-service's `Author`
+ * struct has neither — so most cards print the handle alone, which is exactly
+ * what the wire supports and nothing more.
+ *
+ * Collapsed to one line: a bio is free text and can be a paragraph, so it is
+ * flattened and capped. The cap is characters and not a `line-clamp`, because
+ * the caller truncates with an ellipsis on ONE line and a 400-character bio
+ * would otherwise push the card's own text off the fold before it began.
+ *
+ * Returns undefined — never "" — so a caller's `{role && …}` is the whole of
+ * the decision about whether the middle dot is drawn.
+ */
+export const MAX_ROLE_CHARS = 80
+
+export function authorRole(source: { author?: FeedAuthor }): string | undefined {
+  const raw = clean(source.author?.profession) || clean(source.author?.bio)
+  if (!raw) return undefined
+  // Newlines and runs of space become one space: this is a single line.
+  const flat = raw.replace(/\s+/g, " ").trim()
+  if (!flat) return undefined
+  if (flat.length <= MAX_ROLE_CHARS) return flat
+  // Cut on a word boundary where there is one near the end, so the line does
+  // not break mid-word before the ellipsis the caller's `truncate` adds.
+  const cut = flat.slice(0, MAX_ROLE_CHARS)
+  const space = cut.lastIndexOf(" ")
+  return `${(space > MAX_ROLE_CHARS - 20 ? cut.slice(0, space) : cut).trimEnd()}…`
+}

@@ -25,12 +25,13 @@
  */
 
 import { useCallback, useEffect, useId, useRef } from "react"
-import { Smartphone, X } from "lucide-react"
+import { Plus, Smartphone, X } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
 import { Avatar, avatarSrc } from "@momentum/content"
 import { APP_ONLY_REASON, DESTINATIONS, isActionable } from "./destinations"
-import { RailNavItem } from "./NavItem"
+import { RailNavItem, SOLID_ACTION_FILL } from "./NavItem"
+import { RailSearchBox } from "./SearchBox"
 import { signInHref } from "./zone"
 import type { ViewerProfile } from "./api"
 
@@ -124,6 +125,101 @@ export interface LeftRailProps {
   basePath: string
   profile: ViewerProfile | null
   currentId: string | null
+  /**
+   * Opens the zone's composer. ABSENT MEANS NO BUTTON AT ALL.
+   *
+   * ── The one rule this prop exists to keep ─────────────────────────────
+   * The founder's objection to the old feed was a prominent control with
+   * nothing behind it, and "Create Post" is the most prominent control in the
+   * reference. This package cannot compose a post — it has no composer, and
+   * `POST /v1/posts` is a zone endpoint, not one of the three in ./api.ts —
+   * so the button is drawn only where a zone has actually wired one.
+   *
+   * apps/social passes one (see its SocialFrame). apps/reels and apps/kwit do
+   * not, and get no button, which is the same absent-not-disabled rule
+   * ./destinations keeps for a destination with no web zone.
+   */
+  onCreatePost?: () => void
+}
+
+/**
+ * The product, said once at the top of the rail.
+ *
+ * The reference opens with a card holding a square app icon beside two lines:
+ * the name in a large semibold and a quieter line under it. That is what this
+ * is, and both halves come from @momentum/brand rather than from a literal —
+ * the package exists precisely so a rename is one constant.
+ *
+ * The square is the SAME lockup mark ./AppHeader draws, down to the
+ * `bg-mo-primary bg-mo-ember` pairing: `bg-mo-ember` is a background-IMAGE, so
+ * on its own the fill is transparent and forced-colors mode (or any browser
+ * that drops the gradient) renders --mo-on-primary against the page at 1.00:1
+ * — an invisible initial. The flat colour underneath is the fallback the
+ * 19px/700 floor was measured for.
+ */
+function BrandCard() {
+  return (
+    <section className="flex items-center gap-3 rounded-mo-lg border border-mo bg-mo-surface p-4 shadow-mo-sm">
+      <span
+        aria-hidden="true"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-mo-sm bg-mo-primary bg-mo-ember text-mo-ember-label font-bold text-mo-on-primary shadow-mo-ember"
+      >
+        {BRAND.initial}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate font-mo-display text-base font-semibold tracking-mo-display text-mo-ink">
+          {BRAND.name}
+        </span>
+        {/*
+          ── The tagline is SHORTER, because the long one truncated ─────────
+          `BRAND.tagline` is "One account, every part of the platform." and in
+          a 268px rail beside a 40px square it rendered as "One account, every
+          part of ..." — a visible ellipsis in a heading block, which reads as
+          broken rather than as abbreviated.
+
+          Two ways to fix that: let it wrap to two lines, or say something that
+          fits. Wrapping makes the card taller than the reference's and puts a
+          sentence where the reference has a label, so this is the label. It is
+          the same claim in three words; it is this rail's copy rather than an
+          edit to the brand constant, because the long form is still the right
+          thing in a page's `<meta name="description">`, which is what
+          `BRAND.tagline` is for; and it does not truncate at 360px either.
+
+          Small text, so --mo-body and never --mo-muted-lg: 3.01 on a card is
+          below the 4.5 a 12px line needs, however quiet it looks.
+        */}
+        <span className="block truncate text-xs text-mo-body">One account, everywhere</span>
+      </span>
+    </section>
+  )
+}
+
+/**
+ * The big green button at the bottom of the navigation.
+ *
+ * `SOLID_ACTION_FILL` and not `bg-mo-primary text-mo-on-primary`: this package
+ * is mounted in a light zone and two dark ones and the dark pair measures 4.03
+ * — large-text only. The whole argument is on that constant in ./NavItem.
+ *
+ * Full width and fully rounded, which is the reference's shape — and 44px
+ * rather than the 48 it started at. This is the one control in the rail that
+ * KEEPS the full pointer target: it is the only way to compose a post on the
+ * web, so the argument that lets the suggestion pills be 32 (there is another
+ * way to do the same thing) does not apply to it. 44 also lines it up with the
+ * nav rows above, so the rail reads as one rhythm rather than as a list with a
+ * slab under it.
+ */
+function CreatePostButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-mo-pill px-4 text-sm font-semibold transition-colors duration-150 ease-mo focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mo ${SOLID_ACTION_FILL}`}
+    >
+      <Plus aria-hidden="true" className="h-4 w-4 shrink-0" />
+      Create Post
+    </button>
+  )
 }
 
 /**
@@ -142,6 +238,7 @@ function RailContent({
   basePath,
   profile,
   currentId,
+  onCreatePost,
   onNavigate,
 }: LeftRailProps & { onNavigate?: () => void }) {
   const { signedIn, user } = useSession()
@@ -149,8 +246,67 @@ function RailContent({
 
   return (
     <>
+      {/* The reference's order, top to bottom: who this product is, the way to
+          search it, where you can go, and the one thing you came to do. The
+          viewer's own card is last — see the note above it. */}
+      <BrandCard />
+
+      <div className="mt-4">
+        <RailSearchBox basePath={basePath} />
+      </div>
+
+      {/* `onClick` on the <nav> rather than on each row: every row inside is a
+          real anchor and a click on any of them is a navigation, so one
+          handler on the container closes the drawer for all of them —
+          including the app-only rows, where the "navigation" is a person
+          discovering the row does nothing and wanting the overlay gone. */}
+      <nav aria-label="Destinations" className="mt-4" onClick={onNavigate}>
+        <ul className="space-y-1">
+          {DESTINATIONS.map((destination) => (
+            <RailNavItem
+              key={destination.id}
+              destination={destination}
+              current={destination.id === currentId}
+              reasonId={appOnlyId}
+            />
+          ))}
+        </ul>
+        {/* One note for every phone-marked row, exactly as RoleSwitcher does
+            it — and rendered only when there is a row that needs it, so the
+            day Reels and Tube get web zones this sentence disappears on its
+            own rather than becoming a lie nobody noticed. */}
+        {appOnlyCount > 0 && (
+          <p
+            id={appOnlyId}
+            className="mt-3 flex items-start gap-2 border-t border-mo px-3 pt-3 text-xs leading-snug text-mo-body"
+          >
+            <Smartphone aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-mo-muted-lg" />
+            <span>{APP_ONLY_REASON}</span>
+          </p>
+        )}
+      </nav>
+
+      {/*
+        The composer's door. Only drawn when a zone wired one — see
+        `onCreatePost` — and only to someone who could actually publish:
+        `POST /v1/posts` is 401 for an anonymous browser, so a signed-out
+        visitor gets the Sign in card below instead of a button that would
+        open a dialog whose Post cannot succeed.
+      */}
+      {onCreatePost && signedIn && <CreatePostButton onClick={onCreatePost} />}
+
+      {/*
+        ── The viewer's card moved DOWN, and did not go away ─────────────────
+        The reference puts the product at the top of the rail and says nothing
+        about the account, because on the reference the account lives in the
+        header — which is where it lives here too (./ProfileMenu). What the
+        header does NOT carry is the signed-out invitation or the three counts,
+        and both are real, both come from `/v1/profiles/me`, and dropping them
+        to match a mockup would be losing something true to gain a layout.
+        So it sits under the navigation: present, quieter, and last.
+      */}
       {signedIn ? (
-        <section className="rounded-mo border border-mo bg-mo-surface p-4 shadow-mo">
+        <section className="mt-5 rounded-mo-lg border border-mo bg-mo-surface p-4 shadow-mo-sm">
           <div className="flex items-center gap-3">
             {/* The viewer's own face. `/v1/profiles/me` sends
                 `avatar_media_id` and — alone among the profile routes — no
@@ -179,7 +335,7 @@ function RailContent({
           {profile && <ViewerStats profile={profile} />}
         </section>
       ) : (
-        <section className="rounded-mo border border-mo bg-mo-surface p-4 shadow-mo">
+        <section className="mt-5 rounded-mo-lg border border-mo bg-mo-surface p-4 shadow-mo-sm">
           <p className="font-semibold text-mo-ink">You are signed out</p>
           <p className="mt-1 text-sm text-mo-body">
             Sign in to see your feed and the people you follow.
@@ -196,51 +352,41 @@ function RailContent({
           </a>
         </section>
       )}
-
-      {/* `onClick` on the <nav> rather than on each row: every row inside is a
-          real anchor and a click on any of them is a navigation, so one
-          handler on the container closes the drawer for all of them —
-          including the app-only rows, where the "navigation" is a person
-          discovering the row does nothing and wanting the overlay gone. */}
-      <nav aria-label="Destinations" className="mt-4" onClick={onNavigate}>
-        <ul className="space-y-0.5">
-          {DESTINATIONS.map((destination) => (
-            <RailNavItem
-              key={destination.id}
-              destination={destination}
-              current={destination.id === currentId}
-              reasonId={appOnlyId}
-            />
-          ))}
-        </ul>
-        {/* One note for every phone-marked row, exactly as RoleSwitcher does
-            it — and rendered only when there is a row that needs it, so the
-            day Reels and Tube get web zones this sentence disappears on its
-            own rather than becoming a lie nobody noticed. */}
-        {appOnlyCount > 0 && (
-          <p
-            id={appOnlyId}
-            className="mt-3 flex items-start gap-2 border-t border-mo px-3 pt-3 text-xs leading-snug text-mo-body"
-          >
-            <Smartphone aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-mo-muted-lg" />
-            <span>{APP_ONLY_REASON}</span>
-          </p>
-        )}
-      </nav>
-
-      <p className="mt-5 px-3 text-xs text-mo-body">
-        One {BRAND.name} account, every part of the platform.
-      </p>
     </>
   )
 }
 
-/** The rail as a column — 1024px and up, which is where there is room for it. */
+/**
+ * The rail as a column — 1024px and up, which is where there is room for it.
+ *
+ * ── Sticky, and scrollable on its own ONLY when it has to be ──────────────
+ * `top-14` is the header's height, so the rail parks directly under it, and
+ * `overflow-y-auto` is what lets a rail taller than the window reach its own
+ * bottom rows — a sticky element does not scroll with the page once it has
+ * stuck.
+ *
+ * It used to be `overflow-y-auto` unconditionally, and the founder saw the
+ * cost: two nested scrollbars side by side, one on the rail and one on the
+ * page, on a rail that was not overflowing at all. `scrollbar-gutter` cannot
+ * fix that (it reserves the space rather than removing the bar) and hiding the
+ * bar with the arbitrary variants ./AppHeader uses would hide it in the case
+ * where it is doing something.
+ *
+ * `overflow-y-auto` is already the conditional form — a bar appears only when
+ * the content overflows — so what was actually wrong was that the content DID
+ * overflow, by about 120px, because eight two-line rows and a 48px button do
+ * not fit in 900px minus the header. The rows are one line now and the button
+ * is 44px, which takes the whole rail to roughly 620px at the same viewport:
+ * under the window, no bar, and the page keeps the only one. The declaration
+ * stays for the case it was written for — a short laptop, a large font — and
+ * `overscroll-contain` is added so that reaching the end of the rail in that
+ * case does not start scrolling the feed behind it.
+ */
 export function LeftRail(props: LeftRailProps) {
   return (
     <aside
       aria-label="You and your destinations"
-      className="sticky top-14 hidden max-h-[calc(100vh-3.5rem)] overflow-y-auto py-5 pr-2 lg:block"
+      className="sticky top-14 hidden max-h-[calc(100vh-3.5rem)] overflow-y-auto overscroll-contain py-5 pr-2 lg:block"
     >
       <RailContent {...props} />
     </aside>

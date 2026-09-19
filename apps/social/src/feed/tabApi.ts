@@ -233,6 +233,23 @@ interface BatchProfile {
    * worth not having.
    */
   avatar_url?: string
+
+  /**
+   * ── Three keys of the PUBLIC profile card that the home feed never sees ──
+   * user-service's own visibility test enumerates the public allowlist and
+   * `is_verified`, `profession` and `bio` are in it by name — every caller
+   * keeps them, owner or not. feed-service's `Author` struct carries none of
+   * the three, so a home-feed row has no tick and no role line and a
+   * hashtag-hydrated row does.
+   *
+   * That asymmetry is carried rather than hidden. The alternative was to fire
+   * this same batch request for every home-feed page purely to decorate the
+   * byline, which is one extra round trip on the front door of the product
+   * for two optional lines of text.
+   */
+  is_verified?: boolean
+  profession?: string
+  bio?: string
 }
 
 interface Hydration {
@@ -293,6 +310,12 @@ async function hydrateAuthors(items: FeedItem[]): Promise<Hydration> {
         ...(profile.display_name ? { display_name: profile.display_name } : {}),
         ...(profile.username ? { username: profile.username } : {}),
         ...(profile.avatar_media_id ? { avatar_media_id: profile.avatar_media_id } : {}),
+        // `=== true` rather than a truthiness test: this decides whether a
+        // verification tick is drawn beside somebody's name, and a stray
+        // truthy value from a wire that changed shape must not award one.
+        ...(profile.is_verified === true ? { is_verified: true } : {}),
+        ...(profile.profession ? { profession: profile.profession } : {}),
+        ...(profile.bio ? { bio: profile.bio } : {}),
       }
       return { ...item, author }
     })

@@ -37,10 +37,8 @@ import { Menu } from "lucide-react"
 import { BRAND } from "@momentum/brand"
 import { useSession } from "@atpost/api-client/session"
 import { NotificationBell } from "@momentum/notifications"
-import { DESTINATIONS, HOME_PATH } from "./destinations"
-import { HeaderNavIcon } from "./NavItem"
+import { HOME_PATH } from "./destinations"
 import { ProfileMenu } from "./ProfileMenu"
-import { SearchBox } from "./SearchBox"
 import { signInHref } from "./zone"
 
 /**
@@ -65,7 +63,6 @@ export function AppHeader({
   basePath,
   displayName,
   avatarMediaId,
-  currentId,
   navOpen,
   onToggleNav,
   navButtonRef,
@@ -75,7 +72,6 @@ export function AppHeader({
   displayName?: string | null
   /** The viewer's avatar asset id, from `/v1/profiles/me`. Not a URL. */
   avatarMediaId?: string | null
-  currentId: string | null
   /** Whether ./LeftRail's drawer is open, for the trigger's `aria-expanded`. */
   navOpen?: boolean
   /** Opens the drawer. Omit and no hamburger is drawn at all. */
@@ -161,9 +157,43 @@ export function AppHeader({
           </span>
         </a>
 
-        <SearchBox basePath={basePath} />
+        {/*
+          ── ONE search box, and ONE navigation — both of them in the rail ──
 
-        {/* ── Centre: the destinations ──────────────────────────────────────
+          What stood here was a search box and, after it, a strip of eight
+          destination glyphs. Both are gone, and both for the same reason: each
+          was a SECOND copy of something the left rail already draws, on the
+          same screen at the same time.
+
+          · SEARCH. Two boxes, both reading "Search Momentum", both submitting
+            to the one results page. The founder's reference puts search in the
+            rail under the brand card, so the rail's is the one that stays.
+            `RailSearchBox` also binds "/" as a shortcut, which is only
+            unambiguous while exactly one of them is mounted.
+
+          · DESTINATIONS. The strip was the rail's own list again, as
+            unlabelled glyphs. The reference has no zone icons in the header at
+            all — the rail IS the navigation — and a shortcut row for a list
+            already open beside it is a row nobody needs.
+
+          ── What this costs below 1024px, stated rather than hidden ─────────
+          There the rail is a drawer, so both are one tap behind the hamburger
+          instead of on the bar. That is a real change, and it is the same one
+          for both, which is what keeps it explicable: the bar carries the
+          product, what is new, and you — everything else is in the one place
+          the navigation lives.
+
+          ── And what it means for apps/reels and apps/kwit ──────────────────
+          They mount this same header and lose the same two things. Both keep a
+          complete navigation, because both also mount `AppFrame`: the rail is
+          a column from 1024px up and the drawer below it, and every
+          destination — including the one they are in, marked — is in it.
+          Neither zone had a search box of its own to lose; the rail's is one
+          they gain.
+        */}
+        <div className="flex-1" />
+
+        {/* ── The destination strip that used to be here ────────────────────
 
             ── `hidden lg:flex`, and why this strip stopped being the phone's
                navigation ────────────────────────────────────────────────────
@@ -198,19 +228,14 @@ export function AppHeader({
             whichever zone's stylesheet scans this file — and both of them
             already glob `packages/chrome/src` for exactly this reason. Same
             two declarations as `.mo-hscroll`, with no shared class to keep in
-            step. */}
-        <nav
-          aria-label="Momentum destinations"
-          className="mx-auto hidden min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] lg:flex [&::-webkit-scrollbar]:hidden"
-        >
-          {DESTINATIONS.map((destination) => (
-            <HeaderNavIcon
-              key={destination.id}
-              destination={destination}
-              current={destination.id === currentId}
-            />
-          ))}
-        </nav>
+            step.
+
+            All of that is kept as the record of a thing that is no longer
+            drawn. `HeaderNavIcon` still exists in ./NavItem.tsx and is still
+            exported, because it is the only component that knows how to draw a
+            destination as a glyph — and the next surface that wants a compact
+            destination row (a full-bleed watch page, say) should take it
+            rather than write a third one. */}
 
         {/* ── Right: what is new, then you ──────────────────────────────── */}
         <div className="ml-auto flex shrink-0 items-center gap-1">

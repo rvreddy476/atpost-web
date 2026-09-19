@@ -3,7 +3,7 @@ import { Figtree, Outfit } from "next/font/google"
 import { BRAND, zoneTitle } from "@momentum/brand"
 import { readServerSession } from "@atpost/api-client/server"
 import { SessionProvider } from "@atpost/api-client/session"
-import { AppFrame } from "@momentum/chrome"
+import { SocialFrame } from "./SocialFrame"
 import "./globals.css"
 
 /**
@@ -84,7 +84,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       */}
       <body className="mo-root mo-light">
         <SessionProvider initialSignedIn={signedIn}>
-          <AppFrame basePath="/social">{children}</AppFrame>
+          {/*
+            `SocialFrame` rather than `AppFrame` directly. It is a thin client
+            wrapper that mounts the same frame and adds the two things a server
+            component cannot: the composer's open state — the rail's "Create
+            Post" needs a handler, and a dialog holding a half-written post
+            has to outlive a route change — and this zone's own "Trending
+            Topics" card for the right rail, which is a post-service endpoint
+            and so not @momentum/chrome's to fetch. Its header carries both
+            arguments in full. `children` stays a server component.
+          */}
+          <SocialFrame>{children}</SocialFrame>
         </SessionProvider>
       </body>
     </html>

@@ -124,15 +124,67 @@ export interface AppFrameProps {
    * a header that looks perfect and navigates nowhere.
    */
   basePath: string
+  /**
+   * Opens the zone's composer, from the rail's "Create Post" button.
+   *
+   * Absent means no button — the frame cannot compose a post and will not draw
+   * a control for something it cannot do. See `LeftRailProps.onCreatePost`.
+   */
+  onCreatePost?: () => void
+  /**
+   * A card the ZONE owns, rendered under "People to follow" in the right rail.
+   *
+   * ── Why this is a slot and not a second fetch in this package ──────────
+   * apps/social wants the founder's "Trending Topics" card there, and trending
+   * hashtags are `GET /v1/hashtags/trending` — a post-service route apps/social
+   * already calls from its own `tabApi.ts`. ./api.ts states the boundary this
+   * keeps: the chrome owns the three routes whose subject is the VIEWER, and a
+   * zone's own endpoints stay in the zone. Fetching trending tags here would
+   * put a fourth URL in a package that reels and kwit also mount, for a card
+   * only one of them asked for.
+   *
+   * A node rather than a render prop because nothing here needs to pass it
+   * anything: the zone's element arrives fully wired.
+   */
+  rightRailExtra?: React.ReactNode
+  /**
+   * The viewer's profile, when the ZONE has already fetched it.
+   *
+   * ── One request for the viewer, still ─────────────────────────────────
+   * This file's own header says so: `/v1/profiles/me` is fetched here and
+   * handed to both the header and the rail, because two components each
+   * calling a hook is how a page makes the same request twice on every mount.
+   *
+   * apps/social needs the same row a third time — its composer draws the
+   * viewer's name and face on the post it has just written, or somebody's own
+   * words appear at the top of their own feed under a stranger's byline. The
+   * options were a third caller, a callback handing this component's state
+   * upwards (which is a render loop waiting to be written), or this: the zone
+   * fetches once and passes it down, and the frame then does not fetch at all.
+   *
+   * `undefined` means "you fetch it", which is what apps/reels and apps/kwit
+   * say by saying nothing. `null` is a real value — "fetched, and there is
+   * none" — so the two are told apart rather than collapsed with `??`.
+   */
+  viewerProfile?: ViewerProfile | null
   children: React.ReactNode
 }
 
-export function AppFrame({ basePath, children }: AppFrameProps) {
+export function AppFrame({
+  basePath,
+  onCreatePost,
+  rightRailExtra,
+  viewerProfile,
+  children,
+}: AppFrameProps) {
   const { signedIn, status: sessionStatus } = useSession()
   const pathname = usePathname()
   const currentId = currentDestinationId(zonePath(basePath, pathname))
 
-  const [profile, setProfile] = useState<ViewerProfile | null>(null)
+  const [fetched, setFetched] = useState<ViewerProfile | null>(null)
+  /** The zone's copy wins outright when there is one. See `viewerProfile`. */
+  const zoneOwnsProfile = viewerProfile !== undefined
+  const profile = zoneOwnsProfile ? viewerProfile : fetched
 
   const [navOpen, setNavOpen] = useState(false)
   const navButtonRef = useRef<HTMLButtonElement>(null)
@@ -149,15 +201,18 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
   }, [pathname])
 
   useEffect(() => {
+    // The zone supplied it. Fetching anyway would be the second request this
+    // prop exists to remove.
+    if (zoneOwnsProfile) return
     if (sessionStatus === "unknown") return
     if (!signedIn) {
-      setProfile(null)
+      setFetched(null)
       return
     }
     let live = true
     fetchViewerProfile()
       .then((next) => {
-        if (live) setProfile(next)
+        if (live) setFetched(next)
       })
       .catch(() => {
         // A profile that did not load is a missing NAME, not a missing
@@ -168,7 +223,7 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
     return () => {
       live = false
     }
-  }, [signedIn, sessionStatus])
+  }, [signedIn, sessionStatus, zoneOwnsProfile])
 
   return (
     <>
@@ -176,7 +231,9 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
         basePath={basePath}
         displayName={profile?.display_name}
         avatarMediaId={profile?.avatar_media_id}
-        currentId={currentId}
+        // No `currentId`: the header no longer draws destinations, so it has
+        // nothing to mark. `currentId` still goes to both shapes of the rail,
+        // which is where the marking now lives — and lives only once.
         navOpen={navOpen}
         onToggleNav={() => setNavOpen((open) => !open)}
         navButtonRef={navButtonRef}
@@ -188,6 +245,17 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
         basePath={basePath}
         profile={profile}
         currentId={currentId}
+        onCreatePost={
+          // The drawer's Create Post shuts the drawer first. Leaving it open
+          // behind a modal dialog would put two focus traps on one page, and
+          // the one underneath is the one Escape would not reach.
+          onCreatePost
+            ? () => {
+                setNavOpen(false)
+                onCreatePost()
+              }
+            : undefined
+        }
         open={navOpen}
         onClose={() => setNavOpen(false)}
         returnFocusTo={navButtonRef}
@@ -203,7 +271,12 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
           "xl:grid-cols-[268px_minmax(0,600px)_300px]",
         ].join(" ")}
       >
-        <LeftRail basePath={basePath} profile={profile} currentId={currentId} />
+        <LeftRail
+          basePath={basePath}
+          profile={profile}
+          currentId={currentId}
+          onCreatePost={onCreatePost}
+        />
         {/* `min-w-0` for the same reason `minmax(0, …)` is on the track: a
             grid item's default `min-width: auto` refuses to shrink below its
             content, and one wide child would push the rails off screen. */}
@@ -212,7 +285,7 @@ export function AppFrame({ basePath, children }: AppFrameProps) {
             appears and disappears as the page scrolls and a 64px tail can put
             "You are all caught up" underneath it. */}
         <main className="mx-auto w-full min-w-0 max-w-[600px] pb-24 pt-4 sm:pt-5">{children}</main>
-        <RightRail basePath={basePath} />
+        <RightRail basePath={basePath} extra={rightRailExtra} />
       </div>
     </>
   )
