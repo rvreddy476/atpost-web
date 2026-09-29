@@ -62,6 +62,8 @@ const ADMIN_ERROR_MESSAGES: Record<string, string> = {
   BUDGET_BELOW_ACCRUED: "The cap cannot be lower than what this period has already accrued.",
   CADENCE_MISMATCH: "That period key does not match the configured settlement cadence.",
   REFUND_ALREADY_EXISTS: "This transaction has already been refunded.",
+  // Trust & safety strikes (/v1/admin/trust/strikes)
+  STRIKE_ROUTE_RETIRED: "This console screen uses a retired strike route. Reload the page to pick up the current version.",
   // Access (/v1/admin/access/*)
   SUPERADMIN_REQUIRED: "Only a platform super-admin can grant or revoke this role.",
   LAST_SUPERADMIN: "This is the last super-admin. Grant the role to someone else before revoking it.",

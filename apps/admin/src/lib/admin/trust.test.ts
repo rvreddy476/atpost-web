@@ -1,13 +1,26 @@
 import { describe, expect, it } from "vitest"
 import {
   INITIAL_GRIEVANCE_FILTER,
+  MAX_STRIKE_IDEMPOTENCY_KEY,
   appealNeedsStepUp,
+  canVoidStrike,
+  checkIssueStrike,
+  emptyIssueStrike,
   grievanceDueState,
   grievanceListUrl,
   grievanceNeedsStepUp,
+  issueStrikeAttempt,
+  issueStrikeBody,
   nextAppealStatuses,
   nextGrievanceStatuses,
   nextReportStatuses,
+  severityTone,
+  strikeIssueUrl,
+  strikeState,
+  strikeVoidUrl,
+  strikesUrl,
+  voidStrikeBody,
+  type IssueStrikeForm,
 } from "./trust"
 
 const NOW = Date.parse("2026-09-16T12:00:00Z")
@@ -64,5 +77,84 @@ describe("trust transitions and step-up hints", () => {
     expect(appealNeedsStepUp("upheld")).toBe(false)
     expect(grievanceNeedsStepUp("resolved")).toBe(true)
     expect(grievanceNeedsStepUp("acknowledged")).toBe(false)
+  })
+})
+
+describe("strikes", () => {
+  const user = "44444444-4444-4444-8444-444444444444"
+  const content = "55555555-5555-4555-8555-555555555555"
+  const form = (over: Partial<IssueStrikeForm> = {}): IssueStrikeForm => ({ ...emptyIssueStrike(user), reason: "repeat spam after a warning", ...over })
+  const counter = () => {
+    let n = 0
+    return () => `key-${++n}`
+  }
+
+  it("builds the issue body with the key, trimmed, severity lower-cased, empty optionals left out", () => {
+    expect(issueStrikeBody(form({ severity: " Severe_Strike ", reason: "  repeat spam after a warning " }), "k-1")).toEqual({
+      user_id: user,
+      severity: "severe_strike",
+      reason: "repeat spam after a warning",
+      idempotency_key: "k-1",
+    })
+    const body = issueStrikeBody(form({ contentId: ` ${content} `, contentType: " post " }), "k-2")
+    expect(body.content_id).toBe(content)
+    expect(body.content_type).toBe("post")
+    expect(Object.keys(issueStrikeBody(form({ contentId: "  " }), "k-3"))).not.toContain("content_id")
+  })
+
+  it("mints one key per click and reuses it for a retry of the same form", () => {
+    const make = counter()
+    const first = issueStrikeAttempt(form(), null, make)
+    expect(first.key).toBe("key-1")
+    // The step-up retry, or "Issue strike" pressed again after a network error.
+    expect(issueStrikeAttempt(form(), first, make)).toBe(first)
+    expect(issueStrikeAttempt(form({ reason: "  repeat spam after a warning  " }), first, make).key).toBe("key-1")
+    // A different action is a different key.
+    expect(issueStrikeAttempt(form({ severity: "warning" }), first, make).key).toBe("key-2")
+    expect(issueStrikeAttempt(form({ contentId: content }), first, make).key).toBe("key-3")
+  })
+
+  it("mints a UUID by default, within trust-safety's key limit", () => {
+    const { key } = issueStrikeAttempt(form(), null)
+    expect(key).toMatch(/^[0-9a-f-]{36}$/)
+    expect(key.length).toBeLessThanOrEqual(MAX_STRIKE_IDEMPOTENCY_KEY)
+  })
+
+  it("builds the void body", () => {
+    expect(voidStrikeBody(` ${content} `, " issued against the wrong account ")).toEqual({ strike_id: content, reason: "issued against the wrong account" })
+  })
+
+  it("refuses a form the server would refuse, before it is sent", () => {
+    expect(checkIssueStrike(form())).toBeNull()
+    expect(checkIssueStrike(form({ userId: "nope" }))).toMatch(/user's id/)
+    expect(checkIssueStrike(form({ severity: "ban" }))).toMatch(/severity/)
+    expect(checkIssueStrike(form({ severity: " STRIKE " }))).toBeNull()
+    expect(checkIssueStrike(form({ contentId: "post-1" }))).toMatch(/content id/)
+    expect(checkIssueStrike(form({ contentType: "x".repeat(65) }))).toMatch(/content type/)
+  })
+
+  it("routes through admin-service's trust prefix", () => {
+    expect(strikesUrl(user)).toBe(`/v1/admin/trust/strikes/${user}`)
+    expect(strikeIssueUrl()).toBe("/v1/admin/trust/strikes")
+    expect(strikeVoidUrl(user)).toBe(`/v1/admin/trust/strikes/${user}/void`)
+  })
+
+  it("is voided over expired, expired once expires_at has passed, active otherwise", () => {
+    const expires = (hours: number) => new Date(NOW + hours * HOUR).toISOString()
+    expect(strikeState({ expires_at: expires(24) }, NOW)).toBe("active")
+    expect(strikeState({ expires_at: expires(-1) }, NOW)).toBe("expired")
+    expect(strikeState({ expires_at: expires(-1), voided_at: expires(-2) }, NOW)).toBe("voided")
+    expect(strikeState({ expires_at: expires(24), voided_at: expires(-2) }, NOW)).toBe("voided")
+    // A row without a readable expiry still counts until the server says otherwise.
+    expect(strikeState({}, NOW)).toBe("active")
+    expect(canVoidStrike({ voided_at: expires(-2) })).toBe(false)
+    expect(canVoidStrike({ expires_at: expires(-1) })).toBe(true)
+  })
+
+  it("colours severity by how much it matters", () => {
+    expect(severityTone("severe_strike")).toBe("bad")
+    expect(severityTone("strike")).toBe("warn")
+    expect(severityTone("warning")).toBe("normal")
+    expect(severityTone(undefined)).toBe("normal")
   })
 })
