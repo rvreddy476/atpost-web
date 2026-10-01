@@ -11,6 +11,7 @@ import { COMMERCE_SECTIONS } from "@/lib/admin/sections"
 
 const DESCRIPTIONS: Record<string, string> = {
   catalogue: "Attribute definitions, category schemas and publishing",
+  coupons: "Platform coupons, and the codes sellers run",
   sellers: "Approve sellers, request changes, suspend, verify KYC",
   products: "Review submitted listings",
   payouts: "What sellers are owed (needs 2FA to view)",

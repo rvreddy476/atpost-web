@@ -128,7 +128,8 @@ describe("buildAdminNav", () => {
     )
     const mstore = findNavGroup(full, "commerce")
     expect(mstore?.label).toBe("MStore")
-    expect(mstore?.links.map((l) => l.href)).toEqual(["/catalogue", "/sellers", "/products", "/payouts"])
+    // A to Z by label, as a person reads a menu.
+    expect(mstore?.links.map((l) => l.href)).toEqual(["/catalogue", "/payouts", "/products", "/sellers"])
 
     const moderator = buildAdminNav(me({ apps: { commerce: ["commerce:products.moderate"] } }))
     expect(findNavGroup(moderator, "commerce")?.links.map((l) => l.id)).toEqual(["products"])

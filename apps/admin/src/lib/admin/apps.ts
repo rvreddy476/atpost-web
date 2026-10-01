@@ -60,3 +60,13 @@ export const COMMERCE_LEGACY_SECTIONS = [
   { id: "products", label: "Products", href: "/products" },
   { id: "payouts", label: "Payouts", href: "/payouts" },
 ] as const
+
+/**
+ * Pages of their own beneath an application in the rail, each shown only to
+ * a holder of `permission` (without the app prefix). The rail lists an app's
+ * pages A to Z by label, these and the legacy screens together.
+ */
+export const APP_PAGES = [
+  { app: "commerce", id: "coupons", label: "Coupons", href: "/commerce/coupons", permission: "coupons.manage" },
+  { app: "payments", id: "offers", label: "Bank offers", href: "/payments/offers", permission: "offers.manage" },
+] as const satisfies readonly { app: AdminAppId; id: string; label: string; href: string; permission: string }[]

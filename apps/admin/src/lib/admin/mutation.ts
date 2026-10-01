@@ -174,3 +174,19 @@ export async function runAdminMutation(
   if (approval) return { kind: "approval", approval }
   return { kind: "done", status: response.status, data: response.data }
 }
+
+/**
+ * A write whose route always needs a fresh 2FA code (coupons, bank offers):
+ * the OTP prompt comes BEFORE the first send unless /me says a step-up window
+ * is open, and a dismissed prompt sends nothing. After that it is
+ * `runAdminMutation`, so a window that lapsed between /me and the click still
+ * gets exactly one prompt and one retry.
+ */
+export async function runSteppedAdminMutation(
+  send: () => Promise<SentResponse>,
+  stepUp: () => Promise<boolean>,
+  windowOpen: boolean,
+): Promise<MutationOutcome> {
+  if (!windowOpen && !(await stepUp())) return { kind: "cancelled" }
+  return runAdminMutation(send, stepUp)
+}

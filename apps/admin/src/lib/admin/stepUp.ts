@@ -13,6 +13,14 @@ export function formatCountdown(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
 }
 
+/** Treat a window with less than this left as closed, so the server does not refuse mid-click. */
+export const STEP_UP_MARGIN_MS = 15_000
+
+/** Is a step-up window open now, with a margin to spare? (`validUntil` is /me's step_up_valid_until.) */
+export function stepUpWindowOpen(validUntil: number | null, now: number): boolean {
+  return validUntil !== null && validUntil - now > STEP_UP_MARGIN_MS
+}
+
 /** A TOTP code as typed: digits only, six of them. */
 export function normaliseOtp(input: string): string {
   return input.replace(/\D/g, "").slice(0, 6)

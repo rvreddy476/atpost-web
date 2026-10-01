@@ -11,6 +11,7 @@ import {
   adminErrorMessage,
   prepareSend,
   runAdminMutation,
+  runSteppedAdminMutation,
   type AdminWrite,
   type MutationOutcome,
   type Transport,
@@ -44,6 +45,7 @@ export function useAdminMutation<Vars>({
   successMessage,
   errorTitle,
   onDone,
+  stepUpFirst,
 }: {
   request: (vars: Vars) => AdminRequest
   invalidate?: QueryKey[]
@@ -51,6 +53,12 @@ export function useAdminMutation<Vars>({
   errorTitle: string
   /** Runs once the server accepted the action: carried out ("done") or queued for a second approver ("approval"). Not after a dismissed step-up. */
   onDone?: (data: unknown, vars: Vars, kind: "done" | "approval") => void
+  /**
+   * For routes that always need a fresh 2FA code: answers whether a step-up
+   * window is open right now. When it is not, the prompt comes before the
+   * request is sent (runSteppedAdminMutation), not after a 403.
+   */
+  stepUpFirst?: () => boolean
 }) {
   const stepUp = useStepUp()
   const qc = useQueryClient()
@@ -59,7 +67,7 @@ export function useAdminMutation<Vars>({
   return useMutation<MutationOutcome, unknown, Vars>({
     mutationFn: (vars) => {
       const { send } = prepareSend(request(vars), transport)
-      return runAdminMutation(send, stepUp)
+      return stepUpFirst ? runSteppedAdminMutation(send, stepUp, stepUpFirst()) : runAdminMutation(send, stepUp)
     },
     onSuccess: (outcome, vars) => {
       if (outcome.kind === "cancelled") {

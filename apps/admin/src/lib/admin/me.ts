@@ -1,4 +1,4 @@
-import { COMMERCE_LEGACY_SECTIONS, adminAppLabel, adminAppOrder, appHref, isAdminAppId, type AdminAppId } from "./apps"
+import { APP_PAGES, COMMERCE_LEGACY_SECTIONS, adminAppLabel, adminAppOrder, appHref, isAdminAppId, type AdminAppId } from "./apps"
 
 /**
  * `GET /v1/admin/me`, as admin-service answers it (inside `{data: ...}`):
@@ -173,22 +173,27 @@ export interface AdminNavModel {
 }
 
 /**
- * Sections are derived here until admin-service sends them. Only MStore has
- * screens today; every other app is its dashboard placeholder for Wave 2.
+ * Sections are derived here until admin-service sends them: MStore's older
+ * screens, and the pages of their own in APP_PAGES (MStore → Coupons,
+ * Payments → Bank offers), each behind its permission, A to Z by label.
  */
 function sectionsFor(me: AdminMe, app: AdminAppId): NavLink[] {
-  if (app !== "commerce") return []
-  const need: Record<string, string[]> = {
-    catalogue: ["catalogue.edit"],
-    sellers: ["sellers.read", "seller.approve"],
-    products: ["products.moderate"],
-    payouts: ["payouts.read"],
+  const links: NavLink[] = []
+  if (app === "commerce") {
+    const need: Record<string, string[]> = {
+      catalogue: ["catalogue.edit"],
+      sellers: ["sellers.read", "seller.approve"],
+      products: ["products.moderate"],
+      payouts: ["payouts.read"],
+    }
+    for (const s of COMMERCE_LEGACY_SECTIONS) {
+      if (need[s.id].some((action) => hasPermission(me, "commerce", action))) links.push({ id: s.id, label: s.label, href: s.href })
+    }
   }
-  return COMMERCE_LEGACY_SECTIONS.filter((s) => need[s.id].some((action) => hasPermission(me, "commerce", action))).map((s) => ({
-    id: s.id,
-    label: s.label,
-    href: s.href,
-  }))
+  for (const page of APP_PAGES) {
+    if (page.app === app && hasPermission(me, app, page.permission)) links.push({ id: page.id, label: page.label, href: page.href })
+  }
+  return links.sort((a, b) => a.label.localeCompare(b.label, "en", { sensitivity: "base" }))
 }
 
 /**

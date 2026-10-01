@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
+import { ArrowRight } from "lucide-react"
 import { Field } from "@/components/blocks/bits"
 import { inputClass } from "@/components/blocks/buttons"
 import { PageHeader } from "@/components/blocks/PageHeader"
@@ -55,6 +57,21 @@ export default function PaymentsDashboard() {
   return (
     <div>
       <PageHeader eyebrow="Application" title={group.label} description="Refunds needing attention, payment intents, reconciliation and the application registry." />
+
+      {group.links.length > 0 ? (
+        <ul className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Payments pages">
+          {group.links.map((link) => (
+            <li key={link.id}>
+              <Link href={link.href} className="flex h-full flex-col rounded-mo border border-mo bg-mo-surface p-4 hover:border-mo-strong">
+                <span className="flex items-center gap-1 font-mo-display text-base font-semibold text-mo-ink">
+                  {link.label} <ArrowRight className="h-4 w-4 text-mo-body" aria-hidden="true" />
+                </span>
+                {link.id === "offers" ? <span className="mt-1 text-xs text-mo-body">Razorpay Offers MStore checkout makes available</span> : null}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <div className="mb-6">
         {choices ? (
