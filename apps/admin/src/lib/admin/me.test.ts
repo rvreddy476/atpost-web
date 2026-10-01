@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ADMIN_APPS } from "./apps"
+import { ADMIN_APPS, APP_ENTRY_PERMISSIONS } from "./apps"
 import { buildAdminNav, findNavGroup, hasAppAccess, hasPermission, mfaBlocks, parseAdminMe, readMfaEnrolled } from "./me"
 
 const allNavigation = ADMIN_APPS.map((app) => ({ app: app.id, label: app.label }))
@@ -100,7 +100,11 @@ describe("buildAdminNav", () => {
   })
 
   it("lets a cross-app platform permission reach listed apps, but not a platform-only one", () => {
-    expect(buildAdminNav(me({ platform: ["*:audit.read"] })).apps).toHaveLength(ADMIN_APPS.length)
+    // Every app except those that open only with one named permission (Live: live:streams.read).
+    const reached = buildAdminNav(me({ platform: ["*:audit.read"] })).apps.map((g) => g.app)
+    expect(reached).toEqual(ADMIN_APPS.map((a) => a.id).filter((id) => !(id in APP_ENTRY_PERMISSIONS)))
+    expect(reached).not.toContain("live")
+    expect(buildAdminNav(me({ platform: ["*:streams.read"] })).apps.map((g) => g.app)).toContain("live")
     const plain = buildAdminNav(me({ platform: ["platform:roles.grant"] }))
     expect(plain.apps.map((g) => g.app)).toEqual(["platform"])
   })

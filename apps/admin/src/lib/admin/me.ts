@@ -1,4 +1,4 @@
-import { APP_PAGES, COMMERCE_LEGACY_SECTIONS, adminAppLabel, adminAppOrder, appHref, isAdminAppId, type AdminAppId } from "./apps"
+import { APP_ENTRY_PERMISSIONS, APP_PAGES, COMMERCE_LEGACY_SECTIONS, adminAppLabel, adminAppOrder, appHref, isAdminAppId, type AdminAppId } from "./apps"
 
 /**
  * `GET /v1/admin/me`, as admin-service answers it (inside `{data: ...}`):
@@ -87,7 +87,8 @@ export function parseAdminMe(raw: unknown): AdminMe | null {
     for (const item of body.navigation) {
       if (!isRecord(item) || !isAdminAppId(item.app)) continue
       if (navigation.some((entry) => entry.app === item.app)) continue
-      const label = typeof item.label === "string" && item.label.trim() ? item.label.trim() : adminAppLabel(item.app)
+      // admin-service names an app it has no menu label for by its id ("live"); the console's label reads better.
+      const label = typeof item.label === "string" && item.label.trim() && item.label.trim() !== item.app ? item.label.trim() : adminAppLabel(item.app)
       const entry: AdminNavEntry = { app: item.app, label }
       if (item.app === "payments" && Array.isArray(item.applications)) entry.applications = strings(item.applications)
       navigation.push(entry)
@@ -196,6 +197,12 @@ function sectionsFor(me: AdminMe, app: AdminAppId): NavLink[] {
   return links.sort((a, b) => a.label.localeCompare(b.label, "en", { sensitivity: "base" }))
 }
 
+/** An app listed in APP_ENTRY_PERMISSIONS opens only with that permission; any other with any permission. */
+export function holdsEntryPermission(me: AdminMe, app: AdminAppId): boolean {
+  const entry = APP_ENTRY_PERMISSIONS[app]
+  return entry === undefined || hasPermission(me, app, entry)
+}
+
 /**
  * The left rail, built ONLY from the server's `navigation`, then filtered
  * again against the permissions in the same answer. Both must agree: a
@@ -204,7 +211,7 @@ function sectionsFor(me: AdminMe, app: AdminAppId): NavLink[] {
  */
 export function buildAdminNav(me: AdminMe): AdminNavModel {
   const apps = me.navigation
-    .filter((entry) => hasAppAccess(me, entry.app))
+    .filter((entry) => hasAppAccess(me, entry.app) && holdsEntryPermission(me, entry.app))
     .sort((a, b) => adminAppOrder(a.app) - adminAppOrder(b.app))
     .map<NavGroup>((entry) => ({
       app: entry.app,

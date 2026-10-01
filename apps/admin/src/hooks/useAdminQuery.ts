@@ -19,19 +19,29 @@ export interface AdminRead<T> {
   refetch: () => void
 }
 
-function useAdminRaw(app: string, url: string, enabled: boolean) {
+function useAdminRaw(app: string, url: string, enabled: boolean, refetchInterval?: number) {
   return useQuery({
     queryKey: adminKey(app, url),
     queryFn: async () => (await api.get(url)).data as unknown,
     enabled,
     // A 403 or 503 will not fix itself on a retry; the error state offers one.
     retry: false,
+    // Only while the tab is visible (react-query's default for intervals).
+    refetchInterval: refetchInterval ?? false,
   })
 }
 
-/** A list route. `rows` is [] while loading, on error, and for a `null` list. */
-export function useAdminList(app: string, url: string, { enabled = true, keys }: { enabled?: boolean; keys?: string[] } = {}): AdminRead<Row[]> {
-  const q = useAdminRaw(app, url, enabled)
+/**
+ * A list route. `rows` is [] while loading, on error, and for a `null` list.
+ * `refetchInterval` (ms) re-reads it on a timer, for lists that change by
+ * themselves (Live → live now).
+ */
+export function useAdminList(
+  app: string,
+  url: string,
+  { enabled = true, keys, refetchInterval }: { enabled?: boolean; keys?: readonly string[]; refetchInterval?: number } = {},
+): AdminRead<Row[]> {
+  const q = useAdminRaw(app, url, enabled, refetchInterval)
   return {
     data: q.data === undefined ? [] : readList(q.data, keys),
     raw: q.data,

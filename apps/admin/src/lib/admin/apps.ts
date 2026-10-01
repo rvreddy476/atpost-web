@@ -23,6 +23,7 @@ export const ADMIN_APPS = [
   { id: "tube", label: "Tube" },
   { id: "qa", label: "Q&A" },
   { id: "chat", label: "Chat" },
+  { id: "live", label: "Live" },
   { id: "rider", label: "Mopedu" },
   { id: "trust_safety", label: "Trust & safety" },
   { id: "platform", label: "Platform" },
@@ -43,6 +44,15 @@ export function adminAppLabel(id: AdminAppId): string {
 /** The console URL of an application's dashboard. Trust & safety lives at /trust. */
 export function appHref(id: AdminAppId): string {
   return id === "trust_safety" ? "/trust" : `/${id}`
+}
+
+/**
+ * Apps whose page needs one particular permission rather than any permission
+ * in the app (the action, without the app prefix). Live opens only with
+ * live:streams.read: every other live permission acts on what that list shows.
+ */
+export const APP_ENTRY_PERMISSIONS: Partial<Record<AdminAppId, string>> = {
+  live: "streams.read",
 }
 
 export function adminAppOrder(id: AdminAppId): number {
