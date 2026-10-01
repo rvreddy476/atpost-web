@@ -5,6 +5,7 @@ import api from "@/lib/admin/api"
 import { readList } from "@/lib/admin/data"
 import type { Seller, Product } from "@atpost/types/commerce"
 import { useAdminMutation } from "@/hooks/useAdminMutation"
+import { kycDocumentsPath, parseKycDocuments, type KycDocument } from "@/lib/admin/kycView"
 
 /**
  * MStore through admin-service (`/v1/admin/commerce`). Every route is
@@ -14,6 +15,9 @@ import { useAdminMutation } from "@/hooks/useAdminMutation"
  *   suspend, unsuspend                commerce:seller.suspend
  *   products queue and decisions      commerce:products.moderate
  *   KYC verify                        commerce:kyc.verify, step-up
+ *   KYC documents list (a READ)       commerce:kyc.verify
+ *   KYC document view (image bytes)   commerce:kyc.verify, step-up, one audit row per view
+ *                                     (lib/admin/kycView.ts; never through axios, never a URL)
  *   pending payouts (a READ)          commerce:payouts.read, step-up
  *   COD remittance settle             commerce:cod.settle, step-up, two-person
  *
@@ -56,6 +60,15 @@ export type PendingPayout = {
 /** Needs step-up: the page offers the 2FA prompt when this fails with STEP_UP_REQUIRED. */
 export function usePendingPayouts({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery<PendingPayout[]>({ queryKey: PAYOUTS_KEY, queryFn: list<PendingPayout>("/payouts/pending"), enabled, retry: false })
+}
+
+/** A seller's KYC documents: type, status, uploaded. No media id, number or URL reaches the console. */
+export function useSellerKycDocuments(sellerId: string) {
+  return useQuery<KycDocument[]>({
+    queryKey: [...SELLERS_KEY, sellerId, "kyc-documents"],
+    queryFn: async () => parseKycDocuments((await api.get(kycDocumentsPath(sellerId))).data),
+    retry: false,
+  })
 }
 
 type ActionVars = { id: string; reason?: string; notes?: string }

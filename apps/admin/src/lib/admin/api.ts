@@ -17,6 +17,9 @@ import { ADMIN_CSRF_COOKIE, readCookie } from "./cookies"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
+/** An API path as the browser must request it (the base path in front), for the few calls that use fetch directly. */
+export const apiUrl = (path: string) => `${API_BASE}${path}`
+
 export const ADMIN_SESSION_ROUTES = {
   login: "/v1/auth/admin-session/login",
   verify2fa: "/v1/auth/admin-session/verify-2fa",

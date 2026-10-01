@@ -17,6 +17,8 @@ export function Dialog({
   onClose,
   children,
   dismissible = true,
+  size = "md",
+  className = "",
 }: {
   open: boolean
   title: string
@@ -25,6 +27,9 @@ export function Dialog({
   children: React.ReactNode
   /** False while a request is in flight, so Escape cannot abandon it half-done. */
   dismissible?: boolean
+  /** "xl" for a viewer (the KYC document canvas); form dialogs stay "md". */
+  size?: "md" | "xl"
+  className?: string
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
@@ -42,7 +47,7 @@ export function Dialog({
       ref={ref}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
-      className="admin-dialog w-[min(28rem,calc(100vw-2rem))] rounded-mo border border-mo-strong bg-mo-surface p-0 text-mo-ink shadow-mo-lift"
+      className={`admin-dialog ${size === "xl" ? "w-[min(72rem,calc(100vw-2rem))]" : "w-[min(28rem,calc(100vw-2rem))]"} rounded-mo border border-mo-strong bg-mo-surface p-0 text-mo-ink shadow-mo-lift ${className}`.trim()}
       onCancel={(event) => {
         event.preventDefault()
         if (dismissible) onClose()

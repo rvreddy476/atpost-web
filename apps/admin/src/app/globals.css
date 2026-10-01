@@ -30,6 +30,15 @@ dialog.admin-dialog::backdrop {
   backdrop-filter: blur(2px);
 }
 
+/* A KYC document is view only: it never reaches paper or "Save as PDF".
+   (Ctrl/Cmd+P is also swallowed while the viewer is open; the browser menu
+   cannot be, so the viewer is simply absent from the printed page.) */
+@media print {
+  .kyc-viewer {
+    display: none !important;
+  }
+}
+
 /* uPlot draws its legend and axes in currentColor-less defaults; give them ink. */
 .admin-chart .u-legend,
 .admin-chart .u-title {

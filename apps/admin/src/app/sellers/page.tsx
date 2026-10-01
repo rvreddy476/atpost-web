@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import { FileText } from "lucide-react"
 import type { Seller } from "@atpost/types/commerce"
 import { PageHeader } from "@/components/blocks/PageHeader"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { ConfirmReasonDialog } from "@/components/blocks/ConfirmReasonDialog"
 import { buttonDanger, buttonPrimary, buttonSecondary } from "@/components/blocks/buttons"
 import { useAdmin } from "@/components/shell/AdminShell"
+import { SellerKycDocuments } from "@/components/commerce/SellerKycDocuments"
 import { useSellerQueue, useApproveSeller, useRejectSeller, useSuspendSeller, useVerifySellerKYC } from "@/hooks/useAdminCommerce"
 import { hasPermission } from "@/lib/admin/me"
 import { adminErrorMessage } from "@/lib/admin/mutation"
@@ -21,6 +23,7 @@ export default function SellersQueuePage() {
   const suspend = useSuspendSeller()
   const verifyKyc = useVerifySellerKYC()
   const [pending, setPending] = useState<Pending | null>(null)
+  const [kycSeller, setKycSeller] = useState<Seller | null>(null)
   const busy = approve.isPending || reject.isPending || suspend.isPending || verifyKyc.isPending
 
   // Buttons follow permissions so nobody is offered an action the server refuses.
@@ -40,6 +43,11 @@ export default function SellersQueuePage() {
       align: "right",
       cell: (s) => (
         <div className="flex flex-wrap justify-end gap-2">
+          {canVerifyKyc ? (
+            <button type="button" className={buttonSecondary} onClick={() => setKycSeller(s)} aria-pressed={kycSeller?.id === s.id}>
+              <FileText className="h-4 w-4" aria-hidden="true" /> KYC documents
+            </button>
+          ) : null}
           {canVerifyKyc ? (
             <button type="button" disabled={busy} className={buttonSecondary} onClick={() => verifyKyc.mutate({ id: s.id })}>
               Verify KYC
@@ -73,7 +81,7 @@ export default function SellersQueuePage() {
 
   return (
     <div>
-      <PageHeader eyebrow="MStore" title="Seller queue" description="Verifying KYC asks for a fresh 2FA code." />
+      <PageHeader eyebrow="MStore" title="Seller queue" description="Viewing KYC documents and verifying KYC ask for a fresh 2FA code." />
       <DataTable
         caption="Sellers awaiting review"
         rows={sellers.data}
@@ -84,6 +92,9 @@ export default function SellersQueuePage() {
         onRetry={() => void sellers.refetch()}
         emptyMessage="No sellers awaiting review."
       />
+      {canVerifyKyc && kycSeller ? (
+        <SellerKycDocuments key={kycSeller.id} seller={kycSeller} onClose={() => setKycSeller(null)} />
+      ) : null}
       <ConfirmReasonDialog
         open={pending !== null}
         title={pending?.action === "suspend" ? "Suspend this seller?" : "Reject this seller?"}
