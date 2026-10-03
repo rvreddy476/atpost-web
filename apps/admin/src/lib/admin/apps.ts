@@ -1,6 +1,7 @@
 /**
  * Every application the console knows how to host, in the order the founder
- * asked for them (live pilots, then money, then content apps, then Mopedu,
+ * asked for them (live pilots, then money, then content apps, then Mopedu and
+ * Doorstep — identity's order, rider before doorstep before trust_safety —
  * with the platform-wide areas last).
  *
  * This list does NOT decide who sees what. `GET /v1/admin/me` does, and
@@ -25,6 +26,7 @@ export const ADMIN_APPS = [
   { id: "chat", label: "Chat" },
   { id: "live", label: "Live" },
   { id: "rider", label: "Mopedu" },
+  { id: "doorstep", label: "Doorstep" },
   { id: "trust_safety", label: "Trust & safety" },
   { id: "platform", label: "Platform" },
 ] as const

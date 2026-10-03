@@ -22,6 +22,7 @@ import {
   Users,
   UtensilsCrossed,
   Wallet,
+  Wrench,
   type LucideIcon,
 } from "lucide-react"
 import type { AdminAppId } from "@/lib/admin/apps"
@@ -40,6 +41,7 @@ const APP_ICONS: Record<AdminAppId, LucideIcon> = {
   chat: MessageCircle,
   live: Radio,
   rider: Bike,
+  doorstep: Wrench,
   trust_safety: ShieldAlert,
   platform: Server,
 }

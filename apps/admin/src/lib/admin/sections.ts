@@ -142,6 +142,27 @@ export const RIDER_SECTIONS = [
   { id: "audit", label: "Audit", anyOf: ["audit.read"] },
 ] as const satisfies readonly SectionDef[]
 
+/**
+ * Doorstep (doorstep-service /internal/admin through admin-service). The key
+ * numbers are the dashboard header (stats.read). Each section opens with the
+ * read its lists need (the contract's x-permission); the writes inside check
+ * their own permission, so a reader sees the rows without the buttons.
+ * Approvals opens for a document reviewer alone, who then sees the document
+ * queue but not the professionals waiting (that list needs pros.read).
+ */
+export const DOORSTEP_SECTIONS = [
+  { id: "approvals", label: "Approvals", anyOf: ["documents.review", "pros.approve"] },
+  { id: "professionals", label: "Professionals", anyOf: ["pros.read"] },
+  { id: "bookings", label: "Bookings", anyOf: ["bookings.read"] },
+  { id: "incidents", label: "Incidents", anyOf: ["incidents.read"] },
+  { id: "tickets", label: "Tickets", anyOf: ["tickets.act"] },
+  { id: "ratings", label: "Ratings", anyOf: ["ratings.moderate"] },
+  { id: "catalogue", label: "Catalogue", anyOf: ["catalogue.read"] },
+  { id: "config", label: "Config", anyOf: ["catalogue.read"] },
+  { id: "money", label: "Money", anyOf: ["settlements.read"] },
+  { id: "audit", label: "Audit", anyOf: ["audit.read"] },
+] as const satisfies readonly SectionDef[]
+
 export function can(me: AdminMe, app: AdminAppId, action: string): boolean {
   return hasPermission(me, app, action)
 }
@@ -160,6 +181,6 @@ export function canReadStats(me: AdminMe, app: AdminAppId): boolean {
 }
 
 /** admin-service's prefix for an application's routes. */
-export function adminPrefix(app: "dating" | "food" | "commerce" | "trust_safety" | "rider"): string {
+export function adminPrefix(app: "dating" | "food" | "commerce" | "trust_safety" | "rider" | "doorstep"): string {
   return app === "trust_safety" ? "/v1/admin/trust" : `/v1/admin/${app}`
 }

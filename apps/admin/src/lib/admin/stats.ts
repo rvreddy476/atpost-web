@@ -10,9 +10,9 @@ import { formatPaise } from "./money"
  * all look the same — an admin must not read "0 overdue grievances" when the
  * truth is "we don't know".
  */
-export type StatsApp = "trust_safety" | "dating" | "food" | "commerce" | "rider"
+export type StatsApp = "trust_safety" | "dating" | "food" | "commerce" | "rider" | "doorstep"
 
-export const STATS_APPS: readonly StatsApp[] = ["trust_safety", "dating", "food", "commerce", "rider"]
+export const STATS_APPS: readonly StatsApp[] = ["trust_safety", "dating", "food", "commerce", "rider", "doorstep"]
 
 export interface StatMetric {
   key: string
@@ -85,6 +85,19 @@ export const STATS_METRICS: Record<StatsApp, readonly StatMetric[]> = {
     { key: "payments_confirming", label: "Payments confirming", alert: "warn", optional: true },
     { key: "refunds_requested", label: "Refunds requested", alert: "warn", optional: true },
     { key: "outstanding_pending_paise", label: "Cancellation fees owed", kind: "paise", optional: true },
+  ],
+  // doorstep-service GET /internal/admin/stats (contract AdminStats), most urgent first. Money in paise.
+  doorstep: [
+    { key: "unassigned_within_2h", label: "Unassigned, slot within 2 h", alert: "bad" },
+    { key: "incidents_open", label: "Open incidents", alert: "bad" },
+    { key: "pros_pending_verification", label: "Professionals to review", alert: "warn" },
+    { key: "documents_pending", label: "Documents to review", alert: "warn" },
+    { key: "bookings_in_progress", label: "Visits in progress" },
+    { key: "bookings_today", label: "Bookings today" },
+    { key: "pros_approved", label: "Approved professionals" },
+    { key: "gmv_today_paise", label: "GMV today", kind: "paise" },
+    { key: "refunds_today_paise", label: "Refunds today", kind: "paise" },
+    { key: "outstanding_paise", label: "Extras outstanding", kind: "paise" },
   ],
 }
 
