@@ -89,6 +89,8 @@ export const STATS_METRICS: Record<StatsApp, readonly StatMetric[]> = {
   // doorstep-service GET /internal/admin/stats (contract AdminStats), most urgent first. Money in paise.
   doorstep: [
     { key: "unassigned_within_2h", label: "Unassigned, slot within 2 h", alert: "bad" },
+    // A captured payment that did not match its booking, or a refund that failed: never confirmed from it.
+    { key: "bookings_needing_attention", label: "Bookings needing attention", alert: "bad" },
     { key: "incidents_open", label: "Open incidents", alert: "bad" },
     { key: "pros_pending_verification", label: "Professionals to review", alert: "warn" },
     { key: "documents_pending", label: "Documents to review", alert: "warn" },

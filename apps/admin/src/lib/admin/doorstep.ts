@@ -1,5 +1,5 @@
 import { checkReason } from "../blocks/confirm"
-import { isRecord, isUuid, num, readList, readObject, str, type Row } from "./data"
+import { humanise, isRecord, isUuid, num, readList, readObject, str, type Row } from "./data"
 import { formatPaise, parseRupeeInput } from "./money"
 
 /**
@@ -114,7 +114,7 @@ export const DOORSTEP_WRITES: Record<DoorstepWrite, DoorstepWriteDef> = {
   "skill.revoke": { label: "Revoke skill", permission: "pros.approve", method: "post", path: (t) => `${DOORSTEP}/professionals/${enc(t.id ?? "")}/skills/${enc(t.skill ?? "")}/verify`, stepUp: false, destructive: true, reason: true, explain: "Dispatch stops offering this professional jobs that need the skill.", done: "Skill revoked" },
   "document.approve": { label: "Approve document", permission: "documents.review", method: "post", path: byId("/documents/:id/decide"), stepUp: true, destructive: false, reason: false, explain: "Marks the document as checked. Approving a police clearance certificate makes the background check clear until 12 months after its issue date." + STEP, done: "Document approved" },
   "document.reject": { label: "Reject document", permission: "documents.review", method: "post", path: byId("/documents/:id/decide"), stepUp: true, destructive: true, reason: true, explain: "The professional must upload the document again; they are told why." + STEP, done: "Document rejected" },
-  "booking.cancel": { label: "Cancel booking", permission: "bookings.cancel", method: "post", path: byId("/bookings/:id/cancel"), stepUp: true, destructive: true, reason: true, explain: "Cancels the booking for the customer and the professional. The customer is refunded in full." + STEP, done: "Booking cancelled" },
+  "booking.cancel": { label: "Cancel booking", permission: "bookings.cancel", method: "post", path: byId("/bookings/:id/cancel"), stepUp: true, destructive: true, reason: true, explain: "Cancels the booking for the customer and the professional. The customer is refunded in full unless you keep a fee." + STEP, done: "Booking cancelled" },
   "booking.redispatch": { label: "Re-run dispatch", permission: "bookings.redispatch", method: "post", path: byId("/bookings/:id/redispatch"), stepUp: false, destructive: false, reason: true, explain: "Releases the current professional and offers the job to the next best fit, never to them. Nobody is hand-picked.", done: "Dispatch re-run" },
   "booking.refund": { label: "Refund", permission: "refunds.issue", method: "post", path: byId("/bookings/:id/refund"), stepUp: true, twoPerson: true, idempotencyRequired: true, destructive: true, reason: true, explain: "Returns money to the customer's payment method. Needs a fresh 2FA code and a second admin's approval before any money moves.", done: "Refund requested" },
   "incident.acknowledge": { label: "Acknowledge", permission: "incidents.act", method: "post", path: byId("/incidents/:id/acknowledge"), stepUp: false, destructive: false, reason: false, explain: "Records that someone is looking at this incident.", done: "Incident acknowledged" },
@@ -504,6 +504,70 @@ export function checkDoorstepRefund(text: string, roomPaise: number): { ok: true
 }
 
 export const refundBody = (amountPaise: number, reason: string, payment: RefundPayment) => ({ amount_paise: amountPaise, reason, payment })
+
+/**
+ * The parts of AdminBookingDetail the console shows, read without trusting
+ * the shape. The booking's start and end OTPs are dropped here whatever the
+ * server sends (the contract says they are always null for admins): no
+ * admin screen ever holds an OTP value.
+ */
+export interface AdminBookingView {
+  booking: Row
+  customerUserId: string | null
+  /** The professional whose calendar holds the slot (dispatch offers to them first); null when none is reserved. */
+  reservedProId: string | null
+  /** Money did not match (amount, payer, intent or currency) or a refund failed; the booking was never confirmed from it. */
+  needsAttention: boolean
+  attentionReason: string | null
+}
+
+const OTP_KEYS = ["start_otp", "end_otp"] as const
+
+export function readAdminBooking(detail: Row | null): AdminBookingView | null {
+  if (!detail || !isRecord(detail.booking)) return null
+  const booking: Row = { ...detail.booking }
+  for (const key of OTP_KEYS) delete booking[key]
+  return {
+    booking,
+    customerUserId: str(detail.customer_user_id),
+    reservedProId: str(detail.reserved_pro_id),
+    needsAttention: detail.needs_attention === true,
+    attentionReason: str(detail.attention_reason),
+  }
+}
+
+/** The sentence the attention banner shows; null when the booking is not flagged. */
+export function attentionMessage(view: Pick<AdminBookingView, "needsAttention" | "attentionReason">): string | null {
+  if (!view.needsAttention) return null
+  return view.attentionReason ?? "Flagged without a recorded reason. Check the payments and refunds below before acting."
+}
+
+/** "admin_cancel" and "admin_<key hash>" are ops causes; the rest read as written. */
+export function refundCauseLabel(cause: unknown): string {
+  const c = str(cause) ?? ""
+  if (c === "admin_cancel") return "Ops cancellation"
+  if (/^admin_[0-9a-f]{8,}$/.test(c)) return "Ops refund"
+  return humanise(c)
+}
+
+/**
+ * The optional fee an ops cancel keeps, typed in rupees: blank sends none
+ * (the customer is refunded everything refundable), 0 keeps nothing, and a
+ * fee may not exceed what was captured and not already refunded (the server
+ * caps it there; the console refuses rather than silently capping).
+ */
+export function checkCancelFee(text: string, roomPaise: number): { ok: true; feePaise: number | null } | { ok: false; problem: string } {
+  const fee = rupeesOrZero(text.trim())
+  if (fee === null) return { ok: true, feePaise: null }
+  if (fee === undefined) return { ok: false, problem: "Enter a rupee amount of zero or more, with at most two decimals, or leave it blank." }
+  if (fee > Math.max(0, roomPaise)) {
+    return { ok: false, problem: roomPaise > 0 ? `At most ${formatPaise(roomPaise)} (captured and not refunded) can be kept.` : "Nothing captured is left to keep as a fee." }
+  }
+  return { ok: true, feePaise: fee }
+}
+
+/** The ops cancel body: the reason always; fee_paise only when a fee was typed. */
+export const cancelBody = (reason: string, feePaise: number | null) => (feePaise === null ? { reason } : { reason, fee_paise: feePaise })
 
 // ---------------------------------------------------------------------------
 // Forms

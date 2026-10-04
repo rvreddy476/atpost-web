@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeft } from "lucide-react"
+import { AlertTriangle, ArrowLeft } from "lucide-react"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { Details, Field, IdText, LookupForm, StatusPill } from "@/components/blocks/bits"
 import { buttonDanger, buttonGhost, buttonSecondary, inputClass } from "@/components/blocks/buttons"
@@ -12,14 +12,19 @@ import {
   DECISION_BODIES,
   DOORSTEP_PAGE,
   DOORSTEP_READS,
+  attentionMessage,
   bookingTone,
   canCancelBooking,
   canRedispatch,
+  cancelBody,
+  checkCancelFee,
   checkDoorstepRefund,
   detailRows,
   nextCursor,
   paise,
+  readAdminBooking,
   refundBody,
+  refundCauseLabel,
   refundRoom,
   type RefundPayment,
   type Tone,
@@ -32,7 +37,12 @@ const extraTone = (status: unknown): Tone => {
   return s === "approved" || s === "billed" ? "good" : s === "proposed" ? "warn" : "normal"
 }
 
-/** Bookings by status, city and slot date (cursor-paged), and one booking's detail. */
+/**
+ * Bookings by status, city and slot date (cursor-paged), and one booking's
+ * detail. The list rows (BookingSummary) carry no needs-attention flag and the
+ * route takes no filter for it, so flagged bookings are counted on the
+ * header's stat tile and shown on the detail.
+ */
 export function DoorstepBookings() {
   const [status, setStatus] = useState("")
   const [city, setCity] = useState("")
@@ -100,17 +110,19 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
   const [pending, setPending] = useState<Pending>(null)
   const [payment, setPayment] = useState<RefundPayment>("booking")
   const [amount, setAmount] = useState("")
+  const [fee, setFee] = useState("")
   const mutation = useDoorstepMutation({ onDone: () => setPending(null) })
 
   const d = detail.data
-  const b = d && isRecord(d.booking) ? d.booking : null
+  const view = readAdminBooking(d)
+  const b = view?.booking ?? null
   const back = (
     <button type="button" className={buttonGhost} onClick={onBack}>
       <ArrowLeft className="h-4 w-4" aria-hidden="true" /> All bookings
     </button>
   )
   if (detail.isLoading) return <div className="space-y-3">{back}<p className="text-sm text-mo-body">Loading the booking…</p></div>
-  if (!b) {
+  if (!view || !b) {
     return (
       <div className="space-y-3">
         {back}
@@ -126,6 +138,13 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
   const pro = isRecord(b.professional) ? b.professional : null
   const room = refundRoom(d, payment)
   const refundCheck = pending === "booking.refund" ? checkDoorstepRefund(amount, room) : null
+  const cancelRoom = refundRoom(d, "booking")
+  const feeCheck = pending === "booking.cancel" ? checkCancelFee(fee, cancelRoom) : null
+  const attention = attentionMessage(view)
+  const openCancel = () => {
+    setFee("")
+    setPending("booking.cancel")
+  }
   const openRefund = () => {
     setAmount("")
     setPayment(refundRoom(d, "booking") > 0 ? "booking" : "extras")
@@ -135,6 +154,16 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
   return (
     <div className="space-y-4">
       {back}
+      {attention ? (
+        <div role="alert" className="flex items-start gap-3 rounded-mo border border-mo-bad/60 bg-mo-bad/10 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-mo-bad" aria-hidden="true" />
+          <div>
+            <p className="font-semibold text-mo-ink">Needs attention</p>
+            <p className="text-sm text-mo-ink">{attention}</p>
+            <p className="mt-1 text-xs text-mo-body">The booking was not confirmed from this payment. Check the payments and refunds below before cancelling or refunding.</p>
+          </div>
+        </div>
+      ) : null}
       <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Booking detail">
         <div className="mb-3 flex items-center gap-2">
           <h3 className="flex-1 font-mo-display text-lg font-semibold text-mo-ink">{str(b.service_name) ?? "Booking"}</h3>
@@ -143,13 +172,14 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
         <Details
           items={[
             ["Booking", <IdText key="b" id={b.id} />],
-            ["Customer", <IdText key="c" id={d?.customer_user_id} />],
+            ["Customer", <IdText key="c" id={view.customerUserId} />],
             ["Category", humanise(b.category_slug)],
             ["City · zone", <span key="z">{str(b.city_code) ?? "—"} · <IdText id={b.zone_id} /></span>],
             ["Locality", address ? `${str(address.locality) ?? "—"} ${str(address.pincode) ?? ""}`.trim() : null],
             ["Slot", `${when(b.slot_start)} – ${when(b.slot_end)} (${num(b.duration_minutes) ?? "—"} min)`],
             ["Woman professional required", b.require_female_pro === true ? "Yes" : "No"],
             ["Professional", pro ? `${str(pro.first_name) ?? "—"} · ${num(pro.jobs_completed) ?? 0} jobs` : "Not assigned"],
+            ["Slot reserved for", view.reservedProId ? <IdText key="r" id={view.reservedProId} /> : "No professional reserved"],
             ["Total (GST incl.)", `${paise(b.total_paise)} (taxable ${paise(b.taxable_paise)} + tax ${paise(b.tax_paise)})`],
             ["Paid / refunded", `${paise(b.paid_paise)} / ${paise(b.refunded_paise)}`],
             ["Extras / outstanding", `${paise(b.extras_total_paise)} / ${paise(b.outstanding_paise)}`],
@@ -165,7 +195,7 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
             </button>
           ) : null}
           {mayWrite("booking.cancel") && canCancelBooking(status) ? (
-            <button type="button" className={buttonDanger} onClick={() => setPending("booking.cancel")}>
+            <button type="button" className={buttonDanger} onClick={openCancel}>
               Cancel booking
             </button>
           ) : null}
@@ -221,7 +251,7 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
           caption="Refunds"
           rows={detailRows(d, "refunds")}
           columns={[
-            { key: "cause", header: "Cause", value: (r) => str(r.cause), cell: (r) => humanise(r.cause) },
+            { key: "cause", header: "Cause", value: (r) => str(r.cause), cell: (r) => refundCauseLabel(r.cause) },
             { key: "amount", header: "Amount", value: (r) => num(r.amount_paise), align: "right", cell: (r) => paise(r.amount_paise) },
             { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={r.status} tone={str(r.status) === "succeeded" ? "good" : str(r.status) === "failed" ? "bad" : "warn"} /> },
             { key: "when", header: "Requested", value: (r) => str(r.created_at), cell: (r) => when(r.created_at) },
@@ -261,10 +291,14 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
         write={pending}
         subject={pending === "booking.refund" ? null : "this booking"}
         busy={mutation.isPending}
-        canConfirm={pending !== "booking.refund" || refundCheck?.ok === true}
+        canConfirm={pending === "booking.refund" ? refundCheck?.ok === true : pending === "booking.cancel" ? feeCheck?.ok === true : true}
         onConfirm={(reason) => {
           if (pending === "booking.refund") {
             if (refundCheck?.ok) mutation.mutate({ write: pending, target: { id }, body: refundBody(refundCheck.amountPaise, reason, payment) })
+            return
+          }
+          if (pending === "booking.cancel") {
+            if (feeCheck?.ok) mutation.mutate({ write: pending, target: { id }, body: cancelBody(reason, feeCheck.feePaise) })
             return
           }
           if (pending) mutation.mutate({ write: pending, target: { id }, body: DECISION_BODIES.reason(reason) })
@@ -287,7 +321,19 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
             <p className="text-xs text-mo-body">{REFUND_SECOND_APPROVER_NOTE}</p>
           </div>
         ) : pending === "booking.cancel" ? (
-          <p className="text-sm text-mo-body">The customer is refunded in full; the professional&rsquo;s slot is released.</p>
+          <div className="space-y-3">
+            <Field
+              label="Fee to keep (₹, optional)"
+              hint={feeCheck && !feeCheck.ok ? <span className="text-mo-bad">{feeCheck.problem}</span> : `Blank refunds everything refundable (${paise(cancelRoom)}).`}
+            >
+              {(fid) => <input id={fid} className={inputClass} inputMode="decimal" value={fee} placeholder="0" onChange={(e) => setFee(e.target.value)} />}
+            </Field>
+            <p className="text-sm text-mo-body">
+              {feeCheck?.ok && feeCheck.feePaise !== null && feeCheck.feePaise > 0
+                ? `The customer is refunded ${paise(cancelRoom - feeCheck.feePaise)} and ${paise(feeCheck.feePaise)} is kept as the fee; the professional’s slot is released.`
+                : "The customer is refunded in full; the professional’s slot is released."}
+            </p>
+          </div>
         ) : null}
       </DoorstepActionDialog>
     </div>

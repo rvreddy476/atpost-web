@@ -91,7 +91,7 @@ describe("Doorstep in the console's registries", () => {
     expect(tile("incidents_open")).toMatchObject({ display: "0", tone: "normal" })
     expect(tile("gmv_today_paise")?.display).toBe("₹1,234.56")
     expect(tile("documents_pending")?.display).toBe("unavailable")
-    expect(view.tiles.map((t) => t.key)).toHaveLength(10)
+    expect(view.tiles.map((t) => t.key)).toHaveLength(11)
   })
 })
 
