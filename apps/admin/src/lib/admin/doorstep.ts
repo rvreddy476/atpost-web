@@ -26,6 +26,7 @@ export const DOORSTEP_PAGE = 50
 // ---------------------------------------------------------------------------
 
 export type DoorstepWrite =
+  | "pro.tax_registration"
   | "pro.approve"
   | "pro.reject"
   | "pro.suspend"
@@ -66,6 +67,8 @@ export type DoorstepWrite =
   | "cancellation_rule.update"
   | "commission_rule.create"
   | "commission_rule.update"
+  | "pro_price.approve"
+  | "pro_price.reject"
 
 /** What a write acts on: a row id, a city code, and for a skill decision the skill code. */
 export interface DoorstepTarget {
@@ -105,17 +108,18 @@ const fixed = (path: string) => () => `${DOORSTEP}${path}`
 const STEP = " Needs a fresh 2FA code."
 
 export const DOORSTEP_WRITES: Record<DoorstepWrite, DoorstepWriteDef> = {
-  "pro.approve": { label: "Approve", permission: "pros.approve", method: "post", path: byId("/professionals/:id/approve"), stepUp: false, destructive: false, reason: false, explain: "The professional can go on duty and receive offers. The server refuses while any onboarding step is missing.", done: "Professional approved" },
+  "pro.tax_registration": { label: "Record GST registration", permission: "pros.approve", method: "post", path: byId("/professionals/:id/tax-registration"), stepUp: true, destructive: false, reason: true, explain: "Manually verify the active GST registration and its ownership before recording it. Leave the GSTIN blank to remove it. This does not approve the professional, their skills or prices. Changes are refused while they have active bookings." + STEP, done: "Tax registration recorded" },
+  "pro.approve": { label: "Approve", permission: "pros.approve", method: "post", path: byId("/professionals/:id/approve"), stepUp: false, destructive: false, reason: false, explain: "The professional can go on duty and be picked by customers. The server refuses while any onboarding step is missing. Their selfie, skills, documents and prices are each decided on their own; approving the professional approves none of them.", done: "Professional approved" },
   "pro.reject": { label: "Reject", permission: "pros.approve", method: "post", path: byId("/professionals/:id/reject"), stepUp: false, destructive: true, reason: true, explain: "The application is refused and the professional role is withdrawn. They are told why.", done: "Professional rejected" },
   "pro.suspend": { label: "Suspend", permission: "pros.suspend", method: "post", path: byId("/professionals/:id/suspend"), stepUp: true, destructive: true, reason: true, explain: "The professional is taken off duty and their future jobs are re-dispatched to others." + STEP, done: "Professional suspended" },
   "pro.reinstate": { label: "Reinstate", permission: "pros.suspend", method: "post", path: byId("/professionals/:id/reinstate"), stepUp: true, destructive: false, reason: true, explain: "Lifts the suspension: the professional is approved again and can go on duty." + STEP, done: "Professional reinstated" },
   "pro.block": { label: "Block", permission: "pros.suspend", method: "post", path: byId("/professionals/:id/block"), stepUp: true, destructive: true, reason: true, explain: "Blocks the professional permanently and withdraws the professional role." + STEP, done: "Professional blocked" },
-  "skill.verify": { label: "Verify skill", permission: "pros.approve", method: "post", path: (t) => `${DOORSTEP}/professionals/${enc(t.id ?? "")}/skills/${enc(t.skill ?? "")}/verify`, stepUp: false, destructive: false, reason: false, explain: "Dispatch may offer this professional jobs that need the skill (for a trade, after checking their certificate).", done: "Skill verified" },
+  "skill.verify": { label: "Verify skill", permission: "pros.approve", method: "post", path: (t) => `${DOORSTEP}/professionals/${enc(t.id ?? "")}/skills/${enc(t.skill ?? "")}/verify`, stepUp: false, destructive: false, reason: false, explain: "You confirm this professional can do the work. Declaring a skill never verifies it. Once verified, customers can pick them for services that need it. A skill that needs a certificate is verified by approving its trade certificate; Verify then answers that a certificate is required.", done: "Skill verified" },
   "skill.revoke": { label: "Revoke skill", permission: "pros.approve", method: "post", path: (t) => `${DOORSTEP}/professionals/${enc(t.id ?? "")}/skills/${enc(t.skill ?? "")}/verify`, stepUp: false, destructive: true, reason: true, explain: "Dispatch stops offering this professional jobs that need the skill.", done: "Skill revoked" },
-  "document.approve": { label: "Approve document", permission: "documents.review", method: "post", path: byId("/documents/:id/decide"), stepUp: true, destructive: false, reason: false, explain: "Marks the document as checked. Approving a police clearance certificate makes the background check clear until 12 months after its issue date." + STEP, done: "Document approved" },
+  "document.approve": { label: "Approve document", permission: "documents.review", method: "post", path: byId("/documents/:id/decide"), stepUp: true, destructive: false, reason: false, explain: "Records that you checked it: nothing a professional uploads is approved without an admin. Approving a selfie passes the face-match step, a trade certificate verifies its skill, and a police clearance certificate makes the background check clear until 12 months after its issue date." + STEP, done: "Document approved" },
   "document.reject": { label: "Reject document", permission: "documents.review", method: "post", path: byId("/documents/:id/decide"), stepUp: true, destructive: true, reason: true, explain: "The professional must upload the document again; they are told why." + STEP, done: "Document rejected" },
   "booking.cancel": { label: "Cancel booking", permission: "bookings.cancel", method: "post", path: byId("/bookings/:id/cancel"), stepUp: true, destructive: true, reason: true, explain: "Cancels the booking for the customer and the professional. The customer is refunded in full unless you keep a fee." + STEP, done: "Booking cancelled" },
-  "booking.redispatch": { label: "Re-run dispatch", permission: "bookings.redispatch", method: "post", path: byId("/bookings/:id/redispatch"), stepUp: false, destructive: false, reason: true, explain: "Releases the current professional and offers the job to the next best fit, never to them. Nobody is hand-picked.", done: "Dispatch re-run" },
+  "booking.redispatch": { label: "Offer the customer alternatives", permission: "bookings.redispatch", method: "post", path: byId("/bookings/:id/redispatch"), stepUp: false, destructive: false, reason: true, explain: "Takes the job off the current professional, with no penalty to them. The customer is told and picks another professional (a dearer one is charged the difference, a cheaper one refunded it) or cancels for a full refund. The current professional, and anyone you exclude, are left off their list; ops never assign anyone. With no choice within 30 minutes the booking is cancelled with a full refund.", done: "Customer asked to pick another professional" },
   "booking.refund": { label: "Refund", permission: "refunds.issue", method: "post", path: byId("/bookings/:id/refund"), stepUp: true, twoPerson: true, idempotencyRequired: true, destructive: true, reason: true, explain: "Returns money to the customer's payment method. Needs a fresh 2FA code and a second admin's approval before any money moves.", done: "Refund requested" },
   "incident.acknowledge": { label: "Acknowledge", permission: "incidents.act", method: "post", path: byId("/incidents/:id/acknowledge"), stepUp: false, destructive: false, reason: false, explain: "Records that someone is looking at this incident.", done: "Incident acknowledged" },
   "incident.resolve": { label: "Resolve", permission: "incidents.act", method: "post", path: byId("/incidents/:id/resolve"), stepUp: false, stepUpWhen: (body) => body.lift_suspension === true, destructive: false, reason: true, explain: "Closes the incident with what was done. An automatic suspension stays unless you lift it here; lifting it puts the professional back on the platform and needs a fresh 2FA code.", done: "Incident resolved" },
@@ -145,6 +149,8 @@ export const DOORSTEP_WRITES: Record<DoorstepWrite, DoorstepWriteDef> = {
   "cancellation_rule.update": { label: "Update cancellation rule", permission: "config.write", method: "patch", path: byId("/cancellation-rules/:id"), stepUp: true, destructive: false, reason: false, explain: "Changes what customers are charged for cancelling." + STEP, done: "Cancellation rule updated" },
   "commission_rule.create": { label: "Create commission rule", permission: "config.write", method: "post", path: fixed("/commission-rules"), stepUp: true, destructive: false, reason: false, explain: "Changes the platform's share of what professionals earn." + STEP, done: "Commission rule created" },
   "commission_rule.update": { label: "Update commission rule", permission: "config.write", method: "patch", path: byId("/commission-rules/:id"), stepUp: true, destructive: false, reason: false, explain: "Changes or ends the platform's share of what professionals earn." + STEP, done: "Commission rule updated" },
+  "pro_price.approve": { label: "Approve price", permission: "prices.review", method: "post", path: byId("/pro-prices/:id/approve"), stepUp: true, destructive: false, reason: false, explain: "Customers can book this professional at this price from now; their previous approved price for this item ends now. Bookings already made keep their price." + STEP, done: "Price approved" },
+  "pro_price.reject": { label: "Reject price", permission: "prices.review", method: "post", path: byId("/pro-prices/:id/reject"), stepUp: false, destructive: true, reason: true, explain: "The price never goes live. The professional is told why and can submit another; any price already approved for this item stays live.", done: "Price rejected" },
 }
 
 /** Does this write ALWAYS need a fresh 2FA code? */
@@ -160,6 +166,7 @@ export const doorstepTwoPerson = (write: DoorstepWrite) => DOORSTEP_WRITES[write
  * reads once more, rather than showing a refusal.
  */
 export const DOORSTEP_STEP_UP_READS = {
+  taxRegistration: { permission: "pros.approve", path: (id: string) => `${DOORSTEP}/professionals/${enc(id)}/tax-registration` },
   professional: { permission: "pros.read", path: (id: string) => `${DOORSTEP}/professionals/${enc(id)}` },
   documents: { permission: "documents.review", path: (status: string) => `${DOORSTEP}/documents${(DOCUMENT_STATUSES as readonly string[]).includes(status) ? `?status=${status}` : ""}` },
 } as const
@@ -199,6 +206,10 @@ export const DECISION_BODIES = {
   skill: (verified: boolean, reason: string) => (reason ? { verified, reason } : { verified }),
   resolve: (resolution: string, liftSuspension: boolean) => ({ resolution, lift_suspension: liftSuspension }),
   ticket: (status: string, note: string) => (note ? { status, note } : { status }),
+  /** PriceDecisionInput: the reason is optional to approve, required (ten characters or more) to reject. */
+  price: (reason: string) => (reason ? { reason } : {}),
+  /** AdminRedispatchInput: a reason, and professionals to EXCLUDE only (strict decoding refuses naming one to assign). */
+  redispatch: (reason: string, excludeProIds: readonly string[]) => (excludeProIds.length > 0 ? { reason, exclude_pro_ids: [...excludeProIds] } : { reason }),
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +276,13 @@ export const DOORSTEP_READS = {
   slotConfigs: (city: string) => `${DOORSTEP}/slot-configs${query({ city: cityCode(city) })}`,
   cancellationRules: (city: string) => `${DOORSTEP}/cancellation-rules${query({ city: cityCode(city) })}`,
   commissionRules: (city: string) => `${DOORSTEP}/commission-rules${query({ city: cityCode(city) })}`,
+  proPrices: (f: { status?: string; city?: string; proId?: string }, cursor = "") =>
+    `${DOORSTEP}/pro-prices${query({
+      status: (PRO_PRICE_STATUSES as readonly string[]).includes(f.status ?? "") ? f.status : "",
+      city: cityCode(f.city ?? ""),
+      pro_id: isUuid(f.proId ?? "") ? (f.proId ?? "").trim().toLowerCase() : "",
+      cursor,
+    })}`,
 } as const
 
 /** The next cursor of a cursor-paged list, or "" at the end. */
@@ -277,8 +295,9 @@ export function nextCursor(raw: unknown): string {
 // ---------------------------------------------------------------------------
 
 export const PRO_STATUSES = ["draft", "pending_verification", "approved", "suspended", "rejected", "blocked"] as const
-export const BOOKING_STATUSES = ["pending_payment", "confirmed", "assigned", "en_route", "arrived", "in_progress", "awaiting_extras_payment", "completed", "cancelled", "expired", "customer_no_show", "pro_no_show"] as const
+export const BOOKING_STATUSES = ["pending_payment", "confirmed", "assigned", "en_route", "arrived", "in_progress", "awaiting_extras_payment", "completed", "cancelled", "expired", "customer_no_show", "pro_no_show", "pro_unavailable"] as const
 export const DOCUMENT_STATUSES = ["pending", "approved", "rejected"] as const
+export const PRO_PRICE_STATUSES = ["pending", "approved", "rejected", "withdrawn"] as const
 export const INCIDENT_STATUSES = ["open", "acknowledged", "resolved"] as const
 export const TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"] as const
 export const FAMILIES = ["HOME_CLEANING", "PEST_CONTROL", "APPLIANCE_REPAIR", "INSTALLATION_REPAIR", "PAINTING", "BEAUTY_SALON"] as const
@@ -302,12 +321,20 @@ export const ONBOARDING_STEP_LABELS: Record<string, string> = {
 
 export const DOCUMENT_KIND_LABELS: Record<string, string> = {
   police_certificate: "Police clearance certificate",
+  trade_certificate: "Trade certificate",
+  selfie: "Selfie",
   aadhaar: "Aadhaar",
   pan: "PAN card",
-  other: "Other (trade certificate)",
+  other: "Other document",
 }
 
 export const documentKindLabel = (kind: unknown) => DOCUMENT_KIND_LABELS[str(kind) ?? ""] ?? "Document"
+
+/** The kind, and for a trade certificate the skill it is for: "Trade certificate (electrician)". */
+export function documentLabel(doc: Row): string {
+  const skill = str(doc.skill_code)
+  return str(doc.kind) === "trade_certificate" && skill ? `${documentKindLabel(doc.kind)} (${skill})` : documentKindLabel(doc.kind)
+}
 export const stepLabel = (step: string) => ONBOARDING_STEP_LABELS[step] ?? step
 
 export type Tone = "bad" | "warn" | "good" | "normal"
@@ -325,7 +352,7 @@ const ENDED_BOOKINGS: readonly string[] = ["completed", "cancelled", "expired", 
 
 export function bookingTone(status: unknown): Tone {
   const s = str(status) ?? ""
-  if (s === "cancelled" || s === "expired" || s.endsWith("no_show")) return "bad"
+  if (s === "cancelled" || s === "expired" || s.endsWith("no_show") || s === "pro_unavailable") return "bad"
   if (s === "pending_payment" || LIVE_BOOKINGS.includes(s)) return "warn"
   if (s === "completed") return "good"
   return "normal"
@@ -333,7 +360,7 @@ export function bookingTone(status: unknown): Tone {
 
 export function reviewTone(status: unknown): Tone {
   const s = str(status)
-  if (s === "rejected" || s === "failed" || s === "revoked" || s === "expired") return "bad"
+  if (s === "rejected" || s === "failed" || s === "revoked" || s === "expired" || s === "withdrawn") return "bad"
   if (s === "pending" || s === "consider") return "warn"
   if (s === "approved" || s === "verified" || s === "passed" || s === "clear") return "good"
   return "normal"
@@ -451,6 +478,144 @@ export function sortDocumentQueue(rows: Row[]): Row[] {
   return [...rows].sort((a, b) => rank(a) - rank(b) || (str(a.created_at) ?? "").localeCompare(str(b.created_at) ?? ""))
 }
 
+// --- Nothing approves itself (founder, 4 Oct 2026) -----------------------------
+
+/** doorstep-service's default SELFIE_MIN_SIMILARITY (0–100); the deployed value may differ, so it is only a guide. */
+export const FACE_MATCH_GUIDE = 80
+
+export interface FaceMatchAdvice {
+  /** The face match's similarity, 0–100; null when it could not be compared. */
+  score: number | null
+  /** The check's status: pending (waiting for an admin), passed (an admin approved the selfie), failed, expired. */
+  status: string | null
+  tone: Tone
+  /** What the reviewer is told. Always advice: the admin's own decision approves the selfie. */
+  advice: string
+}
+
+/**
+ * The selfie face match from a professional detail's kyc_checks, as advice
+ * for the reviewer. The service never approves a selfie on its score: it
+ * writes the check pending (or failed, for an image with no face) and an
+ * admin approves or rejects the selfie document; the database refuses a
+ * passed check without that admin. Null when the detail has no face match.
+ */
+export function faceMatchAdvice(detail: Row | null): FaceMatchAdvice | null {
+  const check = detailRows(detail, "kyc_checks").find((c) => str(c.kind) === "selfie_face_match")
+  if (!check) return null
+  const raw = num(check.score)
+  const score = raw === null ? null : Math.max(0, Math.min(100, raw))
+  const status = str(check.status)
+  const shown = score === null ? null : Number.isInteger(score) ? String(score) : score.toFixed(1)
+  if (status === "passed") return { score, status, tone: "good", advice: `Approved by an admin${shown === null ? "" : ` (similarity ${shown} of 100)`}.` }
+  if (status === "failed") return { score, status, tone: "bad", advice: "The selfie could not be compared (no face found, or an unreadable image). Reject it so the professional takes a new one." }
+  if (score === null) return { score, status, tone: "warn", advice: "No similarity score: the comparison was unavailable. Compare the selfie with the DigiLocker photo yourself before deciding." }
+  if (score >= FACE_MATCH_GUIDE) {
+    return { score, status, tone: "normal", advice: `Similarity ${shown} of 100, at or above the usual threshold (${FACE_MATCH_GUIDE}). This is advice only: look at the selfie and decide.` }
+  }
+  return { score, status, tone: "warn", advice: `Similarity ${shown} of 100, below the usual threshold (${FACE_MATCH_GUIDE}). Look carefully: approve only if you are sure it is the same person.` }
+}
+
+/** The document detail rows a reviewer still has to decide (pending), selfies included. */
+export const pendingDocuments = (detail: Row | null): Row[] => detailRows(detail, "documents").filter((d) => str(d.status) === "pending")
+
+/**
+ * A professional's skills for review: every declared skill, pending ones
+ * first (nothing is verified on declaration), then verified, then revoked.
+ */
+export function skillsForReview(detail: Row | null): Row[] {
+  const rank = (r: Row) => (str(r.status) === "pending" ? 0 : str(r.status) === "verified" ? 1 : 2)
+  return [...detailRows(detail, "skills")].sort((a, b) => rank(a) - rank(b) || (str(a.skill_code) ?? "").localeCompare(str(b.skill_code) ?? ""))
+}
+
+/** A skill's status as the reviewer reads it. */
+export function skillStatusLabel(status: unknown): string {
+  const s = str(status)
+  if (s === "pending") return "Waiting for an admin"
+  if (s === "verified") return "Verified by an admin"
+  if (s === "revoked") return "Revoked"
+  return humanise(s)
+}
+
+// --- Professionals' own prices (B1, doorstep:prices.review) ----------------------
+
+export const UNIT_LABELS: Record<string, string> = { per_job: "per job", per_hour: "per hour", per_month: "per month" }
+export const unitLabel = (unit: unknown) => UNIT_LABELS[str(unit) ?? ""] ?? humanise(unit)
+
+export interface ProPriceView {
+  id: string | null
+  proId: string | null
+  proName: string
+  proStatus: string | null
+  city: string | null
+  serviceName: string
+  categorySlug: string | null
+  itemKind: string | null
+  itemName: string
+  unit: string | null
+  status: string | null
+  /** What the professional asks (GST-inclusive paise per unit). */
+  proposedPaise: number | null
+  /** Their live approved price for the item, from another row; null when they have none. */
+  currentApprovedPaise: number | null
+  /** The city's suggested price; never charged, null when none is set. */
+  suggestedPaise: number | null
+  submittedAt: string | null
+  reviewedAt: string | null
+  reviewedBy: string | null
+  reason: string | null
+}
+
+/** One AdminProPrice row, read without trusting its shape. */
+export function readProPrice(row: Row): ProPriceView {
+  return {
+    id: str(row.id),
+    proId: str(row.pro_id),
+    proName: str(row.pro_display_name) ?? "Professional",
+    proStatus: str(row.pro_status),
+    city: str(row.city_code),
+    serviceName: str(row.service_name) ?? "Service",
+    categorySlug: str(row.category_slug),
+    itemKind: str(row.item_kind),
+    itemName: str(row.item_name) ?? "Item",
+    unit: str(row.unit),
+    status: str(row.status),
+    proposedPaise: num(row.price_paise),
+    currentApprovedPaise: num(row.current_approved_paise),
+    suggestedPaise: num(row.suggested_price_paise),
+    submittedAt: str(row.submitted_at),
+    reviewedAt: str(row.reviewed_at),
+    reviewedBy: str(row.reviewed_by),
+    reason: str(row.reason),
+  }
+}
+
+/** "Occupied kitchen (add-on)" style item label: options read bare. */
+export const priceItemLabel = (v: Pick<ProPriceView, "itemName" | "itemKind">) => (v.itemKind === "addon" ? `${v.itemName} (add-on)` : v.itemName)
+
+/**
+ * The proposed price against another (current approved, or suggested):
+ * "+₹100.00 (+5.6%)", "−₹50.00 (−3.1%)", "Same". Null when either is missing.
+ */
+export function priceDelta(proposedPaise: number | null, basePaise: number | null): { paise: number; label: string; tone: Tone } | null {
+  if (proposedPaise === null || basePaise === null) return null
+  const diff = Math.round(proposedPaise - basePaise)
+  if (diff === 0) return { paise: 0, label: "Same", tone: "normal" }
+  const sign = diff > 0 ? "+" : "−"
+  const pct = basePaise > 0 ? ` (${sign}${(Math.abs(diff) / basePaise * 100).toFixed(1)}%)` : ""
+  return { paise: diff, label: `${sign}${formatPaise(Math.abs(diff))}${pct}`, tone: diff > 0 ? "warn" : "normal" }
+}
+
+/** What the reviewer should know before deciding: the professional's own status, what stays live meanwhile, a missing suggested price. */
+export function priceReviewNotes(v: ProPriceView): string[] {
+  const notes: string[] = []
+  if (v.proStatus !== "approved") notes.push(`The professional is ${humanise(v.proStatus).toLowerCase()}: the price is only bookable once they are approved.`)
+  if (v.currentApprovedPaise === null) notes.push("This is their first price for this item; nothing is live for it until you approve.")
+  else notes.push(`Their approved price ${formatPaise(v.currentApprovedPaise)} stays live until you decide.`)
+  if (v.suggestedPaise === null) notes.push("The city has no suggested price for this item.")
+  return notes
+}
+
 /** Today in India (where every Doorstep city is) as YYYY-MM-DD. */
 export function indiaToday(now = new Date()): string {
   return new Date(now.getTime() + 330 * 60_000).toISOString().slice(0, 10)
@@ -469,10 +634,152 @@ export function canCancelBooking(status: unknown): boolean {
   return s !== "" && !isEndedBooking(s) && s !== "in_progress" && s !== "awaiting_extras_payment"
 }
 
-/** Dispatch can be re-run while the booking is paid and the visit has not begun. */
+/**
+ * Ops may take the job off the professional (the customer then picks
+ * another) from confirmed, assigned, en route or arrived (doorstep-service
+ * adminRedispatchable, B1): never once the visit has started, and not while
+ * the booking already waits for the customer's pick.
+ */
 export function canRedispatch(status: unknown): boolean {
   const s = str(status)
-  return s === "confirmed" || s === "assigned" || s === "en_route"
+  return s === "confirmed" || s === "assigned" || s === "en_route" || s === "arrived"
+}
+
+/**
+ * Professionals to leave off the customer's list, typed one per line or
+ * comma-separated: full ids only, at most 50 (AdminRedispatchInput). Blank
+ * is none; a repeated id is sent once.
+ */
+export function parseExcludeIds(raw: string): { ok: true; ids: string[] } | { ok: false; problem: string } {
+  const parts = raw
+    .split(/[\s,]+/)
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean)
+  const bad = parts.find((p) => !isUuid(p))
+  if (bad !== undefined) return { ok: false, problem: `Not a full professional id: ${bad}` }
+  const ids = [...new Set(parts)]
+  if (ids.length > 50) return { ok: false, problem: "Exclude at most 50 professionals." }
+  return { ok: true, ids }
+}
+
+// --- B1: the professional is gone; the customer picks another -------------------
+
+export const UNAVAILABLE_CAUSE_LABELS: Record<string, string> = {
+  declined: "The professional declined the offer",
+  offer_expired: "The offer expired without an answer",
+  pro_cancel: "The professional gave the job back",
+  not_on_duty: "The professional was not on duty in time",
+  pro_no_show: "The professional did not arrive",
+  ops_redispatch: "Ops took the job off the professional",
+  no_professional: "No professional was available",
+}
+
+export const unavailableCauseLabel = (cause: unknown) => {
+  const c = str(cause)
+  return c ? (UNAVAILABLE_CAUSE_LABELS[c] ?? humanise(c)) : "No cause recorded"
+}
+
+export interface ProUnavailableView {
+  cause: string | null
+  causeLabel: string
+  /** When the customer must have picked another professional or cancelled; null when the server sent none. */
+  deadline: string | null
+  /** Whole minutes left (0 once passed); null without a deadline. */
+  minutesLeft: number | null
+  overdue: boolean
+}
+
+/**
+ * The pro_unavailable panel: why the professional is gone and by when the
+ * customer must choose. Null for any other status. Past the deadline the
+ * server cancels it with a full refund; until its worker runs, the booking
+ * still reads pro_unavailable, so the console says the refund is due.
+ */
+export function readProUnavailable(booking: Row | null, now = new Date()): ProUnavailableView | null {
+  if (!booking || str(booking.status) !== "pro_unavailable") return null
+  const deadline = str(booking.choice_deadline)
+  const ms = deadline ? Date.parse(deadline) : NaN
+  const minutesLeft = Number.isNaN(ms) ? null : Math.max(0, Math.ceil((ms - now.getTime()) / 60_000))
+  return {
+    cause: str(booking.unavailable_cause),
+    causeLabel: unavailableCauseLabel(booking.unavailable_cause),
+    deadline: Number.isNaN(ms) ? null : deadline,
+    minutesLeft,
+    overdue: !Number.isNaN(ms) && ms <= now.getTime(),
+  }
+}
+
+/** The sentence under the cause. */
+export function proUnavailableMessage(view: ProUnavailableView): string {
+  if (view.deadline === null) return "Waiting for the customer to pick another professional or cancel. No choice deadline was recorded."
+  if (view.overdue) return "The customer's time to choose has passed: the booking is cancelled with a full refund."
+  return `Waiting for the customer to pick another professional or cancel (${view.minutesLeft} min left). With no choice, the booking is cancelled with a full refund. Nobody is assigned without the customer's choice.`
+}
+
+export interface PendingChangeView {
+  id: string | null
+  status: string | null
+  proId: string | null
+  proFirstName: string | null
+  asap: boolean
+  slotStart: string | null
+  slotEnd: string | null
+  previousTotalPaise: number | null
+  newTotalPaise: number | null
+  /** New minus previous: above zero is charged to the customer, below zero refunded. */
+  differencePaise: number | null
+  refundPaise: number | null
+  holdExpiresAt: string | null
+  paymentStatus: string | null
+  createdAt: string | null
+}
+
+/** One ProChange (booking.pending_change, or a row of the detail's pro_changes); null when absent. */
+export function readProChange(raw: unknown): PendingChangeView | null {
+  if (!isRecord(raw)) return null
+  const intent = isRecord(raw.payment_intent) ? raw.payment_intent : null
+  return {
+    id: str(raw.id),
+    status: str(raw.status),
+    proId: str(raw.pro_id),
+    proFirstName: str(raw.pro_first_name),
+    asap: raw.asap === true,
+    slotStart: str(raw.slot_start),
+    slotEnd: str(raw.slot_end),
+    previousTotalPaise: num(raw.previous_total_paise),
+    newTotalPaise: num(raw.new_total_paise),
+    differencePaise: num(raw.difference_paise),
+    refundPaise: num(raw.refund_paise),
+    holdExpiresAt: str(raw.hold_expires_at),
+    paymentStatus: intent ? str(intent.status) : null,
+    createdAt: str(raw.created_at),
+  }
+}
+
+/** "Charge ₹150.00 more", "Refund ₹100.00", "Same price". */
+export function changeDifferenceLabel(differencePaise: number | null): string {
+  if (differencePaise === null) return "—"
+  if (differencePaise > 0) return `Charge ${formatPaise(differencePaise)} more`
+  if (differencePaise < 0) return `Refund ${formatPaise(-differencePaise)}`
+  return "Same price"
+}
+
+/** The sentence for a change waiting for the customer's payment. */
+export function pendingChangeMessage(change: PendingChangeView): string {
+  const who = change.proFirstName ?? "another professional"
+  const diff = change.differencePaise !== null && change.differencePaise > 0 ? `the ${formatPaise(change.differencePaise)} difference` : "the difference"
+  return `The customer picked ${who} and owes ${diff}. The change applies only when the signed payment event arrives. If the hold lapses unpaid, the change is abandoned and the customer can still choose until the deadline.`
+}
+
+export const PRO_CHANGE_STATUS_LABELS: Record<string, string> = {
+  pending_payment: "Waiting for payment",
+  applied: "Applied",
+  abandoned: "Abandoned",
+}
+
+export const proChangeTone = (status: unknown): Tone => {
+  const s = str(status)
+  return s === "applied" ? "good" : s === "pending_payment" ? "warn" : "normal"
 }
 
 export type RefundPayment = "booking" | "extras"
@@ -519,6 +826,12 @@ export interface AdminBookingView {
   /** Money did not match (amount, payer, intent or currency) or a refund failed; the booking was never confirmed from it. */
   needsAttention: boolean
   attentionReason: string | null
+  /** B1: professionals the customer may not pick again (they let it go, or ops excluded them). */
+  excludedProIds: string[]
+  /** B1: every change of professional, oldest first. */
+  proChanges: PendingChangeView[]
+  /** B1: a dearer change waiting for the customer's payment (booking.pending_change). */
+  pendingChange: PendingChangeView | null
 }
 
 const OTP_KEYS = ["start_otp", "end_otp"] as const
@@ -533,6 +846,9 @@ export function readAdminBooking(detail: Row | null): AdminBookingView | null {
     reservedProId: str(detail.reserved_pro_id),
     needsAttention: detail.needs_attention === true,
     attentionReason: str(detail.attention_reason),
+    excludedProIds: Array.isArray(detail.excluded_pro_ids) ? detail.excluded_pro_ids.filter((x): x is string => typeof x === "string" && x !== "") : [],
+    proChanges: Array.isArray(detail.pro_changes) ? detail.pro_changes.map(readProChange).filter((c): c is PendingChangeView => c !== null) : [],
+    pendingChange: readProChange(booking.pending_change),
   }
 }
 

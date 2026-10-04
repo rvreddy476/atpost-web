@@ -1,4 +1,23 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync, readdirSync } from "node:fs"
+import { resolve } from "node:path"
+
+const contractDir = resolve(process.cwd(), "src/lib/admin/contracts/doorstep")
+const backendDir = resolve(process.cwd(), "../../../modernsmapp/Architecture/services/doorstep-service/internal/http/testdata/contracts")
+const fixture = (name: string) => JSON.parse(readFileSync(resolve(contractDir, name + ".json"), "utf8"))
+
+describe("Doorstep handler golden bytes", () => {
+  it("every published admin contract is copied byte-identical", () => {
+    const names = readdirSync(backendDir).filter(name => name.startsWith("admin_") && name.endsWith(".json"))
+    expect(names.length).toBeGreaterThan(20)
+    for (const name of names) expect(readFileSync(resolve(contractDir,name)).equals(readFileSync(resolve(backendDir,name)))).toBe(true)
+  })
+  it("renders the real safety, support, ratings and compute-only settlements", () => {
+    for (const name of ["admin_incidents_get_200", "admin_tickets_get_200", "admin_ratings_get_200", "admin_settlements_get_200"]) expect(readList(fixture(name)).length).toBe(1)
+    expect(fixture("admin_tickets_get_200").data.items[0].body).toBeTruthy()
+    expect(fixture("admin_settlements_get_200").data.items[0].status).toBe("computed")
+  })
+})
 import { readList, readObject, type Row } from "./data"
 import {
   DOORSTEP,
@@ -15,8 +34,8 @@ import { prepareSend, IDEMPOTENCY_HEADER, type Transport } from "./mutation"
 import { STATS_METRICS, statsView } from "./stats"
 
 /**
- * The console keeps no JSON fixtures, so these are typed samples copied
- * verbatim from doorstep-service's golden bytes
+ * The console reads JSON fixtures copied byte-identical from the
+ * doorstep-service handler tests
  * (Architecture/services/doorstep-service/internal/http/testdata/contracts,
  * commit 9def49e5): admin_booking_get_200.json, admin_booking_cancel_200.json,
  * admin_booking_refund_201.json, admin_bookings_list_200.json and
@@ -67,19 +86,19 @@ interface Refund {
 }
 
 // admin_booking_get_200.json
-const ADMIN_BOOKING_GET_200: Envelope<AdminBookingDetail> = {"data":{"booking":{"id":"b5dbe726-3083-5696-8af3-e63f4620137e","status":"confirmed","service_id":"492b816e-df2d-5545-b150-b9b8889c7dde","service_name":"Kitchen deep cleaning","category_slug":"home-cleaning","city_code":"HYD","zone_id":"ab4daa10-2d55-51d8-ac2a-f7ca4179e957","slot_start":"2026-10-05T08:30:00Z","slot_end":"2026-10-05T12:00:00Z","duration_minutes":210,"require_female_pro":false,"items":[{"kind":"option","ref_id":"f91f4284-19ac-5411-8a29-84dc6de87a3a","price_id":"4207afbe-8d3d-5dbf-8d92-208db40bfc18","name":"Kitchen deep cleaning - Occupied kitchen","quantity":1,"unit_price_paise":179900,"line_total_paise":179900,"taxable_paise":152457,"tax_paise":27443,"tax_rate_bps":1800,"gst_category":"HOME_CLEANING_VIA_ECO","sac":"998533"},{"kind":"addon","ref_id":"199d2a1e-f0c0-5622-83c6-5304bd77e178","price_id":"ff9e3e5e-e6e5-5239-b730-a4f39d1e7afb","name":"Chimney cleaning","quantity":1,"unit_price_paise":44900,"line_total_paise":44900,"taxable_paise":38051,"tax_paise":6849,"tax_rate_bps":1800,"gst_category":"HOME_CLEANING_VIA_ECO","sac":"998533"}],"total_paise":224800,"taxable_paise":190508,"tax_paise":34292,"paid_paise":224800,"refunded_paise":0,"cancellation_fee_paise":0,"extras_total_paise":0,"outstanding_paise":0,"hold_expires_at":null,"address":{"id":"e4329848-a88b-5702-87c4-4baa7bb8e509","label":"Home","line1":"Flat 4B, Cyber Residency","line2":"Road No. 2","landmark":"Opposite Cyber Towers","locality":"HITEC City","city_code":"HYD","pincode":"500081","lat":17.4504,"lng":78.3808,"zone_id":"ab4daa10-2d55-51d8-ac2a-f7ca4179e957","is_default":false,"created_at":"2026-10-04T06:30:00Z"},"professional":null,"parent_booking_id":null,"start_otp":null,"end_otp":null,"photos":[],"status_history":[{"from_status":null,"to_status":"pending_payment","created_at":"2026-10-04T06:30:00Z"},{"from_status":"pending_payment","to_status":"confirmed","created_at":"2026-10-04T06:30:00Z"}],"can_cancel":false,"can_reschedule":false,"created_at":"2026-10-04T06:30:00Z","updated_at":"2026-10-04T06:30:00Z"},"customer_user_id":"2d598287-eee7-40b4-a7f5-b46b9412e4e7","reserved_pro_id":"3005a641-3fd5-5fdb-825a-e3c1c0f92c42","needs_attention":false,"attention_reason":null,"history":[{"from_status":null,"to_status":"pending_payment","actor_kind":"customer","reason":null,"created_at":"2026-10-04T06:30:00Z"},{"from_status":"pending_payment","to_status":"confirmed","actor_kind":"payment_event","reason":null,"created_at":"2026-10-04T06:30:00Z"}],"assignments":[],"payments":[{"payment_id":"9cd38d6a-7e60-5925-8f25-51121208478c","reference_type":"doorstep_booking","reference_id":"b5dbe726-3083-5696-8af3-e63f4620137e","amount_paise":224800,"status":"succeeded","checkout":{"key_id":"rzp_test_fixture","merchant_display_name":"Doorstep","order_id":"order_FixtureDoorstep01","provider":"razorpay"}}],"refunds":[],"extras":[],"photos":[]},"meta":{"request_id":"fixture"}}
+const ADMIN_BOOKING_GET_200: Envelope<AdminBookingDetail> = fixture("admin_booking_get_200")
 
 // admin_booking_cancel_200.json (the admin view of the Booking: OTPs null)
-const ADMIN_BOOKING_CANCEL_200: Envelope<Row & { status: string; start_otp: null; end_otp: null }> = {"data":{"id":"b5dbe726-3083-5696-8af3-e63f4620137e","status":"cancelled","service_id":"492b816e-df2d-5545-b150-b9b8889c7dde","service_name":"Kitchen deep cleaning","category_slug":"home-cleaning","city_code":"HYD","zone_id":"ab4daa10-2d55-51d8-ac2a-f7ca4179e957","slot_start":"2026-10-05T08:30:00Z","slot_end":"2026-10-05T12:00:00Z","duration_minutes":210,"require_female_pro":false,"items":[{"kind":"option","ref_id":"f91f4284-19ac-5411-8a29-84dc6de87a3a","price_id":"4207afbe-8d3d-5dbf-8d92-208db40bfc18","name":"Kitchen deep cleaning - Occupied kitchen","quantity":1,"unit_price_paise":179900,"line_total_paise":179900,"taxable_paise":152457,"tax_paise":27443,"tax_rate_bps":1800,"gst_category":"HOME_CLEANING_VIA_ECO","sac":"998533"},{"kind":"addon","ref_id":"199d2a1e-f0c0-5622-83c6-5304bd77e178","price_id":"ff9e3e5e-e6e5-5239-b730-a4f39d1e7afb","name":"Chimney cleaning","quantity":1,"unit_price_paise":44900,"line_total_paise":44900,"taxable_paise":38051,"tax_paise":6849,"tax_rate_bps":1800,"gst_category":"HOME_CLEANING_VIA_ECO","sac":"998533"}],"total_paise":224800,"taxable_paise":190508,"tax_paise":34292,"paid_paise":224800,"refunded_paise":0,"cancellation_fee_paise":0,"extras_total_paise":0,"outstanding_paise":0,"hold_expires_at":null,"address":{"id":"e4329848-a88b-5702-87c4-4baa7bb8e509","label":"Home","line1":"Flat 4B, Cyber Residency","line2":"Road No. 2","landmark":"Opposite Cyber Towers","locality":"HITEC City","city_code":"HYD","pincode":"500081","lat":17.4504,"lng":78.3808,"zone_id":"ab4daa10-2d55-51d8-ac2a-f7ca4179e957","is_default":false,"created_at":"2026-10-04T06:30:00Z"},"professional":null,"parent_booking_id":null,"start_otp":null,"end_otp":null,"photos":[],"status_history":[{"from_status":null,"to_status":"pending_payment","created_at":"2026-10-04T06:30:00Z"},{"from_status":"pending_payment","to_status":"confirmed","created_at":"2026-10-04T06:30:00Z"},{"from_status":"confirmed","to_status":"cancelled","created_at":"2026-10-04T06:30:00Z"}],"can_cancel":false,"can_reschedule":false,"created_at":"2026-10-04T06:30:00Z","updated_at":"2026-10-04T06:30:00Z"},"meta":{"request_id":"fixture"}}
+const ADMIN_BOOKING_CANCEL_200: Envelope<Row & { status: string; start_otp: null; end_otp: null }> = fixture("admin_booking_cancel_200")
 
 // admin_booking_refund_201.json
-const ADMIN_BOOKING_REFUND_201: Envelope<Refund> = {"data":{"id":"1e8e872d-5b5b-8726-0324-e7ed1e3353a3","payment_id":"9cd38d6a-7e60-5925-8f25-51121208478c","cause":"admin_6c5c3047871fb146","amount_paise":10000,"status":"pending","created_at":"2026-10-04T06:30:00Z"},"meta":{"request_id":"fixture"}}
+const ADMIN_BOOKING_REFUND_201: Envelope<Refund> = fixture("admin_booking_refund_201")
 
 // admin_bookings_list_200.json (BookingSummary rows)
-const ADMIN_BOOKINGS_LIST_200: Envelope<{ items: Row[]; next_cursor: string | null }> = {"data":{"items":[{"id":"b5dbe726-3083-5696-8af3-e63f4620137e","status":"confirmed","service_name":"Kitchen deep cleaning","category_slug":"home-cleaning","slot_start":"2026-10-05T08:30:00Z","slot_end":"2026-10-05T12:00:00Z","total_paise":224800,"created_at":"2026-10-04T06:30:00Z"}],"next_cursor":null},"meta":{"request_id":"fixture"}}
+const ADMIN_BOOKINGS_LIST_200: Envelope<{ items: Row[]; next_cursor: string | null }> = fixture("admin_bookings_list_200")
 
 // admin_stats_200.json
-const ADMIN_STATS_200: Envelope<AdminStats> = {"data":{"bookings_today":0,"bookings_in_progress":0,"unassigned_within_2h":0,"bookings_needing_attention":0,"pros_approved":2,"pros_pending_verification":1,"documents_pending":1,"incidents_open":0,"gmv_today_paise":0,"refunds_today_paise":0,"outstanding_paise":0},"meta":{"request_id":"fixture"}}
+const ADMIN_STATS_200: Envelope<AdminStats> = fixture("admin_stats_200")
 
 const BOOKING_ID = ADMIN_BOOKING_GET_200.data.booking.id
 

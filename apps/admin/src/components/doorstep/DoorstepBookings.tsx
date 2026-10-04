@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, ArrowLeft } from "lucide-react"
+import { AlertTriangle, ArrowLeft, UserX } from "lucide-react"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { Details, Field, IdText, LookupForm, StatusPill } from "@/components/blocks/bits"
 import { buttonDanger, buttonGhost, buttonSecondary, inputClass } from "@/components/blocks/buttons"
@@ -12,17 +12,25 @@ import {
   DECISION_BODIES,
   DOORSTEP_PAGE,
   DOORSTEP_READS,
+  DOORSTEP_WRITES,
+  PRO_CHANGE_STATUS_LABELS,
   attentionMessage,
   bookingTone,
   canCancelBooking,
   canRedispatch,
   cancelBody,
+  changeDifferenceLabel,
   checkCancelFee,
   checkDoorstepRefund,
   detailRows,
   nextCursor,
   paise,
+  parseExcludeIds,
+  pendingChangeMessage,
+  proChangeTone,
+  proUnavailableMessage,
   readAdminBooking,
+  readProUnavailable,
   refundBody,
   refundCauseLabel,
   refundRoom,
@@ -98,11 +106,14 @@ export function DoorstepBookings() {
 type Pending = "booking.cancel" | "booking.redispatch" | "booking.refund" | null
 
 /**
- * One booking: the money, the status timeline, offers and assignments,
- * payments, refunds, extras and photos. Ops may cancel before the visit
- * starts, re-run dispatch (never hand-picking a professional) while it has
- * not begun, and refund what was captured — a refund needs a fresh 2FA code
- * and a second approver.
+ * One booking: the money, the status timeline, offers and assignments, the
+ * customer's changes of professional, payments, refunds, extras and photos.
+ * A booking whose professional is gone (pro_unavailable) shows why and by
+ * when the customer must pick another or cancel; a dearer pick waiting for
+ * payment shows its difference. Ops may cancel before the visit starts, take
+ * the job off the professional so the customer picks another (never
+ * choosing for them) until the visit begins, and refund what was captured —
+ * a refund needs a fresh 2FA code and a second approver.
  */
 export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const mayWrite = useMayWrite()
@@ -111,6 +122,7 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
   const [payment, setPayment] = useState<RefundPayment>("booking")
   const [amount, setAmount] = useState("")
   const [fee, setFee] = useState("")
+  const [exclude, setExclude] = useState("")
   const mutation = useDoorstepMutation({ onDone: () => setPending(null) })
 
   const d = detail.data
@@ -141,6 +153,13 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
   const cancelRoom = refundRoom(d, "booking")
   const feeCheck = pending === "booking.cancel" ? checkCancelFee(fee, cancelRoom) : null
   const attention = attentionMessage(view)
+  const unavailable = readProUnavailable(b)
+  const change = view.pendingChange
+  const excludeCheck = pending === "booking.redispatch" ? parseExcludeIds(exclude) : null
+  const openRedispatch = () => {
+    setExclude("")
+    setPending("booking.redispatch")
+  }
   const openCancel = () => {
     setFee("")
     setPending("booking.cancel")
@@ -164,6 +183,33 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
           </div>
         </div>
       ) : null}
+      {unavailable ? (
+        <div role="status" className="flex items-start gap-3 rounded-mo border border-mo-warn/60 bg-mo-warn/10 p-4" aria-label="Professional unavailable">
+          <UserX className="mt-0.5 h-5 w-5 shrink-0 text-mo-warn" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="font-semibold text-mo-ink">Professional unavailable: {unavailable.causeLabel}</p>
+            <p className="text-sm text-mo-ink">{proUnavailableMessage(unavailable)}</p>
+            <p className="text-xs text-mo-body">Customer must choose by {unavailable.deadline ? when(unavailable.deadline) : "—"}.</p>
+          </div>
+        </div>
+      ) : null}
+      {change && change.status === "pending_payment" ? (
+        <div role="status" className="rounded-mo border border-mo bg-mo-sunken p-4" aria-label="Change of professional waiting for payment">
+          <p className="font-semibold text-mo-ink">Change of professional waiting for payment</p>
+          <p className="text-sm text-mo-ink">{pendingChangeMessage(change)}</p>
+          <div className="mt-2">
+            <Details
+              items={[
+                ["New professional", <span key="np">{change.proFirstName ?? "—"} <IdText id={change.proId} /></span>],
+                ["When", change.asap ? "As soon as possible" : `${when(change.slotStart)} – ${when(change.slotEnd)}`],
+                ["Total", `${paise(change.previousTotalPaise)} → ${paise(change.newTotalPaise)} (${changeDifferenceLabel(change.differencePaise)})`],
+                ["Hold until", when(change.holdExpiresAt)],
+                ["Payment", change.paymentStatus ? <StatusPill key="ps" value={change.paymentStatus} tone={change.paymentStatus === "succeeded" ? "good" : change.paymentStatus === "failed" ? "bad" : "warn"} /> : "No payment started"],
+              ]}
+            />
+          </div>
+        </div>
+      ) : null}
       <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Booking detail">
         <div className="mb-3 flex items-center gap-2">
           <h3 className="flex-1 font-mo-display text-lg font-semibold text-mo-ink">{str(b.service_name) ?? "Booking"}</h3>
@@ -177,9 +223,22 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
             ["City · zone", <span key="z">{str(b.city_code) ?? "—"} · <IdText id={b.zone_id} /></span>],
             ["Locality", address ? `${str(address.locality) ?? "—"} ${str(address.pincode) ?? ""}`.trim() : null],
             ["Slot", `${when(b.slot_start)} – ${when(b.slot_end)} (${num(b.duration_minutes) ?? "—"} min)`],
+            ["Booked for", b.asap === true ? "As soon as possible (same day)" : "A chosen time"],
             ["Woman professional required", b.require_female_pro === true ? "Yes" : "No"],
             ["Professional", pro ? `${str(pro.first_name) ?? "—"} · ${num(pro.jobs_completed) ?? 0} jobs` : "Not assigned"],
             ["Slot reserved for", view.reservedProId ? <IdText key="r" id={view.reservedProId} /> : "No professional reserved"],
+            [
+              "Not offered to the customer again",
+              view.excludedProIds.length > 0 ? (
+                <span key="x" className="inline-flex flex-wrap gap-2">
+                  {view.excludedProIds.map((x) => (
+                    <IdText key={x} id={x} />
+                  ))}
+                </span>
+              ) : (
+                "Nobody"
+              ),
+            ],
             ["Total (GST incl.)", `${paise(b.total_paise)} (taxable ${paise(b.taxable_paise)} + tax ${paise(b.tax_paise)})`],
             ["Paid / refunded", `${paise(b.paid_paise)} / ${paise(b.refunded_paise)}`],
             ["Extras / outstanding", `${paise(b.extras_total_paise)} / ${paise(b.outstanding_paise)}`],
@@ -190,8 +249,8 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
         />
         <div className="mt-4 flex flex-wrap gap-2">
           {mayWrite("booking.redispatch") && canRedispatch(status) ? (
-            <button type="button" className={buttonSecondary} onClick={() => setPending("booking.redispatch")}>
-              Re-run dispatch
+            <button type="button" className={buttonSecondary} onClick={openRedispatch}>
+              {DOORSTEP_WRITES["booking.redispatch"].label}
             </button>
           ) : null}
           {mayWrite("booking.cancel") && canCancelBooking(status) ? (
@@ -233,6 +292,20 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
         ]}
         rowId={(r) => String(r.id)}
         emptyMessage="No offers yet."
+      />
+      <DataTable
+        caption="Changes of professional (the customer's picks)"
+        rows={view.proChanges.map((c, i) => ({ ...c, key: c.id ?? `change-${i}` }))}
+        columns={[
+          { key: "when", header: "Picked", value: (r) => str(r.createdAt), cell: (r) => when(r.createdAt) },
+          { key: "pro", header: "Professional", value: (r) => str(r.proFirstName), cell: (r) => <span>{str(r.proFirstName) ?? "—"} <IdText id={r.proId} /></span> },
+          { key: "slot", header: "When", value: (r) => str(r.slotStart), cell: (r) => (r.asap === true ? "As soon as possible" : when(r.slotStart)) },
+          { key: "diff", header: "Difference", value: (r) => num(r.differencePaise), align: "right", cell: (r) => changeDifferenceLabel(num(r.differencePaise)) },
+          { key: "refund", header: "Refunded", value: (r) => num(r.refundPaise), align: "right", cell: (r) => paise(r.refundPaise) },
+          { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={PRO_CHANGE_STATUS_LABELS[str(r.status) ?? ""] ?? r.status} tone={proChangeTone(r.status)} /> },
+        ]}
+        rowId={(r) => String(r.key)}
+        emptyMessage="The customer has not changed professional."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <DataTable
@@ -291,7 +364,9 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
         write={pending}
         subject={pending === "booking.refund" ? null : "this booking"}
         busy={mutation.isPending}
-        canConfirm={pending === "booking.refund" ? refundCheck?.ok === true : pending === "booking.cancel" ? feeCheck?.ok === true : true}
+        canConfirm={
+          pending === "booking.refund" ? refundCheck?.ok === true : pending === "booking.cancel" ? feeCheck?.ok === true : pending === "booking.redispatch" ? excludeCheck?.ok === true : true
+        }
         onConfirm={(reason) => {
           if (pending === "booking.refund") {
             if (refundCheck?.ok) mutation.mutate({ write: pending, target: { id }, body: refundBody(refundCheck.amountPaise, reason, payment) })
@@ -301,11 +376,27 @@ export function BookingDetail({ id, onBack }: { id: string; onBack: () => void }
             if (feeCheck?.ok) mutation.mutate({ write: pending, target: { id }, body: cancelBody(reason, feeCheck.feePaise) })
             return
           }
+          if (pending === "booking.redispatch") {
+            if (excludeCheck?.ok) mutation.mutate({ write: pending, target: { id }, body: DECISION_BODIES.redispatch(reason, excludeCheck.ids) })
+            return
+          }
           if (pending) mutation.mutate({ write: pending, target: { id }, body: DECISION_BODIES.reason(reason) })
         }}
         onClose={() => setPending(null)}
       >
-        {pending === "booking.refund" ? (
+        {pending === "booking.redispatch" ? (
+          <div className="space-y-3">
+            <p className="text-sm text-mo-body">
+              The booking moves to &ldquo;professional unavailable&rdquo; and the customer is offered the other approved professionals for the same service and options, with their prices and times. You cannot choose who gets the job.
+            </p>
+            <Field
+              label="Also leave off the customer's list (optional)"
+              hint={excludeCheck && !excludeCheck.ok ? <span className="text-mo-bad">{excludeCheck.problem}</span> : "Full professional ids, one per line. The current professional is always left off."}
+            >
+              {(fid) => <textarea id={fid} rows={3} className={inputClass} value={exclude} onChange={(e) => setExclude(e.target.value)} />}
+            </Field>
+          </div>
+        ) : pending === "booking.refund" ? (
           <div className="space-y-3">
             <Field label="Payment">
               {(fid) => (

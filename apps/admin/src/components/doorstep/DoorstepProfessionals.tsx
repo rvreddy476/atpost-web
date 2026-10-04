@@ -17,18 +17,21 @@ import {
   PRO_STATUSES,
   approvalBlockers,
   detailRows,
-  documentKindLabel,
+  documentLabel,
+  faceMatchAdvice,
   nextCursor,
   proTone,
   proWrites,
   readReadiness,
   reviewTone,
+  skillStatusLabel,
+  skillsForReview,
   stepLabel,
   type DoorstepWrite,
 } from "@/lib/admin/doorstep"
 import { can } from "@/lib/admin/sections"
 import { CursorPager, DoorstepActionDialog, StepUpDismissedNote, ValueFilter, useDoorstepMutation, useDoorstepStepUpRead, useMayWrite } from "./DoorstepBits"
-import { ViewDocumentButton, useDocumentViewer } from "./DoorstepDocuments"
+import { DocumentDecisionDialog, ViewDocumentButton, useDocumentViewer, type DocumentDecision } from "./DoorstepDocuments"
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -95,9 +98,11 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
   const zones = useAdminList("doorstep", DOORSTEP_READS.zones(""), { enabled: can(me, "doorstep", "catalogue.read") })
   const viewer = useDocumentViewer()
   const [pending, setPending] = useState<Pending>(null)
+  const [decision, setDecision] = useState<DocumentDecision>(null)
   const mutation = useDoorstepMutation({ onDone: () => setPending(null) })
 
   const d = detail.raw === undefined ? null : readObject(detail.raw)
+  const faceMatch = faceMatchAdvice(d)
   const p = d && isRecord(d.professional) ? d.professional : null
   const status = str(p?.status)
   const readiness = readReadiness(d)
@@ -128,7 +133,7 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
 
   const skillColumns: DataColumn<Row>[] = [
     { key: "skill", header: "Skill", value: (r) => str(r.skill_code), cell: (r) => <span className="font-mo-mono text-xs">{str(r.skill_code)}</span> },
-    { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={r.status} tone={reviewTone(r.status)} /> },
+    { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={skillStatusLabel(r.status)} tone={reviewTone(r.status)} /> },
     { key: "verified", header: "Verified", value: (r) => str(r.verified_at), cell: (r) => when(r.verified_at) },
     {
       key: "actions",
@@ -151,17 +156,35 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
   ]
 
   const documentColumns: DataColumn<Row>[] = [
-    { key: "kind", header: "Document", value: (r) => str(r.kind), cell: (r) => documentKindLabel(r.kind) },
-    { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={r.status} tone={reviewTone(r.status)} /> },
+    { key: "kind", header: "Document", value: (r) => str(r.kind), cell: (r) => documentLabel(r) },
+    { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={str(r.status) === "pending" ? "Waiting for an admin" : r.status} tone={reviewTone(r.status)} /> },
     { key: "issued", header: "Issued", value: (r) => str(r.issued_on) },
     { key: "expires", header: "Expires", value: (r) => str(r.expires_on) },
     { key: "reason", header: "Reason", value: (r) => str(r.reason) },
     { key: "view", header: "Image", value: () => null, cell: (r) => <ViewDocumentButton doc={r} viewer={viewer} /> },
+    {
+      key: "actions",
+      header: "",
+      value: () => null,
+      align: "right",
+      cell: (r) =>
+        str(r.status) === "pending" && mayWrite("document.approve") ? (
+          <span className="inline-flex gap-1">
+            <button type="button" className={buttonPrimary} onClick={() => setDecision({ write: "document.approve", doc: r })} aria-label={`Approve ${documentLabel(r)} ${str(r.id)}`}>
+              Approve
+            </button>
+            <button type="button" className={buttonDanger} onClick={() => setDecision({ write: "document.reject", doc: r })} aria-label={`Reject ${documentLabel(r)} ${str(r.id)}`}>
+              Reject
+            </button>
+          </span>
+        ) : null,
+    },
   ]
 
   return (
     <div className="space-y-4">
       {back}
+      {mayWrite("pro.tax_registration") ? <TaxRegistrationPanel key={id} id={id} /> : null}
       <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Professional detail">
         <div className="mb-3 flex items-center gap-2">
           <h3 className="flex-1 font-mo-display text-lg font-semibold text-mo-ink">{str(p.display_name) ?? "Professional"}</h3>
@@ -213,7 +236,10 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
         </div>
       </section>
 
-      <DataTable caption="Skills" rows={detailRows(d, "skills")} columns={skillColumns} rowId={(r) => String(r.skill_code)} emptyMessage="No skills declared." />
+      <div className="space-y-1">
+        <DataTable caption="Skills" rows={skillsForReview(d)} columns={skillColumns} rowId={(r) => String(r.skill_code)} emptyMessage="No skills declared." />
+        <p className="text-xs text-mo-body">Every declared skill waits for an admin: nothing is verified on declaration. A skill that needs a certificate is verified by approving its trade certificate below.</p>
+      </div>
 
       <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Service area and hours">
         <h4 className="mb-2 text-sm font-semibold text-mo-ink">Service area and hours</h4>
@@ -236,7 +262,14 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
       </section>
 
       <DataTable caption="Documents" rows={detailRows(d, "documents")} columns={documentColumns} rowId={(r) => String(r.id)} emptyMessage="No documents uploaded." />
+      {faceMatch ? (
+        <p className="rounded-mo border border-mo bg-mo-sunken p-3 text-sm text-mo-ink" aria-label="Face match advice">
+          <span className="font-semibold">Face match (advice only): </span>
+          {faceMatch.advice}
+        </p>
+      ) : null}
       {viewer.element}
+      <DocumentDecisionDialog pending={decision} faceMatch={{ kind: "ready", advice: faceMatch }} onClose={() => setDecision(null)} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <DataTable
@@ -255,8 +288,14 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
           rows={detailRows(d, "kyc_checks")}
           columns={[
             { key: "kind", header: "Check", value: (r) => str(r.kind), cell: (r) => humanise(r.kind) },
-            { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={r.status} tone={reviewTone(r.status)} /> },
-            { key: "score", header: "Score", value: (r) => num(r.score), align: "right", cell: (r) => (num(r.score) === null ? "—" : (num(r.score) ?? 0).toFixed(2)) },
+            { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={str(r.status) === "pending" ? "Waiting for an admin" : r.status} tone={reviewTone(r.status)} /> },
+            {
+              key: "score",
+              header: "Similarity (advice)",
+              value: (r) => num(r.score),
+              align: "right",
+              cell: (r) => (num(r.score) === null ? "—" : str(r.kind) === "selfie_face_match" ? `${Number((num(r.score) ?? 0).toFixed(1))} / 100` : (num(r.score) ?? 0).toFixed(2)),
+            },
             { key: "at", header: "Verified", value: (r) => str(r.verified_at), cell: (r) => when(r.verified_at) },
           ]}
           rowId={(r) => String(r.kind)}
@@ -312,4 +351,30 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
       />
     </div>
   )
+}
+
+function TaxRegistrationPanel({ id }: { id: string }) {
+  const [opened, setOpened] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [gstin, setGstin] = useState("")
+  const [verified, setVerified] = useState(false)
+  const read = useDoorstepStepUpRead(DOORSTEP_STEP_UP_READS.taxRegistration.path(id), { enabled: opened })
+  const registration = read.raw === undefined ? null : readObject(read.raw)
+  const mutation = useDoorstepMutation({ onDone: () => { setEditing(false); setGstin(""); setVerified(false) } })
+  const valid = gstin.trim() === "" || (/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin) && verified)
+  return <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="GST registration">
+    <h4 className="mb-2 text-sm font-semibold text-mo-ink">GST registration · manual review</h4>
+    <p className="mb-3 text-sm text-mo-body">Registered-only services stay unavailable until an admin verifies the registration. GSTIN includes sensitive tax identity; opening it requires a fresh security check.</p>
+    {!opened ? <button type="button" className={buttonSecondary} onClick={() => setOpened(true)}>Review registration</button> : <>
+      {read.isLoading ? <p className="text-sm text-mo-body">Loading…</p> : read.dismissed ? <StepUpDismissedNote what="Opening the GST registration" onRetry={read.retry} /> : read.error ? <p role="alert" className="text-sm text-mo-bad">{read.error}</p> : <>
+        <p className="mb-3 font-mo-mono text-sm text-mo-ink">{str(registration?.gstin) ?? "No registration recorded"}</p>
+        <button type="button" className={buttonPrimary} onClick={() => { setGstin(str(registration?.gstin) ?? ""); setVerified(false); setEditing(true) }}>Record reviewed registration</button>
+      </>}
+    </>}
+    <DoorstepActionDialog write={editing ? "pro.tax_registration" : null} subject={null} busy={mutation.isPending} canConfirm={valid} onClose={() => setEditing(false)} onConfirm={reason => mutation.mutate({ write: "pro.tax_registration", target: { id }, body: { gstin: gstin.trim(), verified, reason } })}>
+      <Field label="GSTIN (blank to remove)">{fieldId => <input id={fieldId} className={inputClass} value={gstin} maxLength={15} autoComplete="off" onChange={e => { setGstin(e.target.value.toUpperCase()); setVerified(false) }} />}</Field>
+      {gstin.trim() ? <label className="mt-3 flex gap-2 text-sm text-mo-ink"><input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} />I checked the active registration and its ownership.</label> : <p className="mt-3 text-sm text-mo-body">This removes the registration and prevents new registered-only bookings.</p>}
+      {!valid ? <p className="mt-2 text-sm text-mo-bad">Enter a 15-character GSTIN and confirm the manual verification.</p> : null}
+    </DoorstepActionDialog>
+  </section>
 }

@@ -98,6 +98,7 @@ export function DoorstepTickets() {
 
   const columns: DataColumn<Row>[] = [
     { key: "subject", header: "Subject", value: (r) => str(r.subject), filterable: true },
+    { key: "body", header: "Details", value: (r) => str(r.body), cell: r => <details><summary>Read request</summary><p className="max-w-sm whitespace-pre-wrap">{str(r.body)}</p></details> },
     { key: "category", header: "Category", value: (r) => str(r.category), sortable: true, cell: (r) => humanise(r.category) },
     { key: "booking", header: "Booking", value: (r) => str(r.booking_id), cell: (r) => (str(r.booking_id) ? <IdText id={r.booking_id} /> : "—") },
     { key: "status", header: "Status", value: (r) => str(r.status), sortable: true, filterable: true, cell: (r) => <StatusPill value={r.status} tone={ticketTone(r.status)} /> },

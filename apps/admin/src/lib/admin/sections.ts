@@ -148,10 +148,11 @@ export const RIDER_SECTIONS = [
  * read its lists need (the contract's x-permission); the writes inside check
  * their own permission, so a reader sees the rows without the buttons.
  * Approvals opens for a document reviewer alone, who then sees the document
- * queue but not the professionals waiting (that list needs pros.read).
+ * queue but not the professionals waiting (that list needs pros.read), and
+ * for a price reviewer alone, who sees the Prices queue (prices.review).
  */
 export const DOORSTEP_SECTIONS = [
-  { id: "approvals", label: "Approvals", anyOf: ["documents.review", "pros.approve"] },
+  { id: "approvals", label: "Approvals", anyOf: ["documents.review", "pros.approve", "prices.review"] },
   { id: "professionals", label: "Professionals", anyOf: ["pros.read"] },
   { id: "bookings", label: "Bookings", anyOf: ["bookings.read"] },
   { id: "incidents", label: "Incidents", anyOf: ["incidents.read"] },

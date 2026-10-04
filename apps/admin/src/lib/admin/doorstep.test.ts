@@ -139,6 +139,7 @@ describe("Doorstep sections per permission set", () => {
 describe("every write's route and permission (contract x-permission)", () => {
   const t = { id: ID, code: "HYD", skill: "ac_service" }
   const table: [DoorstepWrite, "post" | "patch", string, string][] = [
+    ["pro.tax_registration", "post", `/professionals/${ID}/tax-registration`, "pros.approve"],
     ["pro.approve", "post", `/professionals/${ID}/approve`, "pros.approve"],
     ["pro.reject", "post", `/professionals/${ID}/reject`, "pros.approve"],
     ["pro.suspend", "post", `/professionals/${ID}/suspend`, "pros.suspend"],
@@ -167,6 +168,8 @@ describe("every write's route and permission (contract x-permission)", () => {
     ["addon.create", "post", `/addon-groups/${ID}/addons`, "catalogue.write"],
     ["addon.update", "patch", `/addons/${ID}`, "catalogue.write"],
     ["price.create", "post", "/prices", "catalogue.write"],
+    ["pro_price.approve", "post", `/pro-prices/${ID}/approve`, "prices.review"],
+    ["pro_price.reject", "post", `/pro-prices/${ID}/reject`, "prices.review"],
     ["rate_card.create", "post", "/rate-cards", "catalogue.write"],
     ["rate_card.update", "patch", `/rate-cards/${ID}`, "catalogue.write"],
     ["city.create", "post", "/cities", "config.write"],
@@ -220,6 +223,9 @@ describe("every write's route and permission (contract x-permission)", () => {
  * two-person route. The console must match it exactly.
  */
 const SERVER_STEP_UP = [
+  "GET /professionals/:id/tax-registration",
+  "POST /professionals/:id/tax-registration",
+  "POST /pro-prices/:id/approve",
   "POST /prices",
   "POST /rate-cards",
   "PATCH /rate-cards/:id",
@@ -246,7 +252,7 @@ describe("the console's step-up and two-person set is admin-service's", () => {
 
   it("step-up routes: the writes that always need it, plus the two step-up reads", () => {
     const writes = all.filter(doorstepStepUp).map(route)
-    const reads = [`GET ${DOORSTEP_STEP_UP_READS.professional.path(":id").slice(DOORSTEP.length).replace(/%3A/g, ":")}`, `GET ${DOORSTEP_STEP_UP_READS.documents.path("").slice(DOORSTEP.length)}`]
+    const reads = [`GET ${DOORSTEP_STEP_UP_READS.professional.path(":id").slice(DOORSTEP.length).replace(/%3A/g, ":")}`, `GET ${DOORSTEP_STEP_UP_READS.taxRegistration.path(":id").slice(DOORSTEP.length).replace(/%3A/g, ":")}`, `GET ${DOORSTEP_STEP_UP_READS.documents.path("").slice(DOORSTEP.length)}`]
     expect(unique([...writes, ...reads])).toEqual(SERVER_STEP_UP)
   })
 
@@ -276,6 +282,7 @@ describe("step-up, two-person and reasons", () => {
 
   it("step-up: account actions, document decisions, ops cancel, refunds and every money setting", () => {
     expect(all.filter(doorstepStepUp)).toEqual([
+      "pro.tax_registration",
       "pro.suspend",
       "pro.reinstate",
       "pro.block",
@@ -290,6 +297,7 @@ describe("step-up, two-person and reasons", () => {
       "cancellation_rule.update",
       "commission_rule.create",
       "commission_rule.update",
+      "pro_price.approve",
     ])
     for (const w of all.filter(doorstepStepUp)) expect(DOORSTEP_WRITES[w].explain).toMatch(/fresh 2FA code/)
   })
@@ -301,7 +309,7 @@ describe("step-up, two-person and reasons", () => {
 
   it("a reason is required for every destructive write, and for re-dispatch, reinstate and resolve", () => {
     const needing = all.filter((w) => DOORSTEP_WRITES[w].reason)
-    expect(needing).toEqual(["pro.reject", "pro.suspend", "pro.reinstate", "pro.block", "skill.revoke", "document.reject", "booking.cancel", "booking.redispatch", "booking.refund", "incident.resolve", "rating.hide"])
+    expect(needing).toEqual(["pro.tax_registration", "pro.reject", "pro.suspend", "pro.reinstate", "pro.block", "skill.revoke", "document.reject", "booking.cancel", "booking.redispatch", "booking.refund", "incident.resolve", "rating.hide", "pro_price.reject"])
     for (const w of all.filter((x) => DOORSTEP_WRITES[x].destructive)) expect(DOORSTEP_WRITES[w].reason).toBe(true)
   })
 
@@ -398,8 +406,8 @@ describe("bookings", () => {
   it("ops cancel until the visit starts; re-dispatch only before the visit begins", () => {
     expect(["pending_payment", "confirmed", "assigned", "en_route", "arrived"].every(canCancelBooking)).toBe(true)
     expect(["in_progress", "awaiting_extras_payment", "completed", "cancelled", "expired", "pro_no_show"].some(canCancelBooking)).toBe(false)
-    expect(["confirmed", "assigned", "en_route"].every(canRedispatch)).toBe(true)
-    expect(["pending_payment", "arrived", "in_progress", "completed"].some(canRedispatch)).toBe(false)
+    expect(["confirmed", "assigned", "en_route", "arrived"].every(canRedispatch)).toBe(true)
+    expect(["pending_payment", "pro_unavailable", "in_progress", "completed"].some(canRedispatch)).toBe(false)
   })
 
   const detail = {
