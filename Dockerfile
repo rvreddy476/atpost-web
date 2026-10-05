@@ -10,7 +10,7 @@
 ARG ZONE=commerce
 
 # ── deps ──────────────────────────────────────────────────────────
-FROM oven/bun:1.1 AS deps
+FROM oven/bun:1.3.14 AS deps
 WORKDIR /app
 COPY package.json bun.lock* turbo.json ./
 COPY apps ./apps
@@ -18,7 +18,7 @@ COPY packages ./packages
 RUN bun install --frozen-lockfile
 
 # ── build ─────────────────────────────────────────────────────────
-FROM oven/bun:1.1 AS builder
+FROM oven/bun:1.3.14 AS builder
 ARG ZONE
 # Admin console only (apps/admin reads these at build time; other zones ignore
 # them). "/" serves the console at the root of its own host; the default keeps
@@ -29,6 +29,8 @@ ARG NEXT_PUBLIC_ADMIN_API_ORIGIN=
 ARG ADMIN_IMAGE_ORIGINS=https://*.cleestudio.com
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps ./apps
+COPY --from=deps /app/packages ./packages
 COPY . .
 RUN ADMIN_BASE_PATH="$ADMIN_BASE_PATH" \
     NEXT_PUBLIC_ADMIN_SIGN_IN_URL="$NEXT_PUBLIC_ADMIN_SIGN_IN_URL" \
