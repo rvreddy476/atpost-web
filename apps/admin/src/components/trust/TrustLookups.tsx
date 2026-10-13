@@ -136,7 +136,7 @@ function IssueStrikeDialog({ open, userId, onClose }: { open: boolean; userId: s
       title="Issue a strike"
       description={
         <>
-          For user <IdText id={userId} />. The user is told, and the strike counts against their standing until it expires or is voided. Issuing needs a fresh 2FA code.
+          For user <IdText id={userId} />. The user is told, and the strike counts against their standing until it expires or is voided.
         </>
       }
       confirmLabel="Issue strike"
@@ -183,7 +183,7 @@ function VoidStrikeDialog({ userId, strike, onClose }: { userId: string; strike:
       description={
         strike ? (
           <>
-            {humanise(strike.severity)} issued {when(strike.created_at)}: “{str(strike.reason)}”. The strike stays on record with your reason and no longer counts. Voiding needs a fresh 2FA code.
+            {humanise(strike.severity)} issued {when(strike.created_at)}: “{str(strike.reason)}”. The strike stays on record with your reason and no longer counts.
           </>
         ) : null
       }
@@ -210,7 +210,7 @@ export function TrustVerification() {
   if (!confirmed || list.needsStepUp) {
     return (
       <StepUpPrompt
-        message="Verification requests include what people submitted to prove who they are. Viewing them is audited and needs a fresh 2FA code."
+        message="Verification requests include what people submitted to prove who they are. Viewing them is audited."
         onConfirm={async () => {
           if (await stepUp()) {
             setConfirmed(true)

@@ -1,21 +1,22 @@
 import type { Metadata } from "next"
-import { Figtree, Outfit } from "next/font/google"
+import localFont from "next/font/local"
 import "./globals.css"
-import { BRAND, zoneTitle } from "@momentum/brand"
+import "./admin-theme.css"
 import { cookies } from "next/headers"
 import { Providers } from "./providers"
 import { AdminShell } from "@/components/shell/AdminShell"
 
 /**
- * Outfit and Figtree, the Momentum pairing. next/font self-hosts both, so the
- * files are served from this origin and `font-src 'self'` holds.
+ * Outfit and Figtree, the Momentum pairing. Keep the existing self-hosted
+ * Latin assets locally so deployments do not depend on Google Fonts responses.
+ * Both are served from this origin and `font-src 'self'` holds.
  */
-const outfit = Outfit({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-outfit", display: "swap" })
-const figtree = Figtree({ subsets: ["latin"], weight: ["400", "600", "700"], variable: "--font-figtree", display: "swap" })
+const outfit = localFont({ src: "./fonts/outfit-latin.woff2", weight: "100 900", variable: "--font-outfit", display: "swap" })
+const figtree = localFont({ src: "./fonts/figtree-latin.woff2", weight: "300 900", variable: "--font-figtree", display: "swap" })
 
 export const metadata: Metadata = {
-  title: zoneTitle("Admin"),
-  description: `${BRAND.name} admin console`,
+  title: "Cleestudio Admin Portal",
+  description: "Cleestudio administration and operations",
   robots: { index: false, follow: false },
   referrer: "no-referrer",
 }

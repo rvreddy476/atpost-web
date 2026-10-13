@@ -69,7 +69,7 @@ export function StepUpPrompt({ message, onConfirm }: { message: string; onConfir
     <div className="rounded-mo border border-mo bg-mo-surface p-6 text-center">
       <p className="mb-3 text-sm text-mo-body">{message}</p>
       <button type="button" className={buttonPrimary} onClick={onConfirm}>
-        <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Confirm with 2FA
+        <ShieldCheck className="h-4 w-4" aria-hidden="true" /> Continue
       </button>
     </div>
   )
@@ -129,7 +129,7 @@ export function LookupForm({
  */
 export function RevealGate<T>({
   title,
-  note = "Revealing it is recorded in the audit trail and needs a fresh 2FA code.",
+  note = "Revealing it is recorded in the audit trail.",
   onReveal,
   children,
 }: {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { PartnerEvidenceButton } from "@/components/blocks/PartnerEvidenceButton"
 import { ArrowLeft, Check, X } from "lucide-react"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { ChoiceDialog } from "@/components/blocks/ChoiceDialog"
@@ -13,6 +14,7 @@ import { useAdminMutation, useStepUpRead } from "@/hooks/useAdminMutation"
 import { adminKey, useAdminList } from "@/hooks/useAdminQuery"
 import { bool, humanise, readList, readObject, str, when, type Row } from "@/lib/admin/data"
 import { can } from "@/lib/admin/sections"
+import { adminErrorMessage } from "@/lib/admin/mutation"
 
 export const FOOD = "/v1/admin/food"
 export const FOOD_KEY = adminKey("food")
@@ -26,7 +28,7 @@ function useDecision(kind: Kind, decision: "approve" | "reject", close: () => vo
     invalidate: [FOOD_KEY],
     successMessage: `${noun} ${decision === "approve" ? "approved" : "rejected"}`,
     errorTitle: `${noun} ${decision === "approve" ? "approval" : "rejection"} failed`,
-    onDone: close,
+    onDone: (_data, _vars, outcome) => { if (outcome === "done") close() },
   })
 }
 
@@ -34,18 +36,14 @@ function useDecision(kind: Kind, decision: "approve" | "reject", close: () => vo
 export function FeastApprovals() {
   const { me } = useAdmin()
   const [kycFor, setKycFor] = useState<Row | null>(null)
+  const [restaurantFor, setRestaurantFor] = useState<Row | null>(null)
+  if (restaurantFor) return <RestaurantDocuments restaurant={restaurantFor} onBack={() => setRestaurantFor(null)} />
   if (kycFor) return <RiderKyc partner={kycFor} onBack={() => setKycFor(null)} />
   return (
     <div className="space-y-8">
-      {can(me, "food", "restaurant.approve") ? <PendingQueue kind="restaurants" /> : null}
+      {can(me, "food", "restaurant.approve") ? <PendingQueue kind="restaurants" onKyc={can(me, "food", "documents.review") ? setRestaurantFor : undefined} /> : null}
       {can(me, "food", "delivery_partner.approve") || can(me, "food", "documents.review") ? (
         <PendingQueue kind="delivery-partners" onKyc={can(me, "food", "documents.review") ? setKycFor : undefined} />
-      ) : null}
-      {can(me, "food", "documents.review") ? (
-        <p className="text-xs text-mo-body">
-          Restaurant documents (FSSAI and others) cannot be listed from the console yet: admin-service has a decide route but no
-          list route for them.
-        </p>
       ) : null}
     </div>
   )
@@ -140,6 +138,8 @@ function RiderKyc({ partner, onBack }: { partner: Row; onBack: () => void }) {
   const id = String(partner.id)
   const [kyc, setKyc] = useState<Row | null>(null)
   const [deciding, setDeciding] = useState<Row | null>(null)
+  const [reviewError, setReviewError] = useState("")
+  const [refreshing, setRefreshing] = useState(false)
 
   const decide = useAdminMutation<{ docId: string; decision: string; reason: string }>({
     request: ({ docId, decision, reason }) => ({
@@ -150,21 +150,23 @@ function RiderKyc({ partner, onBack }: { partner: Row; onBack: () => void }) {
     invalidate: [FOOD_KEY],
     successMessage: "Document decided",
     errorTitle: "Document decision failed",
-    onDone: (data) => {
-      const doc = readObject(data)
+    onDone: (_data, _vars, outcome) => {
       setDeciding(null)
-      if (doc && kyc) {
-        const documents = readList({ items: kyc.documents }).map((d) => (d.id === doc.id ? { ...d, ...doc } : d))
-        setKyc({ ...kyc, documents })
-      }
+      if (outcome === "done") void reveal()
     },
   })
 
   const reveal = async () => {
-    const raw = await read(`${FOOD}/delivery-partners/${encodeURIComponent(id)}/kyc`)
-    if (raw === null) return false
-    setKyc(readObject(raw) ?? {})
-    return true
+    setRefreshing(true); setReviewError("")
+    try {
+      const raw = await read(`${FOOD}/delivery-partners/${encodeURIComponent(id)}/kyc`)
+      if (raw === null) { setKyc(null); return false }
+      const next = readObject(raw)
+      if (!next || !Array.isArray(next.missing) || next.missing.some(item => typeof item !== "string")) throw new Error("Verification status could not be read. Please refresh.")
+      setKyc(next)
+      return true
+    } catch (error) { setKyc(null); setReviewError(adminErrorMessage(error, "Verification could not be refreshed.")); return false }
+    finally { setRefreshing(false) }
   }
 
   const documents = kyc ? readList({ items: kyc.documents }) : []
@@ -172,6 +174,7 @@ function RiderKyc({ partner, onBack }: { partner: Row; onBack: () => void }) {
   const missing = kyc && Array.isArray(kyc.missing) ? kyc.missing.filter((m): m is string => typeof m === "string") : []
 
   const docColumns: DataColumn<Row>[] = [
+    { key: 'view', header: 'Preview', value: () => null, cell: (r) => <PartnerEvidenceButton path={`${FOOD}/delivery-partners/${encodeURIComponent(id)}/documents/${encodeURIComponent(String(r.id))}/view`} /> },
     { key: "type", header: "Document", value: (r) => str(r.document_type), cell: (r) => humanise(r.document_type) },
     { key: "number", header: "Number", value: (r) => str(r.number_masked), cell: (r) => <span className="font-mo-mono">{str(r.number_masked) ?? "—"}</span> },
     { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={r.status} tone={r.status === "APPROVED" ? "good" : r.status === "REJECTED" ? "bad" : "normal"} /> },
@@ -195,7 +198,10 @@ function RiderKyc({ partner, onBack }: { partner: Row; onBack: () => void }) {
       <button type="button" className={buttonGhost} onClick={onBack}>
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to approvals
       </button>
-      <h3 className="font-mo-display text-lg font-semibold text-mo-ink">KYC · {str(partner.full_name) ?? id}</h3>
+      <h3 className="font-mo-display text-lg font-semibold text-mo-ink">Application review · {str(partner.full_name) ?? id}</h3>
+      <ReviewApproval kind="delivery-partners" id={id} ready={Boolean(kyc) && !refreshing && !reviewError && missing.length === 0} onDone={onBack} />
+      {reviewError ? <p role="alert" className="text-sm text-mo-bad">{reviewError}</p> : null}
+      <button type="button" className={buttonSecondary} disabled={refreshing} onClick={() => void reveal()}>{refreshing ? "Refreshing…" : "Refresh verification"}</button>
       <DocumentViewer
         document={{ id, title: "Rider KYC documents and checks", url: null, kind: "pdf", sensitive: true }}
         onReveal={reveal}
@@ -225,13 +231,12 @@ function RiderKyc({ partner, onBack }: { partner: Row; onBack: () => void }) {
             emptyMessage="No identity checks recorded."
           />
           <DataTable caption="KYC documents" rows={documents} columns={docColumns} rowId={(r) => String(r.id)} emptyMessage="No documents uploaded." />
-          <p className="text-xs text-mo-body">Document images are not served to the console yet; numbers stay masked.</p>
         </>
       ) : null}
       <ChoiceDialog
         open={deciding !== null}
         title="Decide this document"
-        description="Deciding a KYC document needs a fresh 2FA code."
+        description="Your document review decision is recorded."
         choiceLabel="Decision"
         choices={[{ value: "APPROVED", label: "Approve" }, { value: "REJECTED", label: "Reject", destructive: true }]}
         busy={decide.isPending}
@@ -240,4 +245,55 @@ function RiderKyc({ partner, onBack }: { partner: Row; onBack: () => void }) {
       />
     </div>
   )
+}
+
+function RestaurantDocuments({ restaurant, onBack }: { restaurant: Row; onBack: () => void }) {
+  const read = useStepUpRead()
+  const id = encodeURIComponent(String(restaurant.id))
+  const [rows, setRows] = useState<Row[] | null>(null)
+  const [deciding, setDeciding] = useState<Row | null>(null)
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+  const refresh = async () => {
+    setLoading(true); setError("")
+    try {
+      const raw = await read(`${FOOD}/restaurants/${id}/documents`)
+      setRows(raw !== null ? readList(raw) : null)
+    } catch (cause) { setRows(null); setError(adminErrorMessage(cause, "Documents could not be loaded.")) }
+    finally { setLoading(false) }
+  }
+  const decide = useAdminMutation<{ doc: string; decision: string; reason: string }>({
+    request: ({ doc, decision, reason }) => ({ method: 'post', url: `${FOOD}/restaurants/${id}/documents/${encodeURIComponent(doc)}/decide`, body: { decision, reason } }),
+    invalidate: [FOOD_KEY], successMessage: 'Document reviewed', errorTitle: 'Review could not be saved',
+    onDone: (_data, _vars, outcome) => { setDeciding(null); if (outcome === "done") void refresh() },
+  })
+  return <section className="space-y-4">
+    <button type="button" className={buttonGhost} onClick={onBack}><ArrowLeft className="h-4 w-4" /> Back to approvals</button>
+    <h3 className="text-lg font-semibold">{str(restaurant.display_name) ?? str(restaurant.name)} · Verification</h3>
+    <ReviewApproval kind="restaurants" id={String(restaurant.id)} ready={rows !== null && !loading && !error} onDone={onBack} />
+    <button type="button" className={buttonSecondary} disabled={loading} onClick={() => void refresh()}>{loading ? 'Loading…' : rows ? 'Refresh documents' : 'Open documents'}</button>
+    {error ? <p role="alert" className="text-sm text-mo-bad">{error}</p> : null}
+    {rows ? <DataTable caption="Restaurant verification documents" rows={rows} rowId={(r) => String(r.id)} emptyMessage="No documents submitted." columns={[
+      { key: 'type', header: 'Document', value: (r) => str(r.document_type), cell: (r) => humanise(r.document_type) },
+      { key: 'status', header: 'Status', value: (r) => str(r.status), cell: (r) => <StatusPill value={r.status} /> },
+      { key: 'view', header: 'Preview', value: () => null, cell: (r) => r.viewable === true ? <PartnerEvidenceButton path={`${FOOD}/restaurants/${id}/documents/${encodeURIComponent(String(r.id))}/view`} /> : 'No preview' },
+      { key: 'action', header: '', value: () => null, cell: (r) => r.status === 'PENDING' ? <button type="button" className={buttonSecondary} onClick={() => setDeciding(r)}>Review</button> : null },
+    ]} /> : null}
+    <ChoiceDialog open={!!deciding} title="Review document" choiceLabel="Decision" choices={[{ value: 'APPROVED', label: 'Approve' }, { value: 'REJECTED', label: 'Reject', destructive: true }]} busy={decide.isPending} onConfirm={(decision, reason) => deciding && decide.mutate({ doc: String(deciding.id), decision, reason })} onClose={() => setDeciding(null)} />
+  </section>
+}
+
+function ReviewApproval({ kind, id, ready, onDone }: { kind: Kind; id: string; ready: boolean; onDone: () => void }) {
+  const { me } = useAdmin()
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState("")
+  const approve = useDecision(kind, "approve", onDone)
+  if (!can(me, "food", kind === "restaurants" ? "restaurant.approve" : "delivery_partner.approve")) return null
+  return <div className="space-y-2">
+    <button type="button" className={buttonPrimary} disabled={!ready || approve.isPending} onClick={() => { setError(""); setConfirming(true) }}>Approve {kind === "restaurants" ? "restaurant" : "delivery partner"}</button>
+    {!ready ? <p className="text-sm text-mo-body">Load and complete the required document reviews below.</p> : null}
+    <ConfirmReasonDialog open={confirming} title="Approve this partner?" description="Confirm you have reviewed the application. Required verification checks still apply." confirmLabel="Approve" busy={approve.isPending} canConfirm={ready} onConfirm={async reason => { setError(""); try { await approve.mutateAsync({ id, reason }) } catch (cause) { setError(adminErrorMessage(cause, "Approval could not be completed.")) } }} onClose={() => setConfirming(false)}>
+      {error ? <p role="alert" className="text-sm text-mo-bad">{error}</p> : null}
+    </ConfirmReasonDialog>
+  </div>
 }

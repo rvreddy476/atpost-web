@@ -133,7 +133,7 @@ export function LiveNow() {
       <ConfirmReasonDialog
         open={stopping !== null}
         title={`Stop ${str(stopping?.title) ?? "this stream"}?`}
-        description="Ends it at once for the host and every viewer; the host sees that an admin stopped it. Needs a fresh 2FA code."
+        description="Ends it at once for the host and every viewer; the host sees that an admin stopped it."
         confirmLabel="Stop stream"
         destructive
         busy={write.isPending}
@@ -234,7 +234,7 @@ export function LiveReports() {
       <ChoiceDialog
         open={resolving !== null}
         title={`Resolve this ${resolving ? reportReasonLabel(resolving.reason).toLowerCase() : ""} report`}
-        description="The outcome and your reason go into live-service's audit trail. Needs a fresh 2FA code."
+        description="The outcome and your reason go into live-service's audit trail."
         choiceLabel="Outcome"
         choices={resolving ? resolveChoices(can, resolving) : []}
         confirmLabel="Resolve"
@@ -331,7 +331,7 @@ export function LiveBans() {
       <ConfirmReasonDialog
         open={banning}
         title="Ban a user from live"
-        description="They can no longer go live or chat on any stream. To end a stream of theirs that is on air now, use Stop in Live now. Needs a fresh 2FA code."
+        description="They can no longer go live or chat on any stream. To end a stream of theirs that is on air now, use Stop in Live now."
         confirmLabel="Ban from live"
         destructive
         canConfirm={idProblem === null}
@@ -350,7 +350,7 @@ export function LiveBans() {
       <ConfirmReasonDialog
         open={unbanning !== null}
         title={`Unban ${unbanning ? (banUser(unbanning).name ?? banUser(unbanning).id ?? "this user") : "this user"}?`}
-        description="They may go live and chat again (going live still needs the pilot list). Needs a fresh 2FA code."
+        description="They may go live and chat again (going live still needs the pilot list)."
         confirmLabel="Unban"
         requireReason
         busy={write.isPending}

@@ -6,22 +6,21 @@ import { Field, StatusPill } from "@/components/blocks/bits"
 import { buttonSecondary, inputClass } from "@/components/blocks/buttons"
 import { FormPanel } from "@/components/blocks/formFields"
 import { useAdminList } from "@/hooks/useAdminQuery"
-import { humanise, isRecord, num, str, when, type Row } from "@/lib/admin/data"
+import { humanise, num, str, when, type Row } from "@/lib/admin/data"
 import {
   CANCEL_STAGES,
-  DOORSTEP_PAGE,
   DOORSTEP_READS,
   bpsLabel,
   checkCancellationRule,
   checkCity,
   checkCommissionRule,
   checkSlotConfig,
-  checkZone,
   paise,
   scopeLabel,
 } from "@/lib/admin/doorstep"
 import { ActiveToggle, AreaSwitch, EditDialog, ReadOnlyNote, SpecForm, useMayWrite } from "./DoorstepBits"
 import { useCategories } from "./DoorstepCatalogue"
+import { DoorstepZones } from "./DoorstepZones"
 
 type Area = "cities" | "zones" | "slots" | "cancellation" | "commission"
 
@@ -44,17 +43,18 @@ const rupeesText = (p: unknown) => (num(p) === null ? "" : ((num(p) ?? 0) / 100)
 export function DoorstepConfig() {
   const [area, setArea] = useState<Area>("cities")
   const [city, setCity] = useState("HYD")
+  const cities = useAdminList("doorstep", DOORSTEP_READS.cities())
   const mayWrite = useMayWrite()
   return (
     <div>
       <AreaSwitch value={area} areas={AREAS} onChange={setArea} label="Config area" />
       <ReadOnlyNote show={!mayWrite("city.create")}>Read only: changing the configuration needs the config write permission.</ReadOnlyNote>
       {area !== "cities" ? (
-        <div className="mb-3 w-32">
-          <Field label="City">{(id) => <input id={id} className={inputClass} value={city} maxLength={3} onChange={(e) => setCity(e.target.value.toUpperCase())} />}</Field>
+        <div className="mb-4 max-w-sm">
+          <Field label="City">{(id) => <select id={id} className={inputClass} value={city} onChange={e=>setCity(e.target.value)}>{!cities.data.some(c=>c.code===city)&&<option value={city}>{city}</option>}{cities.data.map(c=><option key={String(c.code)} value={String(c.code)}>{String(c.name)}{c.active===true?"":" (disabled)"}</option>)}</select>}</Field>
         </div>
       ) : null}
-      {area === "cities" ? <Cities /> : area === "zones" ? <Zones city={city} /> : area === "slots" ? <SlotConfigs city={city} /> : area === "cancellation" ? <CancellationRules city={city} /> : <CommissionRules city={city} />}
+      {area === "cities" ? <Cities /> : area === "zones" ? <DoorstepZones key={city} city={city} /> : area === "slots" ? <SlotConfigs city={city} /> : area === "cancellation" ? <CancellationRules city={city} /> : <CommissionRules city={city} />}
     </div>
   )
 }
@@ -134,43 +134,6 @@ function Cities() {
           />
         ) : null}
       </EditDialog>
-    </div>
-  )
-}
-
-function Zones({ city }: { city: string }) {
-  const mayWrite = useMayWrite()
-  const list = useAdminList("doorstep", DOORSTEP_READS.zones(city))
-  const columns: DataColumn<Row>[] = [
-    { key: "name", header: "Zone", value: (r) => str(r.name), sortable: true, filterable: true, cell: (r) => <span>{str(r.name)} <span className="text-xs text-mo-body">{str(r.slug)}</span></span> },
-    { key: "city", header: "City", value: (r) => str(r.city_code) },
-    { key: "buffer", header: "Travel buffer (min)", value: (r) => num(r.travel_buffer_minutes), align: "right" },
-    { key: "shape", header: "Boundary", value: (r) => (isRecord(r.boundary) ? str(r.boundary.type) : null) },
-    { key: "updated", header: "Updated", value: (r) => str(r.updated_at), cell: (r) => when(r.updated_at) },
-    { key: "active", header: "Served", value: (r) => (r.active === true ? "yes" : "no"), cell: active },
-    { key: "toggle", header: "", value: () => null, align: "right", cell: (r) => <ActiveToggle write="zone.update" target={{ id: String(r.id) }} active={r.active === true} label={str(r.name) ?? "zone"} /> },
-  ]
-  return (
-    <div className="space-y-4">
-      <DataTable caption="Zones" rows={list.data} columns={columns} rowId={(r) => String(r.id)} loading={list.isLoading} error={list.error} onRetry={list.refetch} emptyMessage="No zones in this city." pageSize={DOORSTEP_PAGE} />
-      {mayWrite("zone.create") ? (
-        <FormPanel title="New zone" note="Paste the boundary as GeoJSON (Polygon or MultiPolygon, [longitude, latitude]). The service checks the geometry.">
-          <SpecForm
-            write="zone.create"
-            target={{}}
-            fields={[
-              { key: "city_code", label: "City" },
-              { key: "name", label: "Name" },
-              { key: "slug", label: "Slug" },
-              { key: "travel_buffer_minutes", label: "Travel buffer (min, default 30)" },
-              { key: "boundary", label: "Boundary (GeoJSON)", kind: "textarea", placeholder: "{\"type\": \"Polygon\", \"coordinates\": [[[78.38, 17.44], …]]}" },
-              { key: "active", label: "Served now", kind: "check" },
-            ]}
-            initial={{ city_code: city, name: "", slug: "", travel_buffer_minutes: "", boundary: "", active: true }}
-            check={checkZone}
-          />
-        </FormPanel>
-      ) : null}
     </div>
   )
 }

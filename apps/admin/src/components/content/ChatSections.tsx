@@ -196,7 +196,7 @@ export function ChatReportQueue({ scope }: { scope: ChatScope }) {
       <ConfirmReasonDialog
         open={suspending !== null}
         title="Suspend this channel?"
-        description={suspending ? `Channel ${str(suspending.channel_id)}: its updates stop reaching followers until it is unsuspended. Needs a fresh 2FA code.` : null}
+        description={suspending ? `Channel ${str(suspending.channel_id)}: its updates stop reaching followers until it is unsuspended.` : null}
         confirmLabel="Suspend"
         destructive
         busy={suspend.isPending}
@@ -247,8 +247,8 @@ export function ChannelControls() {
         title={action === "suspend" ? "Suspend this channel?" : "Unsuspend this channel?"}
         description={
           action === "suspend"
-            ? "Its updates stop reaching followers until it is unsuspended. Needs a fresh 2FA code."
-            : "Its updates reach followers again. Needs a fresh 2FA code."
+            ? "Its updates stop reaching followers until it is unsuspended."
+            : "Its updates reach followers again."
         }
         confirmLabel={action === "suspend" ? "Suspend" : "Unsuspend"}
         destructive={action === "suspend"}

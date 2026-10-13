@@ -1,4 +1,5 @@
 "use client"
+import { PartnerEvidenceButton } from "@/components/blocks/PartnerEvidenceButton"
 
 import { useReducer, useState } from "react"
 import { Eye, EyeOff, Lock, RefreshCw } from "lucide-react"
@@ -102,7 +103,7 @@ export function RiderDocuments() {
     { key: "partner", header: "Partner", value: (r) => str(r.partner_id), filterable: true, cell: (r) => <IdText id={r.partner_id} /> },
     { key: "type", header: "Document", value: (r) => str(r.document_type), sortable: true, cell: (r) => humanise(r.document_type) },
     { key: "number", header: "Number", value: (r) => str(r.document_number), cell: (r) => <span className="font-mo-mono text-xs" data-document-number>{str(r.document_number) ?? "—"}</span> },
-    { key: "file", header: "File", value: () => null, cell: (r) => <FileLink url={r.file_url} /> },
+    { key: "file", header: "File", value: () => null, cell: (r) => <PartnerEvidenceButton path={`/v1/admin/rider/documents/${encodeURIComponent(String(r.id))}/view`} /> },
     { key: "status", header: "Status", value: (r) => str(r.status), sortable: true, cell: (r) => <StatusPill value={r.status} tone={reviewTone(r.status)} /> },
     { key: "expires", header: "Expires", value: (r) => str(r.expires_at), sortable: true, cell: (r) => when(r.expires_at) },
     { key: "uploaded", header: "Uploaded", value: (r) => str(r.created_at), sortable: true, cell: (r) => when(r.created_at) },
@@ -143,7 +144,7 @@ export function RiderDocuments() {
         <div className="rounded-mo border border-dashed border-mo-strong bg-mo-sunken p-6 text-center" data-blurred="true">
           <Lock className="mx-auto mb-2 h-6 w-6 text-mo-body" aria-hidden="true" />
           <p className="text-sm text-mo-ink">Partner documents</p>
-          <p className="mb-3 text-xs text-mo-body">Each row carries the document number in the clear. Revealing the list is recorded in the audit trail and needs a fresh 2FA code.</p>
+          <p className="mb-3 text-xs text-mo-body">Each row carries the document number in the clear. Revealing the list is recorded in the audit trail.</p>
           <button type="button" className={buttonPrimary} onClick={() => void reveal()} disabled={state.status === "revealing"}>
             <Eye className="h-4 w-4" aria-hidden="true" />
             {state.status === "revealing" ? "Revealing…" : "Reveal documents"}

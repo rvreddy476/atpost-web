@@ -63,15 +63,15 @@ export interface RiderWriteDef {
 export const RIDER_WRITES: Record<RiderWrite, RiderWriteDef> = {
   "partner.approve": { label: "Approve", permission: "partners.approve", stepUp: false, destructive: false, reason: false, explain: "The partner can go online and take rides once their documents, vehicle and subscription are in order." },
   "partner.reject": { label: "Reject", permission: "partners.approve", stepUp: false, destructive: true, reason: true, explain: "The partner is told why and may apply again." },
-  "partner.suspend": { label: "Suspend", permission: "partners.suspend", stepUp: true, destructive: true, reason: true, explain: "The partner is taken offline and cannot accept rides until reinstated. Needs a fresh 2FA code." },
-  "partner.block": { label: "Block", permission: "partners.suspend", stepUp: true, destructive: true, reason: true, explain: "The partner is blocked from the platform. Needs a fresh 2FA code." },
-  "document.verify": { label: "Verify", permission: "documents.review", stepUp: true, destructive: false, reason: false, explain: "Marks the document as checked. Needs a fresh 2FA code." },
-  "document.reject": { label: "Reject", permission: "documents.review", stepUp: true, destructive: true, reason: true, explain: "The partner must upload the document again. Needs a fresh 2FA code." },
+  "partner.suspend": { label: "Suspend", permission: "partners.suspend", stepUp: true, destructive: true, reason: true, explain: "The partner is taken offline and cannot accept rides until reinstated." },
+  "partner.block": { label: "Block", permission: "partners.suspend", stepUp: true, destructive: true, reason: true, explain: "The partner is blocked from the platform." },
+  "document.verify": { label: "Verify", permission: "documents.review", stepUp: true, destructive: false, reason: false, explain: "Marks the document as checked." },
+  "document.reject": { label: "Reject", permission: "documents.review", stepUp: true, destructive: true, reason: true, explain: "The partner must upload the document again." },
   "vehicle.verify": { label: "Verify", permission: "vehicles.review", stepUp: false, destructive: false, reason: false, explain: "The vehicle may be used for rides." },
   "vehicle.reject": { label: "Reject", permission: "vehicles.review", stepUp: false, destructive: true, reason: true, explain: "The vehicle cannot be used; the partner is told why." },
-  "payment.verify": { label: "Verify payment", permission: "payments.settle", stepUp: true, destructive: false, reason: false, explain: "Confirms the subscription payment was received and activates the plan. Needs a fresh 2FA code." },
-  "payment.reject": { label: "Reject payment", permission: "payments.reject", stepUp: true, destructive: true, reason: true, explain: "The proof is refused and the partner must pay again. Needs a fresh 2FA code." },
-  "ride.cancel": { label: "Cancel ride", permission: "rides.cancel", stepUp: true, destructive: true, reason: true, explain: "Ends the ride for both customer and partner. Needs a fresh 2FA code." },
+  "payment.verify": { label: "Verify payment", permission: "payments.settle", stepUp: true, destructive: false, reason: false, explain: "Confirms the subscription payment was received and activates the plan." },
+  "payment.reject": { label: "Reject payment", permission: "payments.reject", stepUp: true, destructive: true, reason: true, explain: "The proof is refused and the partner must pay again." },
+  "ride.cancel": { label: "Cancel ride", permission: "rides.cancel", stepUp: true, destructive: true, reason: true, explain: "Ends the ride for both customer and partner." },
   "rating.visibility": { label: "Set rating visibility", permission: "ratings.moderate", stepUp: false, destructive: false, reason: false, explain: "Hides, flags or shows the customer's rating of this ride." },
   "complaint.status": { label: "Update status", permission: "complaints.act", stepUp: false, destructive: false, reason: false, explain: "Moves the complaint along; the note is kept with it." },
   "incident.acknowledge": { label: "Acknowledge", permission: "incidents.act", stepUp: false, destructive: false, reason: false, explain: "Records that someone is looking at this incident." },
@@ -80,16 +80,16 @@ export const RIDER_WRITES: Record<RiderWrite, RiderWriteDef> = {
   "city.update": { label: "Update city", permission: "cities.manage", stepUp: false, destructive: false, reason: false, explain: "Changes a city's details or switches it on or off." },
   "zone.create": { label: "Create zone", permission: "cities.manage", stepUp: false, destructive: false, reason: false, explain: "Adds a zone (a boundary polygon) inside a city." },
   "zone.update": { label: "Update zone", permission: "cities.manage", stepUp: false, destructive: false, reason: false, explain: "Changes a zone's name or boundary, or switches it on or off." },
-  "fare_rule.create": { label: "Create fare rule", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes what every rider in that city is charged. Needs a fresh 2FA code." },
-  "fare_rule.update": { label: "Update fare rule", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes what every rider in that city is charged. Needs a fresh 2FA code." },
-  "fare_window.create": { label: "Create fare window", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Adds a peak window: rides quoted in it are multiplied. Needs a fresh 2FA code." },
-  "fare_window.update": { label: "Update fare window", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes when the window applies or by how much. Needs a fresh 2FA code." },
-  "fare_window.deactivate": { label: "Deactivate window", permission: "fares.manage", stepUp: true, destructive: true, reason: true, explain: "The window stops applying to new quotes at once. Needs a fresh 2FA code." },
-  "coupon.create": { label: "Create coupon", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Customers can apply the code from the moment it starts. Needs a fresh 2FA code." },
-  "coupon.update": { label: "Update coupon", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes the discount, limits or validity of an existing code. Needs a fresh 2FA code." },
-  "coupon.deactivate": { label: "Deactivate coupon", permission: "fares.manage", stepUp: true, destructive: true, reason: true, explain: "The code stops working at once; rides already quoted with it keep their discount. Needs a fresh 2FA code." },
-  "outstanding.waive": { label: "Waive fee", permission: "payments.settle", stepUp: true, twoPerson: true, destructive: true, reason: true, explain: "Forgives the cancellation fee the customer still owes. Needs a fresh 2FA code and a second admin's approval before it takes effect." },
-  "refund.issue": { label: "Refund ride", permission: "payments.settle", stepUp: true, twoPerson: true, destructive: true, reason: true, explain: "Returns the fare (or part of it) to the customer's payment method. Needs a fresh 2FA code and a second admin's approval before any money moves." },
+  "fare_rule.create": { label: "Create fare rule", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes what every rider in that city is charged." },
+  "fare_rule.update": { label: "Update fare rule", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes what every rider in that city is charged." },
+  "fare_window.create": { label: "Create fare window", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Adds a peak window: rides quoted in it are multiplied." },
+  "fare_window.update": { label: "Update fare window", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes when the window applies or by how much." },
+  "fare_window.deactivate": { label: "Deactivate window", permission: "fares.manage", stepUp: true, destructive: true, reason: true, explain: "The window stops applying to new quotes at once." },
+  "coupon.create": { label: "Create coupon", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Customers can apply the code from the moment it starts." },
+  "coupon.update": { label: "Update coupon", permission: "fares.manage", stepUp: true, destructive: false, reason: false, explain: "Changes the discount, limits or validity of an existing code." },
+  "coupon.deactivate": { label: "Deactivate coupon", permission: "fares.manage", stepUp: true, destructive: true, reason: true, explain: "The code stops working at once; rides already quoted with it keep their discount." },
+  "outstanding.waive": { label: "Waive fee", permission: "payments.settle", stepUp: true, twoPerson: true, destructive: true, reason: true, explain: "Forgives the cancellation fee the customer still owes. Needs a second admin's approval before it takes effect." },
+  "refund.issue": { label: "Refund ride", permission: "payments.settle", stepUp: true, twoPerson: true, destructive: true, reason: true, explain: "Returns the fare (or part of it) to the customer's payment method. Needs a second admin's approval before any money moves." },
 }
 
 export const riderStepUp = (write: RiderWrite) => RIDER_WRITES[write].stepUp
@@ -97,7 +97,7 @@ export const riderTwoPerson = (write: RiderWrite) => RIDER_WRITES[write].twoPers
 
 /**
  * Reads that are reveals: the answer carries data an admin must ask for on
- * purpose, the read is audited and needs a fresh 2FA code.
+ * purpose, the read is audited.
  */
 export const RIDER_REVEALS = {
   /** The document list carries document numbers in the clear. */

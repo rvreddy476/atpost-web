@@ -15,7 +15,8 @@ WORKDIR /app
 COPY package.json bun.lock* turbo.json ./
 COPY apps ./apps
 COPY packages ./packages
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile --network-concurrency 8
 
 # ── build ─────────────────────────────────────────────────────────
 FROM oven/bun:1.3.14 AS builder
@@ -26,6 +27,7 @@ ARG ZONE
 ARG ADMIN_BASE_PATH=/admin
 ARG NEXT_PUBLIC_ADMIN_SIGN_IN_URL=
 ARG NEXT_PUBLIC_ADMIN_API_ORIGIN=
+ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
 ARG ADMIN_IMAGE_ORIGINS=https://*.cleestudio.com
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -36,6 +38,7 @@ RUN ADMIN_BASE_PATH="$ADMIN_BASE_PATH" \
     NEXT_PUBLIC_ADMIN_SIGN_IN_URL="$NEXT_PUBLIC_ADMIN_SIGN_IN_URL" \
     NEXT_PUBLIC_ADMIN_API_ORIGIN="$NEXT_PUBLIC_ADMIN_API_ORIGIN" \
     ADMIN_IMAGE_ORIGINS="$ADMIN_IMAGE_ORIGINS" \
+    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY" \
     bunx turbo run build --filter=@atpost/${ZONE}
 
 # ── runner ────────────────────────────────────────────────────────

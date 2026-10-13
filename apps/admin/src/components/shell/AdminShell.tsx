@@ -162,20 +162,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const { me, nav } = access
   return (
     <AdminContext.Provider value={{ me, nav }}>
-      <StepUpProvider windowSeconds={me.stepUpWindowSeconds}>
-        <div className="min-h-screen">
-          <TopBar me={me} onToggleNav={() => setNavOpen((open) => !open)} />
-          <div className="flex">
-            <aside
-              className={[
-                "fixed inset-y-14 left-0 z-30 w-64 overflow-y-auto border-r border-mo bg-mo-bg lg:sticky lg:top-14 lg:block lg:h-[calc(100vh-3.5rem)]",
-                navOpen ? "block" : "hidden",
-              ].join(" ")}
-            >
+      <StepUpProvider windowSeconds={me.stepUpWindowSeconds} disabled={me.stepUpRequired === false}>
+        <div className="admin-layout">
+            {navOpen && <button className="admin-nav-backdrop is-open" aria-label="Close navigation" onClick={() => setNavOpen(false)} />}
+            <aside className={`admin-rail ${navOpen ? "is-open" : ""}`}>
+              <ProductMark />
               <SideNav nav={nav} onNavigate={() => setNavOpen(false)} />
             </aside>
-            <main className="min-w-0 flex-1 px-4 py-6 lg:px-8">
-              <div className="mx-auto max-w-6xl">{children}</div>
+          <div className="min-w-0">
+            <TopBar me={me} nav={nav} onToggleNav={() => setNavOpen((open) => !open)} />
+            <main className="admin-main">
+              {children}
             </main>
           </div>
         </div>

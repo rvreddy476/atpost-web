@@ -124,7 +124,7 @@ function IncidentDetail({ incident, onBack }: { incident: Row; onBack: () => voi
       {mayReveal ? (
         <RevealGate<Row[]>
           title="Contact alerts"
-          note="Who was alerted about this incident, on which phone number. Revealing the numbers is recorded in the audit trail and needs a fresh 2FA code."
+          note="Who was alerted about this incident, on which phone number. Revealing the numbers is recorded in the audit trail."
           onReveal={async () => {
             const raw = await read(RIDER_REVEALS.incidentAlerts.path(id))
             return raw === null ? null : readAlerts(raw)

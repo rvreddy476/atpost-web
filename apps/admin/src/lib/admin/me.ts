@@ -22,6 +22,7 @@ export interface AdminMe {
   /** Epoch milliseconds, or null when no step-up window is open. */
   stepUpValidUntil: number | null
   stepUpWindowSeconds: number
+  stepUpRequired?: boolean
   platform: string[]
   apps: Partial<Record<AdminAppId, string[]>>
   navigation: AdminNavEntry[]
@@ -108,6 +109,7 @@ export function parseAdminMe(raw: unknown): AdminMe | null {
     },
     stepUpValidUntil: readTime(body.step_up_valid_until),
     stepUpWindowSeconds: window,
+    stepUpRequired: body.step_up_required !== false,
     platform: strings(permissions.platform),
     apps,
     navigation,

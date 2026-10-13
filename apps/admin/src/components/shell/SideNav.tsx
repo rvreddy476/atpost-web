@@ -27,8 +27,10 @@ import {
 } from "lucide-react"
 import type { AdminAppId } from "@/lib/admin/apps"
 import type { AdminNavModel } from "@/lib/admin/me"
+import { useAdmin } from "./AdminShell"
+import * as sections from "@/lib/admin/sections"
 
-const APP_ICONS: Record<AdminAppId, LucideIcon> = {
+export const APP_ICONS: Record<AdminAppId, LucideIcon> = {
   dating: Heart,
   food: UtensilsCrossed,
   commerce: ShoppingBag,
@@ -52,11 +54,13 @@ function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`)
 }
 
-const linkClass = (active: boolean) =>
-  [
-    "flex items-center gap-2 rounded-mo-sm px-3 py-1.5 text-sm",
-    active ? "bg-mo-raised font-semibold text-mo-ink" : "text-mo-body hover:bg-mo-raised/60 hover:text-mo-ink",
-  ].join(" ")
+const linkClass = (active: boolean) => `admin-nav-link ${active ? "is-active" : ""}`
+const MODULE_SECTIONS: Partial<Record<AdminAppId, readonly sections.SectionDef[]>> = {
+  dating: sections.DATING_SECTIONS, food: sections.FOOD_SECTIONS, commerce: sections.COMMERCE_SECTIONS,
+  trust_safety: sections.TRUST_SECTIONS, doorstep: sections.DOORSTEP_SECTIONS, rider: sections.RIDER_SECTIONS,
+  social: sections.SOCIAL_SECTIONS, tube: sections.TUBE_SECTIONS, qa: sections.QA_SECTIONS, chat: sections.CHAT_SECTIONS,
+  payments: sections.PAYMENTS_SECTIONS, monetization: sections.MONETIZATION_SECTIONS,
+}
 
 /**
  * The left rail. It renders exactly the model it is given — which
@@ -65,12 +69,14 @@ const linkClass = (active: boolean) =>
  */
 export function SideNav({ nav, onNavigate }: { nav: AdminNavModel; onNavigate?: () => void }) {
   const pathname = usePathname()
+  const { me } = useAdmin()
 
   return (
-    <nav aria-label="Admin" className="flex flex-col gap-4 p-3">
+    <nav aria-label="Admin" className="admin-nav flex flex-col gap-4">
       <Link href="/" onClick={onNavigate} className={linkClass(pathname === "/")} aria-current={pathname === "/" ? "page" : undefined}>
-        <LayoutDashboard className="h-4 w-4" aria-hidden="true" /> Overview
+        <LayoutDashboard className="h-4 w-4" aria-hidden="true" /> Dashboard
       </Link>
+      <Link href="/pending" onClick={onNavigate} className={linkClass(pathname === "/pending")}><Inbox className="h-4 w-4" aria-hidden="true" /> Pending requests</Link>
 
       {nav.apps.length > 0 ? (
         <div>
@@ -78,6 +84,8 @@ export function SideNav({ nav, onNavigate }: { nav: AdminNavModel; onNavigate?: 
           <ul className="space-y-0.5">
             {nav.apps.map((group) => {
               const Icon = APP_ICONS[group.app] ?? Gauge
+              const moduleLinks = sections.visibleSections(me, group.app, MODULE_SECTIONS[group.app] ?? []).map(s => ({id: s.id, label: s.label, href: `${group.href}?tab=${s.id}`}))
+              const links = [...group.links, ...moduleLinks.filter(s => !group.links.some(l => l.id === s.id))]
               const groupActive =
                 isActive(pathname, group.href) || group.links.some((link) => isActive(pathname, link.href))
               return (
@@ -90,9 +98,9 @@ export function SideNav({ nav, onNavigate }: { nav: AdminNavModel; onNavigate?: 
                   >
                     <Icon className="h-4 w-4" aria-hidden="true" /> {group.label}
                   </Link>
-                  {groupActive && group.links.length > 0 ? (
-                    <ul className="ml-6 mt-0.5 space-y-0.5 border-l border-mo pl-2">
-                      {group.links.map((link) => (
+                  {groupActive && links.length > 0 ? (
+                    <ul className="admin-subnav">
+                      {links.map((link) => (
                         <li key={link.id}>
                           <Link
                             href={link.href}

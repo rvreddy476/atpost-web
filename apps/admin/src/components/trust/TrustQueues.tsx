@@ -179,7 +179,7 @@ export function TrustAppeals() {
         choices={nextAppealStatuses(deciding?.status).map((s) => ({
           value: s,
           destructive: appealNeedsStepUp(s),
-          hint: appealNeedsStepUp(s) ? "Overturning reverses the enforcement and needs a fresh 2FA code." : undefined,
+          hint: appealNeedsStepUp(s) ? "Overturning reverses the enforcement." : undefined,
         }))}
         reasonLabel="Note"
         busy={decide.isPending}

@@ -118,7 +118,7 @@ export function PaymentsRefunds({ application, can }: PaymentsSectionProps) {
         description={
           resolving ? (
             <>
-              {formatPaise(amount)} for {humanise(resolving.reference_type)} {str(resolving.reference_id)}. Every resolution needs a fresh 2FA code. {REFUND_SECOND_APPROVER_NOTE} Only test data is resolved at once.
+              {formatPaise(amount)} for {humanise(resolving.reference_type)} {str(resolving.reference_id)}. {REFUND_SECOND_APPROVER_NOTE} Only test data is resolved at once.
             </>
           ) : null
         }
@@ -456,7 +456,7 @@ export function PaymentsApplications({ application, can }: PaymentsSectionProps)
   return (
     <>
       <DataTable caption="Payments applications" rows={list.data} columns={columns} rowId={(r) => String(r.key)} loading={list.isLoading} error={list.error} onRetry={list.refetch} emptyMessage="No applications." />
-      <Dialog open={editing !== null} title={`Edit ${str(editing?.key) ?? "application"}`} description="Changes the name customers see and the payment methods offered. Needs a fresh 2FA code." onClose={() => setEditing(null)} dismissible={!save.isPending}>
+      <Dialog open={editing !== null} title={`Edit ${str(editing?.key) ?? "application"}`} description="Changes the name customers see and the payment methods offered." onClose={() => setEditing(null)} dismissible={!save.isPending}>
         <form
           className="space-y-3"
           onSubmit={(e) => {

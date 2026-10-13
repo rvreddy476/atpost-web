@@ -219,7 +219,7 @@ export function AccessGrant({ catalogue }: { catalogue: Catalogue }) {
           <button type="submit" className={buttonPrimary} disabled={grant.isPending}>
             {grant.isPending ? "Granting…" : "Grant role"}
           </button>
-          <span className="text-xs text-mo-body">Needs a fresh 2FA code.</span>
+          <span className="text-xs text-mo-body">This change is recorded.</span>
         </div>
       </form>
 

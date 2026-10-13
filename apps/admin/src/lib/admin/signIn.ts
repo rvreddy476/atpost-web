@@ -40,6 +40,7 @@ export type SignInState =
 export type SignInEvent =
   | { type: "submit-credentials" }
   | { type: "credentials-accepted"; pendingToken: string }
+  | { type: "local-session-accepted" }
   | { type: "credentials-refused"; error: SignInError }
   | { type: "submit-otp" }
   | { type: "otp-accepted" }
@@ -59,6 +60,8 @@ export function signInReducer(state: SignInState, event: SignInEvent): SignInSta
       return state.step === "credentials" && state.busy && event.pendingToken
         ? { step: "otp", busy: false, pendingToken: event.pendingToken, error: null }
         : state
+    case "local-session-accepted":
+      return state.step === "credentials" && state.busy ? { step: "done" } : state
     case "credentials-refused":
       return state.step === "credentials" ? { step: "credentials", busy: false, error: event.error } : state
     case "submit-otp":
@@ -117,4 +120,13 @@ export function readPendingToken(body: unknown): string | null {
   const inner = record(body) && record(body.data) ? body.data : body
   if (!record(inner) || inner.requires_2fa !== true) return null
   return typeof inner.pending_token === "string" && inner.pending_token !== "" ? inner.pending_token : null
+}
+
+/** Local password mode must be explicitly confirmed by a real session answer. */
+export function isLocalPasswordSession(body: unknown): boolean {
+  const record = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null
+  const inner = record(body) && record(body.data) ? body.data : body
+  return record(inner) && inner.requires_2fa === false && inner.local_password_login === true &&
+    inner.admin_mfa === false && typeof inner.session_id === "string" && inner.session_id !== "" &&
+    record(inner.user) && typeof inner.user.id === "string" && inner.user.id !== ""
 }

@@ -103,7 +103,7 @@ export function commentStatusRequirement(status: CommentStatus): ActionRequireme
 
 /** One line for a confirm dialog: what the action needs. */
 export function requirementNote(req: ActionRequirement): string {
-  return req.takedown ? "This is a takedown: it needs the remove permission and a fresh 2FA code." : "Needs the moderate permission; no 2FA code."
+  return req.takedown ? "This is a takedown: it needs the remove permission." : "Needs the moderate permission."
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ export const QA_WRITES: Record<QaWrite, { label: string; permission: string; ste
   "question.hide": { label: "Hide question", permission: "questions.moderate", stepUp: false, destructive: true, explain: "The question and its answers disappear from every reader; the author keeps a copy." },
   "question.lock": { label: "Lock question", permission: "questions.moderate", stepUp: false, destructive: true, explain: "No new answers or comments; existing ones stay visible." },
   "question.duplicate": { label: "Mark duplicate", permission: "questions.moderate", stepUp: false, destructive: false, explain: "Points readers to the original question; both stay visible." },
-  "question.merge": { label: "Merge into another question", permission: "questions.merge", stepUp: true, destructive: true, explain: "Moves the answers onto the other question and closes this one. This cannot be undone, so it needs a fresh 2FA code." },
+  "question.merge": { label: "Merge into another question", permission: "questions.merge", stepUp: true, destructive: true, explain: "Moves the answers onto the other question and closes this one. This cannot be undone, please check the destination carefully." },
   "answer.hide": { label: "Hide answer", permission: "answers.moderate", stepUp: false, destructive: true, explain: "The answer disappears from every reader." },
   "comment.hide": { label: "Hide comment", permission: "comments.moderate", stepUp: false, destructive: true, explain: "The comment disappears from every reader." },
 }

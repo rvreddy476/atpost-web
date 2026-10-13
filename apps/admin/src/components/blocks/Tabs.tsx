@@ -1,6 +1,7 @@
 "use client"
 
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 
 export interface TabDef {
   id: string
@@ -25,6 +26,11 @@ export function Tabs({
 }) {
   const [selected, setSelected] = useState(() => (initial && tabs.some((t) => t.id === initial) ? initial : tabs[0]?.id))
   const refs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const params = useSearchParams()
+  const requested = params?.get("tab")
+  useEffect(() => {
+    if (requested && tabs.some(tab => tab.id === requested)) setSelected(requested)
+  }, [requested, tabs])
   const base = useId()
   const current = tabs.some((t) => t.id === selected) ? selected : tabs[0]?.id
   if (!current) return null

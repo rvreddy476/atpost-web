@@ -294,7 +294,7 @@ export function MStoreCodSettle() {
       <ConfirmReasonDialog
         open={confirming}
         title="Settle this COD remittance?"
-        description="It goes to a second admin for approval and needs a fresh 2FA code."
+        description="It goes to a second admin for approval."
         confirmLabel="Send for approval"
         destructive
         busy={settle.isPending}

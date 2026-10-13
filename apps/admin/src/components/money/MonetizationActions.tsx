@@ -80,7 +80,7 @@ export function Wallets() {
       <ConfirmReasonDialog
         open={current !== null}
         title={current?.title ?? ""}
-        description={current ? `${current.explain} Needs a fresh 2FA code.` : null}
+        description={current ? `${current.explain}` : null}
         confirmLabel={current?.label ?? "Confirm"}
         destructive={current?.destructive ?? false}
         requireReason
@@ -92,7 +92,7 @@ export function Wallets() {
   )
 }
 
-/** Suspend or unsuspend a creator from the creator fund. Needs a fresh 2FA code. */
+/** Suspend or unsuspend a creator from the creator fund. */
 export function Creators() {
   const [creatorId, setCreatorId] = useState<string | null>(null)
   const [action, setAction] = useState<"suspend" | "unsuspend" | null>(null)
@@ -127,8 +127,8 @@ export function Creators() {
         title={action === "suspend" ? "Suspend this creator?" : "Unsuspend this creator?"}
         description={
           action === "suspend"
-            ? "They stop earning from the creator fund immediately. Past settled earnings stay. Needs a fresh 2FA code."
-            : "They can earn from the creator fund again. Needs a fresh 2FA code."
+            ? "They stop earning from the creator fund immediately. Past settled earnings stay."
+            : "They can earn from the creator fund again."
         }
         confirmLabel={action === "suspend" ? "Suspend" : "Unsuspend"}
         destructive={action === "suspend"}
@@ -182,7 +182,7 @@ export function MonetizationRefunds() {
         title="Refund this transaction?"
         description={
           <>
-            {formatPaise(paise)} on transaction {transactionId.trim()}. Needs a fresh 2FA code. <span data-testid="mon-refund-confirm-hint">{REFUND_SECOND_APPROVER_NOTE}</span>
+            {formatPaise(paise)} on transaction {transactionId.trim()}. <span data-testid="mon-refund-confirm-hint">{REFUND_SECOND_APPROVER_NOTE}</span>
           </>
         }
         confirmLabel="Send for approval"

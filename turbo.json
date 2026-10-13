@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["ADMIN_BASE_PATH", "ADMIN_IMAGE_ORIGINS", "NEXT_PUBLIC_ADMIN_*"],
+      "env": ["ADMIN_BASE_PATH", "ADMIN_IMAGE_ORIGINS", "NEXT_PUBLIC_ADMIN_*", "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "lint": {},
@@ -16,7 +16,7 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["ADMIN_BASE_PATH", "ADMIN_IMAGE_ORIGINS", "NEXT_PUBLIC_ADMIN_*"]
+      "passThroughEnv": ["ADMIN_BASE_PATH", "ADMIN_IMAGE_ORIGINS", "NEXT_PUBLIC_ADMIN_*", "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"]
     }
   }
 }

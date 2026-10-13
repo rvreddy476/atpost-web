@@ -68,7 +68,7 @@ export function KycDocumentsSection({
           <h2 id="kyc-documents-title" className="font-mo-display text-lg font-semibold text-mo-ink">
             KYC documents · {storeName}
           </h2>
-          <p className="mt-1 text-sm text-mo-body">Viewing a document asks for a fresh 2FA code. View only. Every view is recorded.</p>
+          <p className="mt-1 text-sm text-mo-body">View only. Every view is recorded.</p>
         </div>
         {onClose ? (
           <button type="button" className={buttonGhost} onClick={onClose} aria-label="Close KYC documents">
@@ -189,7 +189,7 @@ export function SellerKycDocuments({ seller, onClose }: { seller: { id: string; 
       })
       if (id !== attempt.current || !alive.current) return
       if (outcome.kind === "cancelled") {
-        setNotice("Not opened: viewing a KYC document needs a fresh 2FA code.")
+        setNotice("Document view cancelled.")
         return
       }
       if (outcome.kind === "error") {

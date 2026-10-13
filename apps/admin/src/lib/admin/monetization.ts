@@ -80,7 +80,7 @@ export function monetizationTwoPerson(write: MonetizationWrite): boolean {
   return MONETIZATION_ALWAYS_TWO_PERSON.includes(write)
 }
 
-export const ALWAYS_TWO_PERSON_NOTE = "This always goes to a second admin for approval, and needs a fresh 2FA code. Nothing changes until they approve."
+export const ALWAYS_TWO_PERSON_NOTE = "This always goes to a second admin for approval. Nothing changes until they approve."
 
 /** What to tell the admin before a monetization refund is sent: the amount once typed, then the rule. */
 export function monetizationRefundHint(amountPaise: number | null): string {

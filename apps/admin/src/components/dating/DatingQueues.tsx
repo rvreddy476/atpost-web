@@ -125,7 +125,7 @@ export function DatingReports() {
       <ChoiceDialog
         open={enforcing !== null}
         title="Suspend or reinstate this profile"
-        description="Enforcement against a person. It is recorded with your reason and needs a fresh 2FA code."
+        description="Enforcement against a person. It is recorded with your reason."
         choiceLabel="Enforcement"
         choices={ENFORCEMENT_ACTIONS.map((a) => ({ value: a, destructive: true }))}
         confirmLabel="Apply"

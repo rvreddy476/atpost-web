@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server"
 import { proxyRequest } from "@atpost/api-client/proxy"
 import { adminProxyHeaders } from "@/lib/admin/cookies"
+import { localPasswordProxyOptions } from "@/lib/admin/localPasswordLogin"
 
 /**
  * The console's same-origin gateway proxy: the shared implementation
@@ -18,7 +19,8 @@ async function adminProxy(req: NextRequest, ctx: Context) {
     headers: adminProxyHeaders(req.headers),
     body: hasBody ? await req.arrayBuffer() : undefined,
   })
-  return proxyRequest(forwarded, ctx)
+  const { path } = await ctx.params
+  return proxyRequest(forwarded, ctx, localPasswordProxyOptions(req.url, path, process.env, req.headers.get("host")))
 }
 
 export const GET = adminProxy

@@ -3,6 +3,11 @@ import { ADMIN_APPS, APP_ENTRY_PERMISSIONS } from "./apps"
 import { buildAdminNav, findNavGroup, hasAppAccess, hasPermission, mfaBlocks, parseAdminMe, readMfaEnrolled } from "./me"
 
 const allNavigation = ADMIN_APPS.map((app) => ({ app: app.id, label: app.label }))
+it("only pauses step-up when the server explicitly disables it", () => {
+  expect(parseAdminMe({user_id:"admin"})?.stepUpRequired).toBe(true)
+  expect(parseAdminMe({user_id:"admin",step_up_required:"false"})?.stepUpRequired).toBe(true)
+  expect(parseAdminMe({user_id:"admin",step_up_required:false})?.stepUpRequired).toBe(false)
+})
 
 function me({
   platform = [] as string[],

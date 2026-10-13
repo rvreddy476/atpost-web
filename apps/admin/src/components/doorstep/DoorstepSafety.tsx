@@ -83,7 +83,7 @@ export function DoorstepIncidents() {
         onClose={() => setResolving(null)}
       >
         {resolving?.pro_auto_suspended === true ? (
-          <CheckField label="Lift the professional's automatic suspension" hint="Only when the incident is cleared; this needs a fresh 2FA code. Otherwise the suspension stays until someone reinstates them." checked={lift} onChange={setLift} />
+          <CheckField label="Lift the professional's automatic suspension" hint="Only when the incident is cleared; otherwise the suspension stays until someone reinstates them." checked={lift} onChange={setLift} />
         ) : null}
       </DoorstepActionDialog>
     </>

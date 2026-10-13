@@ -26,6 +26,9 @@ export const DOORSTEP_PAGE = 50
 // ---------------------------------------------------------------------------
 
 export type DoorstepWrite =
+  | "change.approve"
+  | "change.reject"
+  | "pro.identity_review"
   | "pro.tax_registration"
   | "pro.approve"
   | "pro.reject"
@@ -105,24 +108,27 @@ export interface DoorstepWriteDef {
 const enc = encodeURIComponent
 const byId = (path: string) => (t: DoorstepTarget) => `${DOORSTEP}${path.replace(":id", enc(t.id ?? ""))}`
 const fixed = (path: string) => () => `${DOORSTEP}${path}`
-const STEP = " Needs a fresh 2FA code."
+const STEP = ""
 
 export const DOORSTEP_WRITES: Record<DoorstepWrite, DoorstepWriteDef> = {
+  "change.approve": { label:"Approve change", permission:"pros.approve", method:"post", path:byId("/partner-changes/:id/decide"), stepUp:false, destructive:false, reason:false, explain:"Apply the submitted details. Service changes are checked against eligibility rules. A changed PAN requires a fresh identity review.", done:"Partner change approved" },
+  "change.reject": { label:"Reject change", permission:"pros.approve", method:"post", path:byId("/partner-changes/:id/decide"), stepUp:false, destructive:false, reason:true, explain:"Keep the approved details and tell the partner what needs correcting.", done:"Partner change rejected" },
+  "pro.identity_review": { label: "Record identity review", permission: "pros.approve", method: "post", path: byId("/professionals/:id/identity-review"), stepUp: true, destructive: false, reason: true, explain: "Review the submitted PAN and approved selfie, and record salon eligibility. Choose unknown if eligibility cannot be established. This is manual review, not UIDAI or government PAN authentication. It does not approve the professional, skills or prices." + STEP, done: "Identity review recorded" },
   "pro.tax_registration": { label: "Record GST registration", permission: "pros.approve", method: "post", path: byId("/professionals/:id/tax-registration"), stepUp: true, destructive: false, reason: true, explain: "Manually verify the active GST registration and its ownership before recording it. Leave the GSTIN blank to remove it. This does not approve the professional, their skills or prices. Changes are refused while they have active bookings." + STEP, done: "Tax registration recorded" },
-  "pro.approve": { label: "Approve", permission: "pros.approve", method: "post", path: byId("/professionals/:id/approve"), stepUp: false, destructive: false, reason: false, explain: "The professional can go on duty and be picked by customers. The server refuses while any onboarding step is missing. Their selfie, skills, documents and prices are each decided on their own; approving the professional approves none of them.", done: "Professional approved" },
+  "pro.approve": { label: "Approve", permission: "pros.approve", method: "post", path: byId("/professionals/:id/approve"), stepUp: false, destructive: false, reason: false, explain: "Approve this partner's application and open their workspace. Service availability, hours and prices are configured before taking jobs.", done: "Professional approved" },
   "pro.reject": { label: "Reject", permission: "pros.approve", method: "post", path: byId("/professionals/:id/reject"), stepUp: false, destructive: true, reason: true, explain: "The application is refused and the professional role is withdrawn. They are told why.", done: "Professional rejected" },
   "pro.suspend": { label: "Suspend", permission: "pros.suspend", method: "post", path: byId("/professionals/:id/suspend"), stepUp: true, destructive: true, reason: true, explain: "The professional is taken off duty and their future jobs are re-dispatched to others." + STEP, done: "Professional suspended" },
   "pro.reinstate": { label: "Reinstate", permission: "pros.suspend", method: "post", path: byId("/professionals/:id/reinstate"), stepUp: true, destructive: false, reason: true, explain: "Lifts the suspension: the professional is approved again and can go on duty." + STEP, done: "Professional reinstated" },
   "pro.block": { label: "Block", permission: "pros.suspend", method: "post", path: byId("/professionals/:id/block"), stepUp: true, destructive: true, reason: true, explain: "Blocks the professional permanently and withdraws the professional role." + STEP, done: "Professional blocked" },
-  "skill.verify": { label: "Verify skill", permission: "pros.approve", method: "post", path: (t) => `${DOORSTEP}/professionals/${enc(t.id ?? "")}/skills/${enc(t.skill ?? "")}/verify`, stepUp: false, destructive: false, reason: false, explain: "You confirm this professional can do the work. Declaring a skill never verifies it. Once verified, customers can pick them for services that need it. A skill that needs a certificate is verified by approving its trade certificate; Verify then answers that a certificate is required.", done: "Skill verified" },
+  "skill.verify": { label: "Verify skill", permission: "pros.approve", method: "post", path: (t) => `${DOORSTEP}/professionals/${enc(t.id ?? "")}/skills/${enc(t.skill ?? "")}/verify`, stepUp: false, destructive: false, reason: false, explain: "Confirm this partner can provide the selected service. Experience certificates are optional supporting evidence.", done: "Skill verified" },
   "skill.revoke": { label: "Revoke skill", permission: "pros.approve", method: "post", path: (t) => `${DOORSTEP}/professionals/${enc(t.id ?? "")}/skills/${enc(t.skill ?? "")}/verify`, stepUp: false, destructive: true, reason: true, explain: "Dispatch stops offering this professional jobs that need the skill.", done: "Skill revoked" },
   "document.approve": { label: "Approve document", permission: "documents.review", method: "post", path: byId("/documents/:id/decide"), stepUp: true, destructive: false, reason: false, explain: "Records that you checked it: nothing a professional uploads is approved without an admin. Approving a selfie passes the face-match step, a trade certificate verifies its skill, and a police clearance certificate makes the background check clear until 12 months after its issue date." + STEP, done: "Document approved" },
   "document.reject": { label: "Reject document", permission: "documents.review", method: "post", path: byId("/documents/:id/decide"), stepUp: true, destructive: true, reason: true, explain: "The professional must upload the document again; they are told why." + STEP, done: "Document rejected" },
   "booking.cancel": { label: "Cancel booking", permission: "bookings.cancel", method: "post", path: byId("/bookings/:id/cancel"), stepUp: true, destructive: true, reason: true, explain: "Cancels the booking for the customer and the professional. The customer is refunded in full unless you keep a fee." + STEP, done: "Booking cancelled" },
   "booking.redispatch": { label: "Offer the customer alternatives", permission: "bookings.redispatch", method: "post", path: byId("/bookings/:id/redispatch"), stepUp: false, destructive: false, reason: true, explain: "Takes the job off the current professional, with no penalty to them. The customer is told and picks another professional (a dearer one is charged the difference, a cheaper one refunded it) or cancels for a full refund. The current professional, and anyone you exclude, are left off their list; ops never assign anyone. With no choice within 30 minutes the booking is cancelled with a full refund.", done: "Customer asked to pick another professional" },
-  "booking.refund": { label: "Refund", permission: "refunds.issue", method: "post", path: byId("/bookings/:id/refund"), stepUp: true, twoPerson: true, idempotencyRequired: true, destructive: true, reason: true, explain: "Returns money to the customer's payment method. Needs a fresh 2FA code and a second admin's approval before any money moves.", done: "Refund requested" },
+  "booking.refund": { label: "Refund", permission: "refunds.issue", method: "post", path: byId("/bookings/:id/refund"), stepUp: true, twoPerson: true, idempotencyRequired: true, destructive: true, reason: true, explain: "Returns money to the customer's payment method. Needs a second admin's approval before any money moves.", done: "Refund requested" },
   "incident.acknowledge": { label: "Acknowledge", permission: "incidents.act", method: "post", path: byId("/incidents/:id/acknowledge"), stepUp: false, destructive: false, reason: false, explain: "Records that someone is looking at this incident.", done: "Incident acknowledged" },
-  "incident.resolve": { label: "Resolve", permission: "incidents.act", method: "post", path: byId("/incidents/:id/resolve"), stepUp: false, stepUpWhen: (body) => body.lift_suspension === true, destructive: false, reason: true, explain: "Closes the incident with what was done. An automatic suspension stays unless you lift it here; lifting it puts the professional back on the platform and needs a fresh 2FA code.", done: "Incident resolved" },
+  "incident.resolve": { label: "Resolve", permission: "incidents.act", method: "post", path: byId("/incidents/:id/resolve"), stepUp: false, stepUpWhen: (body) => body.lift_suspension === true, destructive: false, reason: true, explain: "Closes the incident with what was done. An automatic suspension stays unless you lift it here; lifting it puts the professional back on the platform.", done: "Incident resolved" },
   "ticket.status": { label: "Move ticket", permission: "tickets.act", method: "post", path: byId("/tickets/:id/status"), stepUp: false, destructive: false, reason: false, explain: "Moves the ticket along; the note is kept with it.", done: "Ticket updated" },
   "rating.hide": { label: "Hide rating", permission: "ratings.moderate", method: "post", path: byId("/ratings/:id/hide"), stepUp: false, destructive: true, reason: true, explain: "The rating is hidden and no longer counts towards the professional's average.", done: "Rating hidden" },
   "category.create": { label: "Create category", permission: "catalogue.write", method: "post", path: fixed("/categories"), stepUp: false, destructive: false, reason: false, explain: "Adds a category. It stays hidden from customers until it is active.", done: "Category created" },
@@ -308,7 +314,7 @@ export const CANCEL_STAGES = ["unassigned", "assigned", "en_route", "arrived", "
 
 export const ONBOARDING_STEP_LABELS: Record<string, string> = {
   profile: "Profile",
-  aadhaar_digilocker: "Aadhaar via DigiLocker",
+  identity_review: "Manual identity review",
   selfie_face_match: "Selfie face match",
   skills: "Skills",
   service_area: "Service area",
@@ -316,13 +322,20 @@ export const ONBOARDING_STEP_LABELS: Record<string, string> = {
   bank: "Bank account",
   police_certificate: "Police clearance certificate",
   agreement: "Agreement",
-  pan: "PAN (recommended)",
+  pan: "PAN number",
 }
 
 export const DOCUMENT_KIND_LABELS: Record<string, string> = {
+  introduction_video: "Introduction video (optional)",
+  manual_identity: "Identity proof",
+  experience_certificate: "Experience certificate (optional)",
+  passport: "Passport",
+  voter_id: "Voter ID",
+  driving_license: "Driving licence",
   police_certificate: "Police clearance certificate",
   trade_certificate: "Trade certificate",
   selfie: "Selfie",
+  bank_proof: "Bank proof",
   aadhaar: "Aadhaar",
   pan: "PAN card",
   other: "Other document",
@@ -400,7 +413,7 @@ export function bpsLabel(value: unknown): string {
 export function proWrites(status: unknown): DoorstepWrite[] {
   const s = str(status) ?? ""
   const out: DoorstepWrite[] = []
-  if (s === "pending_verification") out.push("pro.approve")
+  if (s === "pending_verification" || s === "draft") out.push("pro.approve")
   if (s === "pending_verification" || s === "draft") out.push("pro.reject")
   if (s === "approved") out.push("pro.suspend")
   if (s === "suspended") out.push("pro.reinstate")
@@ -431,14 +444,13 @@ export function readReadiness(detail: Row | null): Readiness {
 }
 
 /**
- * Why Approve is not offered yet: the required onboarding steps still
- * missing (PAN is only recommended), or a readiness the console could not
- * read. Empty means the server should accept it.
+ * Required checks from the server. Never hide the action or omit PAN.
+ * The server still makes the final approval decision.
  */
 export function approvalBlockers(detail: Row | null): string[] {
-  if (!detail || !isRecord(detail.readiness)) return ["The onboarding readiness could not be read."]
+  if (!detail || !isRecord(detail.readiness) || !Array.isArray(detail.readiness.missing_steps) || detail.readiness.missing_steps.some((step: unknown) => typeof step !== "string")) return ["The onboarding readiness could not be read."]
   return readReadiness(detail)
-    .missing.filter((step) => step !== "pan")
+    .missing
     .map(stepLabel)
 }
 

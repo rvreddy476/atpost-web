@@ -5,6 +5,7 @@ import Link from "next/link"
 import { CancelForm } from "@/components/sell/CancelForm"
 import { SellerShell } from "@/components/sell/SellerShell"
 import { ShipForm } from "@/components/sell/ShipForm"
+import { LocalDeliveryTracking } from "@/components/commerce/LocalDelivery"
 import { OrderStatusPill } from "@/components/sell/StatusPill"
 import {
   useCancelSellerOrder,
@@ -88,7 +89,7 @@ function OrderDetail({ id }: { id: string }) {
   const timeline = history ? timelineFromHistory(history, events) : buildTimeline(order, shipment, events)
   const historyUnavailable = historyQ.isError && !isNotFound(historyQ.error)
   const address = decodeAddressSnapshot(card.delivery_address ?? null)
-  const shipLive = canBookShipment(order, shipment)
+  const shipLive = canBookShipment(order, shipment) && shipment?.courier !== "cleestudio_local"
   const actions = sellerActionsFor(order.status)
   const payUI = orderStatusUI(order.payment_status)
 
@@ -129,6 +130,7 @@ function OrderDetail({ id }: { id: string }) {
         </div>
       </div>
 
+      <LocalDeliveryTracking orderId={id} seller />
       <section className="panel panel-pad">
         <h2 className="panel-heading">Fulfilment</h2>
         <Actions

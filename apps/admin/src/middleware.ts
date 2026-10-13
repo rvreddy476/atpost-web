@@ -17,6 +17,7 @@ export function middleware(request: NextRequest) {
 
   const csp = buildContentSecurityPolicy({
     nonce,
+    maps: /(?:^|\/)doorstep(?:\/|$)/.test(request.nextUrl.pathname),
     dev: process.env.NODE_ENV === "development",
     apiOrigin: process.env.NEXT_PUBLIC_ADMIN_API_ORIGIN ?? null,
     imageOrigins: splitOrigins(process.env.ADMIN_IMAGE_ORIGINS ?? "https://*.cleestudio.com"),

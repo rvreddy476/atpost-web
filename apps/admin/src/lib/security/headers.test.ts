@@ -16,6 +16,7 @@ describe("admin CSP", () => {
   it("is strict in production", () => {
     const d = directives(buildContentSecurityPolicy({ nonce: NONCE, dev: false, apiOrigin: "https://api.cleestudio.com/v1" }))
     expect(d["default-src"]).toEqual(["'none'"])
+    expect(d["media-src"]).toEqual(["blob:"])
     expect(d["script-src"]).toEqual(["'self'", `'nonce-${NONCE}'`, "'strict-dynamic'"])
     expect(d["connect-src"]).toEqual(["'self'", "https://api.cleestudio.com"])
     expect(d["frame-ancestors"]).toEqual(["'none'"])
@@ -45,6 +46,14 @@ describe("admin CSP", () => {
     expect(d["script-src"]).toHaveLength(3)
   })
 
+  it("permits Maps only when explicitly enabled, retaining strict script policy", () => {
+    const d = directives(buildContentSecurityPolicy({nonce:NONCE,dev:false,maps:true}))
+    expect(d["connect-src"]).toContain("https://*.googleapis.com")
+    expect(d["style-src-elem"]).toContain("https://fonts.googleapis.com")
+    expect(d["script-src"]).not.toContain("'unsafe-eval'")
+    expect(d["style-src-elem"]).not.toContain("'unsafe-inline'")
+    expect(d["frame-ancestors"]).toEqual(["'none'"])
+  })
   it("sanitises origins", () => {
     expect(sanitiseOrigin("https://media.cleestudio.com/path?q=1")).toBe("https://media.cleestudio.com")
     expect(sanitiseOrigin("ftp://x")).toBeNull()

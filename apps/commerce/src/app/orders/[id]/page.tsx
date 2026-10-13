@@ -6,6 +6,7 @@ import { useOrder, useOrderWithItems, useShipment, useInvoice, useCancelOrder, u
 import { StoreHeader } from '@/components/StoreHeader'
 import { StoreFooter } from '@/components/StoreFooter'
 import { completeOrderPayment } from '@/lib/orderPayment'
+import { LocalDeliveryTracking } from '@/components/commerce/LocalDelivery'
 
 // Maps payment_status (server-side, from payments-service) to a label + a
 // colour. On navy each state is carried by its text hue alone — `.status-pill`
@@ -151,6 +152,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </section>
       ) : null}
 
+      <LocalDeliveryTracking orderId={id} />
       {shipmentData?.shipment ? (
         <section className="panel panel-pad">
           <h2 className="panel-heading">Shipment</h2>

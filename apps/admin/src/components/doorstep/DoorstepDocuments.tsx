@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Eye } from "lucide-react"
+import { PartnerEvidenceButton } from "@/components/blocks/PartnerEvidenceButton"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { ErrorNote, IdText, StatusPill } from "@/components/blocks/bits"
 import { buttonDanger, buttonPrimary, buttonSecondary } from "@/components/blocks/buttons"
@@ -11,6 +12,7 @@ import { useAdmin } from "@/components/shell/AdminShell"
 import { useStepUp } from "@/components/shell/StepUpProvider"
 import { useAdminIdentity } from "@/hooks/useAdminMe"
 import { apiUrl } from "@/lib/admin/api"
+import { bankForProof } from "@/lib/admin/bankReview"
 import { readList, readObject, str, when, type Row } from "@/lib/admin/data"
 import {
   DECISION_BODIES,
@@ -41,7 +43,7 @@ type OpenViewer = { doc: Row; bitmap: ImageBitmap; lines: [string, string] }
  * view), decoded to a bitmap and drawn on the watermarked canvas. No <img>,
  * no object URL, no link, nothing to save.
  */
-export function useDocumentViewer() {
+export function useDocumentViewer(changePhoto = false) {
   const { me } = useAdmin()
   const requestStepUp = useStepUp()
   const identity = useAdminIdentity()
@@ -51,7 +53,7 @@ export function useDocumentViewer() {
   const [viewer, setViewer] = useState<OpenViewer | null>(null)
   const attempt = useRef(0)
   const alive = useRef(true)
-  const mayView = can(me, "doorstep", DOORSTEP_REVEALS.documentView.permission)
+  const mayView = can(me, "doorstep", changePhoto ? "pros.read" : DOORSTEP_REVEALS.documentView.permission)
 
   useEffect(() => {
     alive.current = true
@@ -73,14 +75,14 @@ export function useDocumentViewer() {
         stepUpWindowOpen: stepUpWindowOpen(me.stepUpValidUntil, Date.now()),
         requestStepUp,
         fetchImage: async () => {
-          const result = await fetchKycImage(apiUrl(DOORSTEP_REVEALS.documentView.path(id)))
+          const result = await fetchKycImage(apiUrl(changePhoto ? `/v1/admin/doorstep/partner-changes/${encodeURIComponent(id)}/photo` : DOORSTEP_REVEALS.documentView.path(id)))
           lastStatus = result.ok ? null : result.status
           return result
         },
       })
       if (mine !== attempt.current || !alive.current) return
       if (outcome.kind === "cancelled") {
-        setNotice("Not opened: viewing a document needs a fresh 2FA code.")
+        setNotice("Document not opened. Please try again.")
         return
       }
       if (outcome.kind === "error") {
@@ -129,6 +131,7 @@ export function useDocumentViewer() {
 /** The View button for one document row. */
 export function ViewDocumentButton({ doc, viewer }: { doc: Row; viewer: ReturnType<typeof useDocumentViewer> }) {
   if (!viewer.mayView || !str(doc.media_id)) return <span className="text-xs text-mo-body">—</span>
+  if (doc.kind === 'introduction_video') return <PartnerEvidenceButton path={`/v1/admin/doorstep/documents/${encodeURIComponent(String(doc.id))}/evidence/view`} title="Partner introduction" />
   return (
     <button type="button" className={buttonSecondary} disabled={viewer.openingId !== null} onClick={() => viewer.view(doc)} aria-label={`View ${documentLabel(doc)} ${str(doc.id)}`}>
       <Eye className="h-4 w-4" aria-hidden="true" />
@@ -154,6 +157,7 @@ export function documentEffect(doc: Row): string {
     return until ? `Background check clear until ${until}` : "No issue date: cannot clear the check"
   }
   if (kind === "selfie") return "Passes the face-match step"
+  if (kind === "bank_proof") return "Verifies the linked payout account"
   if (kind === "trade_certificate") return str(doc.skill_code) ? `Verifies the skill ${str(doc.skill_code)}` : "Verifies its skill"
   return "—"
 }
@@ -204,7 +208,15 @@ export function DocumentDecisionDialog({ pending, faceMatch, onClose }: { pendin
   const approving = pending?.write === "document.approve"
   const warning = approving && doc ? documentApprovalWarning(doc, today) : null
   const clearUntil = doc && str(doc.kind) === "police_certificate" ? policeClearUntil(doc.issued_on) : null
-  const needsLook = approving && isSelfie
+  const isBank = str(doc?.kind) === "bank_proof"
+  const { me } = useAdmin()
+  const bankProId = isBank ? str(doc?.pro_id) : null
+  const bankDetail = useDoorstepStepUpRead(DOORSTEP_STEP_UP_READS.professional.path(bankProId ?? ""), { enabled: bankProId !== null && can(me, "doorstep", DOORSTEP_STEP_UP_READS.professional.permission) })
+  const bankProfessional = bankDetail.raw === undefined ? null : readObject(bankDetail.raw)
+  const currentBank = bankProfessional ? readObject({ data: bankProfessional.payout_account }) : null
+  const bank = bankForProof(currentBank, str(doc?.id))
+  const bankMatches = bank !== null && str(bank.proof_document_id) === str(doc?.id)
+  const needsLook = approving && (isSelfie || isBank)
 
   useEffect(() => {
     setLooked(false)
@@ -215,7 +227,7 @@ export function DocumentDecisionDialog({ pending, faceMatch, onClose }: { pendin
       write={pending?.write ?? null}
       subject={doc ? `this ${documentLabel(doc).toLowerCase()}` : null}
       busy={mutation.isPending}
-      canConfirm={warning === null && (!needsLook || looked)}
+      canConfirm={warning === null && (!needsLook || looked) && (!approving || !isBank || bankMatches)}
       onConfirm={(reason) =>
         pending &&
         mutation.mutate({
@@ -228,7 +240,8 @@ export function DocumentDecisionDialog({ pending, faceMatch, onClose }: { pendin
     >
       <div className="space-y-3">
         {isSelfie ? <FaceMatchNote source={faceMatch} /> : null}
-        {needsLook ? <CheckField label="I looked at the selfie myself and it is the same person as the DigiLocker photo." hint="Required: the similarity score is advice, not a decision." checked={looked} onChange={setLooked} /> : null}
+        {isBank ? bankMatches ? <div className="rounded-mo border border-mo bg-mo-sunken p-3 text-sm"><p className="font-semibold">{str(bank?.account_holder)}</p><p>{str(bank?.bank_name)} · ••••{str(bank?.account_last4)}</p><p>IFSC: {str(bank?.ifsc)}</p><p>{str(bank?.proof_kind)?.replaceAll("_", " ")}</p></div> : <p role="status" className="text-sm text-mo-body">{bankDetail.isLoading ? "Loading the linked bank account…" : "The current bank account could not be matched to this proof. Open the professional record and retry."}</p> : null}
+        {needsLook ? <CheckField label={isBank ? "I compared the proof with the account holder, last four digits and IFSC on the partner record." : "I reviewed the selfie against the identity evidence."} hint="Required before approval." checked={looked} onChange={setLooked} /> : null}
         {warning ? (
           <p role="alert" className="text-sm text-mo-bad">
             {warning}
@@ -306,7 +319,7 @@ export function DoorstepDocumentQueue() {
       <div className="flex flex-wrap items-end gap-3">
         <ValueFilter value={status} options={DOCUMENT_STATUSES} onChange={setStatus} />
         <p className="flex-1 text-xs text-mo-body">
-          Nothing a professional uploads is approved without an admin: a selfie&rsquo;s face match is advice only. View only: viewing an image asks for a fresh 2FA code, and every view is recorded.
+          Nothing a professional uploads is approved without an admin: a selfie&rsquo;s face match is advice only. View only: every document view is recorded.
         </p>
       </div>
       {list.dismissed ? (

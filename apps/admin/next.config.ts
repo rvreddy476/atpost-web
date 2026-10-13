@@ -43,7 +43,7 @@ const nextConfig: NextConfig = {
   // The zone defaults forward /login and /register to the consumer sign-in
   // page. The console signs in on its own host, so it keeps both routes.
   async redirects() {
-    return []
+    return basePath ? [] : [{ source: '/admin/:path*', destination: '/:path*', permanent: false }]
   },
   async headers() {
     const noStore = [

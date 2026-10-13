@@ -38,6 +38,7 @@
 
 export interface CspOptions {
   nonce: string
+  maps?: boolean
   dev: boolean
   /** Origin of the API when the browser calls it directly; omitted when proxied. */
   apiOrigin?: string | null
@@ -68,7 +69,7 @@ export function splitOrigins(value: string | null | undefined): string[] {
     .filter((v): v is string => !!v)
 }
 
-export function buildContentSecurityPolicy({ nonce, dev, apiOrigin, imageOrigins = [] }: CspOptions): string {
+export function buildContentSecurityPolicy({ nonce, dev, apiOrigin, imageOrigins = [], maps = false }: CspOptions): string {
   if (!/^[A-Za-z0-9+/=_-]{16,}$/.test(nonce)) throw new Error("CSP nonce must be at least 16 base64 characters")
   const api = sanitiseOrigin(apiOrigin)
   const images = imageOrigins.map((o) => sanitiseOrigin(o)).filter((o): o is string => !!o)
@@ -80,6 +81,8 @@ export function buildContentSecurityPolicy({ nonce, dev, apiOrigin, imageOrigins
     "style-src-elem": dev ? ["'self'", "'unsafe-inline'"] : ["'self'", `'nonce-${nonce}'`],
     "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:", ...images],
+    // Partner introductions are authenticated bytes held only in memory.
+    "media-src": ["blob:"],
     "font-src": ["'self'", "data:"],
     // Dev needs the HMR websocket on the same host.
     "connect-src": ["'self'", ...(api ? [api] : []), ...(dev ? ["ws:", "wss:"] : [])],
@@ -92,6 +95,16 @@ export function buildContentSecurityPolicy({ nonce, dev, apiOrigin, imageOrigins
     "frame-ancestors": ["'none'"],
   }
 
+  // Only the Doorstep coverage editor needs Maps. Nonces remain mandatory;
+  // do not weaken scripts or styles with unsafe-inline/unsafe-eval.
+  if (maps) {
+    directives["connect-src"].push("https://*.googleapis.com", "https://*.gstatic.com", "https://*.google.com")
+    directives["img-src"].push("https://*.googleapis.com", "https://*.gstatic.com", "https://*.google.com", "https://*.googleusercontent.com")
+    directives["font-src"].push("https://fonts.gstatic.com")
+    directives["style-src"].push("https://fonts.googleapis.com")
+    directives["style-src-elem"].push("https://fonts.googleapis.com")
+    directives["frame-src"] = ["https://*.google.com"]
+  }
   const parts = Object.entries(directives).map(([name, values]) => `${name} ${values.join(" ")}`)
   if (!dev) parts.push("upgrade-insecure-requests")
   return parts.join("; ")

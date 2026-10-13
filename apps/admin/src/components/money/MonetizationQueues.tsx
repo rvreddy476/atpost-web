@@ -60,7 +60,7 @@ export function FraudReviews() {
         <ChoiceDialog
           open={deciding !== null}
           title="Decide this fraud review"
-          description={deciding ? `Creator ${str(deciding.creator_id)}, risk score ${num(deciding.risk_score) ?? "—"}. Deciding needs a fresh 2FA code.` : null}
+          description={deciding ? `Creator ${str(deciding.creator_id)}, risk score ${num(deciding.risk_score) ?? "—"}.` : null}
           choiceLabel="Decision"
           choices={[
             { value: "investigating", label: "Investigating", hint: "Keeps the review open while you look into it." },
@@ -129,7 +129,7 @@ export function Disputes() {
       <ChoiceDialog
         open={acting !== null}
         title="Act on this dispute"
-        description={acting ? `Transaction ${str(acting.transaction_id)}. Needs a fresh 2FA code.` : null}
+        description={acting ? `Transaction ${str(acting.transaction_id)}.` : null}
         choiceLabel="Outcome"
         choices={[
           { value: "investigating", label: "Investigating", hint: "Keeps the dispute open." },

@@ -137,7 +137,7 @@ function PanicDetail({ incident, onBack }: { incident: Row; onBack: () => void }
       {mayReveal ? (
         <RevealGate<Row>
           title="Location and context"
-          note="The member's GPS position at the time of the panic. Revealing it is recorded in the audit trail and needs a fresh 2FA code."
+          note="The member's GPS position at the time of the panic. Revealing it is recorded in the audit trail."
           onReveal={async () => {
             const raw = await read(`${DATING}/panic/${encodeURIComponent(id)}`)
             return raw === null ? null : readObject(raw) ?? {}

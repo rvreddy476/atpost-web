@@ -141,7 +141,7 @@ export const RESOLUTIONS: readonly { value: Resolution; label: string; explain: 
   {
     value: "test_data",
     label: "Test data",
-    explain: "A test or fixture payment with no real money behind it. Needs a fresh 2FA code, never a second approver.",
+    explain: "A test or fixture payment with no real money behind it. No second approver is required.",
   },
 ]
 
@@ -155,7 +155,7 @@ export function resolveNeedsSecondApprover(resolution: Resolution): boolean {
 
 /** What to tell the admin before a resolve is sent: the amount when known, then the rule. */
 export function resolveHint(resolution: Resolution, amountPaise: number | null = null): string {
-  if (resolution === "test_data") return "Test data moves no money: it is resolved once you confirm with 2FA."
+  if (resolution === "test_data") return "Test data moves no money: it is resolved once you confirm."
   return amountPaise === null ? REFUND_SECOND_APPROVER_NOTE : `${formatPaise(amountPaise)}. ${REFUND_SECOND_APPROVER_NOTE}`
 }
 

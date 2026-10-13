@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { SellerShell } from "@/components/sell/SellerShell"
+import { SellerPickupLocation } from "@/components/commerce/LocalDelivery"
 import { useMyProducts, useSubmitProduct } from "@/hooks/useSellerDashboard"
 import { Table, TBody, TD, TH, THead, TR } from "@atpost/ui"
 
@@ -76,6 +77,7 @@ function MyProducts() {
 export default function SellPage() {
   return (
     <SellerShell redirectTo="/shop">
+      <SellerPickupLocation />
       <MyProducts />
     </SellerShell>
   )

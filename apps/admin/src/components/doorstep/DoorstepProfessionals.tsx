@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { ArrowLeft } from "lucide-react"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { Details, Field, IdText, LookupForm, StatusPill } from "@/components/blocks/bits"
@@ -15,7 +15,6 @@ import {
   DOORSTEP_STEP_UP_READS,
   DOORSTEP_WRITES,
   PRO_STATUSES,
-  approvalBlockers,
   detailRows,
   documentLabel,
   faceMatchAdvice,
@@ -30,6 +29,8 @@ import {
   type DoorstepWrite,
 } from "@/lib/admin/doorstep"
 import { can } from "@/lib/admin/sections"
+import { approveProfessional, professionalApproval } from "@/lib/admin/professionalApproval"
+import { adminErrorMessage } from "@/lib/admin/mutation"
 import { CursorPager, DoorstepActionDialog, StepUpDismissedNote, ValueFilter, useDoorstepMutation, useDoorstepStepUpRead, useMayWrite } from "./DoorstepBits"
 import { DocumentDecisionDialog, ViewDocumentButton, useDocumentViewer, type DocumentDecision } from "./DoorstepDocuments"
 
@@ -87,9 +88,9 @@ export function DoorstepProfessionals({ initialStatus = "", caption = "Professio
   )
 }
 
-type Pending = { write: DoorstepWrite; skill?: string } | null
+type Pending = { write: DoorstepWrite; skill?: string; confirmIdentity?: boolean } | null
 
-/** One professional. Approve is offered only once every required onboarding step is done; the server refuses otherwise too. */
+/** Application review first; workspace configuration is kept out of the approval checklist. */
 export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const { me } = useAdmin()
   const mayWrite = useMayWrite()
@@ -99,15 +100,22 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
   const viewer = useDocumentViewer()
   const [pending, setPending] = useState<Pending>(null)
   const [decision, setDecision] = useState<DocumentDecision>(null)
-  const mutation = useDoorstepMutation({ onDone: () => setPending(null) })
+  const mutation = useDoorstepMutation({ onDone: (write) => { if (write !== "pro.identity_review") setPending(null) } })
+  const [identityChecked, setIdentityChecked] = useState(false)
+  const [reviewedGender, setReviewedGender] = useState("unknown")
+  const [approvalBusy, setApprovalBusy] = useState(false)
+  const [approvalError, setApprovalError] = useState("")
+  const approvalLock = useRef(false)
 
   const d = detail.raw === undefined ? null : readObject(detail.raw)
   const faceMatch = faceMatchAdvice(d)
   const p = d && isRecord(d.professional) ? d.professional : null
+  const application = p && isRecord(p.application) ? p.application : null
   const status = str(p?.status)
   const readiness = readReadiness(d)
-  const blockers = approvalBlockers(d)
-  const writes = proWrites(status).filter((w) => mayWrite(w) && (w !== "pro.approve" || blockers.length === 0))
+  const { blockers, confirmIdentity } = professionalApproval(d)
+  const reviewing = status === "pending_verification" || status === "draft"
+  const writes = proWrites(status).filter((w) => mayWrite(w))
   const zoneName = (zid: string) => str(zones.data.find((z) => str(z.id) === zid)?.name)
   const payout = d ? readObject({ data: d.payout_account }) : null
   const hours = d ? detailRows(d, "weekly_hours") : []
@@ -132,7 +140,7 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
   }
 
   const skillColumns: DataColumn<Row>[] = [
-    { key: "skill", header: "Skill", value: (r) => str(r.skill_code), cell: (r) => <span className="font-mo-mono text-xs">{str(r.skill_code)}</span> },
+    { key: "skill", header: "Service", value: (r) => str(r.skill_code), cell: (r) => humanise(r.skill_code) },
     { key: "status", header: "Status", value: (r) => str(r.status), cell: (r) => <StatusPill value={skillStatusLabel(r.status)} tone={reviewTone(r.status)} /> },
     { key: "verified", header: "Verified", value: (r) => str(r.verified_at), cell: (r) => when(r.verified_at) },
     {
@@ -184,7 +192,6 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
   return (
     <div className="space-y-4">
       {back}
-      {mayWrite("pro.tax_registration") ? <TaxRegistrationPanel key={id} id={id} /> : null}
       <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Professional detail">
         <div className="mb-3 flex items-center gap-2">
           <h3 className="flex-1 font-mo-display text-lg font-semibold text-mo-ink">{str(p.display_name) ?? "Professional"}</h3>
@@ -192,29 +199,24 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
         </div>
         <Details
           items={[
-            ["Professional id", <IdText key="id" id={p.id} />],
-            ["User", <IdText key="u" id={p.user_id} />],
-            ["City", str(p.city_code)],
-            ["Gender (from Aadhaar)", humanise(p.gender)],
-            ["Rating", num(p.rating_avg) === null ? "No ratings yet" : `${(num(p.rating_avg) ?? 0).toFixed(2)} from ${num(p.rating_count) ?? 0}`],
-            ["Jobs completed", String(num(p.jobs_completed) ?? 0)],
-            ["Max jobs a day", String(num(p.max_jobs_per_day) ?? "—")],
-            ["Can go on duty", readiness.canGoOnDuty ? "Yes" : "No"],
-            ["Joined", when(p.created_at)],
-            ["Updated", when(p.updated_at)],
+            ["City", application ? `${str(application.town)}, ${str(application.state_name)}` : str(p.city_code)],
+            ["Gender", application ? humanise(application.declared_gender) : humanise(p.gender)],
+            ["Verified mobile", application ? `Ending ${str(application.primary_phone_last4)}` : "—"],
+            ["Alternate contact", application?.alternate_phone_last4 ? `Ending ${str(application.alternate_phone_last4)} · ${application.alternate_phone_verified_at ? "Verified" : "Verify later"}` : "Not supplied (optional)"],
+            ["Applied", when(application?.submitted_at ?? p.created_at)],
           ]}
         />
         <div className="mt-4 space-y-2">
-          <h4 className="text-sm font-semibold text-mo-ink">Onboarding</h4>
+          <h4 className="text-sm font-semibold text-mo-ink">Application checks</h4>
           <ul className="flex flex-wrap gap-1" aria-label="Onboarding steps">
-            {readiness.completed.map((s) => (
+            {readiness.completed.filter(s => !application || ["selfie_face_match", "identity_review", "skills", "pan", "bank"].includes(s)).map((s) => (
               <li key={`c-${s}`}>
                 <StatusPill value={stepLabel(s)} tone="good" />
               </li>
             ))}
             {readiness.missing.map((s) => (
               <li key={`m-${s}`}>
-                <StatusPill value={`${stepLabel(s)}: missing`} tone="warn" />
+                <StatusPill value={`${stepLabel(s)}: ${s === "identity_review" && confirmIdentity ? "confirm with approval" : "to review"}`} tone="warn" />
               </li>
             ))}
             {readiness.recommended.map((s) => (
@@ -223,26 +225,33 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
               </li>
             ))}
           </ul>
-          {status === "pending_verification" && blockers.length > 0 ? (
-            <p className="text-xs text-mo-body">Approve appears once these are done: {blockers.join(", ")}.</p>
+          {reviewing && blockers.length > 0 ? (
+            <p id="approval-requirements" className="text-sm text-mo-body" role="status">Before approval: {blockers.join(", ")}. Review the services and documents below.</p>
           ) : null}
+          {reviewing && blockers.length === 0 ? <p className="text-sm text-mo-body">{confirmIdentity ? "Documents reviewed. Confirm the identity check when approving this partner." : "Required application checks are complete. Ready for approval."}</p> : null}
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {writes.map((w) => (
-            <button key={w} type="button" className={DOORSTEP_WRITES[w].destructive ? buttonDanger : buttonPrimary} onClick={() => setPending({ write: w })}>
+            <button key={w} type="button" className={DOORSTEP_WRITES[w].destructive ? buttonDanger : buttonPrimary}
+              disabled={approvalBusy || (w === "pro.approve" && blockers.length > 0)}
+              aria-describedby={w === "pro.approve" && blockers.length > 0 ? "approval-requirements" : undefined}
+              onClick={() => { setIdentityChecked(false); setReviewedGender(str(p.gender) || "unknown"); setApprovalError(""); setPending({ write: w, confirmIdentity: w === "pro.approve" && confirmIdentity }) }}>
               {DOORSTEP_WRITES[w].label}
             </button>
           ))}
         </div>
       </section>
 
+      <DataTable caption="Documents" rows={detailRows(d, "documents")} columns={documentColumns} rowId={(r) => String(r.id)} emptyMessage="No documents uploaded." />
+
       <div className="space-y-1">
-        <DataTable caption="Skills" rows={skillsForReview(d)} columns={skillColumns} rowId={(r) => String(r.skill_code)} emptyMessage="No skills declared." />
-        <p className="text-xs text-mo-body">Every declared skill waits for an admin: nothing is verified on declaration. A skill that needs a certificate is verified by approving its trade certificate below.</p>
+        <DataTable caption="Services" rows={skillsForReview(d)} columns={skillColumns} rowId={(r) => String(r.skill_code)} emptyMessage="No services selected." />
+        <p className="text-xs text-mo-body">Review the services this partner can provide. Experience certificates are optional supporting evidence.</p>
       </div>
 
-      <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Service area and hours">
-        <h4 className="mb-2 text-sm font-semibold text-mo-ink">Service area and hours</h4>
+      <details className="rounded-mo border border-mo bg-mo-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-mo-ink">Workspace setup · service area and hours</summary>
+        <p className="my-2 text-sm text-mo-body">Configured before taking jobs, separately from application review.</p>
         <Details
           items={[
             [
@@ -255,13 +264,12 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
               "Weekly hours",
               hours.length > 0
                 ? hours.map((h) => `${WEEKDAYS[num(h.weekday) ?? 0] ?? "?"} ${str(h.start)}–${str(h.end)}`).join(" · ")
-                : "Not in the detail answer yet",
+                : "Not configured",
             ],
           ]}
         />
-      </section>
+      </details>
 
-      <DataTable caption="Documents" rows={detailRows(d, "documents")} columns={documentColumns} rowId={(r) => String(r.id)} emptyMessage="No documents uploaded." />
       {faceMatch ? (
         <p className="rounded-mo border border-mo bg-mo-sunken p-3 text-sm text-mo-ink" aria-label="Face match advice">
           <span className="font-semibold">Face match (advice only): </span>
@@ -271,7 +279,10 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
       {viewer.element}
       <DocumentDecisionDialog pending={decision} faceMatch={{ kind: "ready", advice: faceMatch }} onClose={() => setDecision(null)} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <details className="rounded-mo border border-mo bg-mo-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-mo-ink">Review history & service-specific checks</summary>
+        <div className="my-3"><Details items={[["Professional reference", <IdText key="p" id={p.id} />], ["Account reference", <IdText key="u" id={p.user_id} />], ["Updated", when(p.updated_at)]]} /></div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <DataTable
           caption="Background checks"
           rows={detailRows(d, "background_checks")}
@@ -301,7 +312,10 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
           rowId={(r) => String(r.kind)}
           emptyMessage="No KYC checks yet."
         />
-      </div>
+        </div>
+        {mayWrite("pro.identity_review") ? <IdentityReviewPanel key={`identity-${id}`} id={id} application={Boolean(application)} /> : null}
+        {mayWrite("pro.tax_registration") ? <TaxRegistrationPanel key={id} id={id} /> : null}
+      </details>
 
       <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Payout account">
         <h4 className="mb-2 text-sm font-semibold text-mo-ink">Payout account</h4>
@@ -311,11 +325,15 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
               ["Holder", str(payout.account_holder)],
               ["Account", str(payout.account_last4) ? `•••• ${str(payout.account_last4)}` : null],
               ["IFSC", str(payout.ifsc)],
+              ["Bank", str(payout.bank_name)],
+              ["Branch", str(payout.branch_name)],
+              ["Proof", str(payout.proof_kind)?.replaceAll("_", " ")],
+              ["Review note", str(payout.reason)],
               ["Status", <StatusPill key="s" value={payout.status} tone={reviewTone(payout.status)} />],
             ]}
           />
         ) : (
-          <p className="text-sm text-mo-body">No bank account added. Payouts are off; settlements are computed only.</p>
+          <p className="text-sm text-mo-body">No bank account submitted.</p>
         )}
       </section>
 
@@ -332,15 +350,32 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
           rowId={(r) => `${str(r.created_at)}-${str(r.to_status)}`}
         />
       ) : (
-        <p className="text-xs text-mo-body">Status history is not in the detail answer yet; the Audit tab lists every admin decision.</p>
+        null
       )}
 
       <DoorstepActionDialog
         write={pending?.write ?? null}
         subject={pending?.skill ? `“${pending.skill}”` : str(p.display_name)}
-        busy={mutation.isPending}
-        onConfirm={(reason) => {
+        busy={mutation.isPending || approvalBusy}
+        canConfirm={pending?.write !== "pro.approve" || (blockers.length === 0 && (!pending.confirmIdentity || identityChecked))}
+        onConfirm={async (reason) => {
           if (!pending) return
+          if (pending.write === "pro.approve") {
+            if (approvalLock.current || blockers.length > 0 || (pending.confirmIdentity && !identityChecked)) return
+            approvalLock.current = true; setApprovalBusy(true); setApprovalError("")
+            try {
+              const outcome = await approveProfessional(async (write, body) => {
+                const result = await mutation.mutateAsync({ write, target: { id }, body })
+                if (write === "pro.identity_review" && result.kind === "done") {
+                  setPending(current => current ? { ...current, confirmIdentity: false } : null)
+                }
+                return result
+              }, pending.confirmIdentity ? { gender: reviewedGender } : null, reason)
+              if (outcome.kind === "approval") setPending(null)
+            } catch (error) { setApprovalError(adminErrorMessage(error, "Approval could not be completed. Your saved reviews are preserved.")) }
+            finally { approvalLock.current = false; setApprovalBusy(false) }
+            return
+          }
           if (pending.write === "skill.verify" || pending.write === "skill.revoke") {
             mutation.mutate({ write: pending.write, target: { id, skill: pending.skill }, body: DECISION_BODIES.skill(pending.write === "skill.verify", reason) })
           } else {
@@ -348,7 +383,16 @@ export function ProfessionalDetail({ id, onBack }: { id: string; onBack: () => v
           }
         }}
         onClose={() => setPending(null)}
-      />
+      >
+        {pending?.confirmIdentity ? <div className="space-y-3">
+          <label className="flex items-start gap-2 text-sm text-mo-ink"><input type="checkbox" checked={identityChecked} onChange={e => setIdentityChecked(e.target.checked)} />I reviewed the approved identity proof and selfie and confirm they belong to this applicant.</label>
+          <details><summary className="cursor-pointer text-sm text-mo-body">Restricted-service eligibility (if applicable)</summary>
+            <p className="my-2 text-xs text-mo-body">Only record what the evidence establishes. Unknown eligibility keeps restricted services unavailable.</p>
+            <Field label="Reviewed eligibility">{fieldId => <select id={fieldId} className={inputClass} value={reviewedGender} onChange={e => { setReviewedGender(e.target.value); setIdentityChecked(false) }}><option value="unknown">Not established</option><option value="female">Female</option><option value="male">Male</option><option value="transgender">Transgender</option></select>}</Field>
+          </details>
+        </div> : null}
+        {approvalError ? <p role="alert" className="text-sm text-mo-bad">{approvalError}</p> : null}
+      </DoorstepActionDialog>
     </div>
   )
 }
@@ -375,6 +419,23 @@ function TaxRegistrationPanel({ id }: { id: string }) {
       <Field label="GSTIN (blank to remove)">{fieldId => <input id={fieldId} className={inputClass} value={gstin} maxLength={15} autoComplete="off" onChange={e => { setGstin(e.target.value.toUpperCase()); setVerified(false) }} />}</Field>
       {gstin.trim() ? <label className="mt-3 flex gap-2 text-sm text-mo-ink"><input type="checkbox" checked={verified} onChange={e => setVerified(e.target.checked)} />I checked the active registration and its ownership.</label> : <p className="mt-3 text-sm text-mo-body">This removes the registration and prevents new registered-only bookings.</p>}
       {!valid ? <p className="mt-2 text-sm text-mo-bad">Enter a 15-character GSTIN and confirm the manual verification.</p> : null}
+    </DoorstepActionDialog>
+  </section>
+}
+
+function IdentityReviewPanel({ id, application = false }: { id: string; application?: boolean }) {
+  const [editing, setEditing] = useState(false)
+  const [gender, setGender] = useState("unknown")
+  const [checked, setChecked] = useState(false)
+  const mutation = useDoorstepMutation({ onDone: () => { setEditing(false); setChecked(false) } })
+  return <section className="rounded-mo border border-mo bg-mo-surface p-4" aria-label="Manual identity review">
+    <h4 className="mb-2 text-sm font-semibold text-mo-ink">Identity and salon eligibility · admin review</h4>
+    <p className="mb-3 text-sm text-mo-body">{application ? "Approve the uploaded identity proof, then record your manual review." : "Review PAN submission and approve the current selfie first."} Experience or course certificates are skill evidence, not identity proof. Unknown eligibility keeps restricted salon work unavailable.</p>
+    <button type="button" className={buttonSecondary} onClick={() => { setChecked(false); setEditing(true) }}>Record reviewed identity</button>
+    <DoorstepActionDialog write={editing ? "pro.identity_review" : null} subject={null} busy={mutation.isPending} canConfirm={checked} onClose={() => setEditing(false)} onConfirm={reason => mutation.mutate({ write: "pro.identity_review", target: { id }, body: { gender, reason } })}>
+      {application && <p className="text-sm text-mo-body">Approve the uploaded Passport, Voter ID or Driving Licence first. Self-declared gender is not reviewed eligibility. Account approval opens the workspace; job-readiness checks still apply.</p>}
+      <Field label="Reviewed eligibility">{fieldId => <select id={fieldId} className={inputClass} value={gender} onChange={e => { setGender(e.target.value); setChecked(false) }}><option value="unknown">Unknown / not established</option><option value="female">Female</option><option value="male">Male</option><option value="transgender">Transgender</option></select>}</Field>
+      <label className="mt-3 flex gap-2 text-sm text-mo-ink"><input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} />I reviewed the evidence. This is a manual decision, not Aadhaar/PAN authentication.</label>
     </DoorstepActionDialog>
   </section>
 }

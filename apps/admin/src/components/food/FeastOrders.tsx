@@ -28,10 +28,12 @@ export function orderTotalPaise(order: Row): number | null {
 /** Feast orders: a paged list, a look-up by id, and the detail with cancel and refund. */
 export function FeastOrders() {
   const [offset, setOffset] = useState(0)
+  const [recoveryOffset, setRecoveryOffset] = useState(0)
   const [openId, setOpenId] = useState<string | null>(null)
   const list = useAdminList("food", `${FOOD}/orders?limit=${LIMIT}&offset=${offset}`)
+  const recovery = useAdminList("food", `${FOOD}/delivery-recovery?limit=${LIMIT}&offset=${recoveryOffset}`)
 
-  if (openId) return <OrderDetail id={openId} onBack={() => setOpenId(null)} />
+  if (openId) return <OrderDetail id={openId} recoveryIssue={str(recovery.data.find((r) => r.order_id === openId)?.issue) ?? undefined} onBack={() => setOpenId(null)} />
 
   const columns: DataColumn<Row>[] = [
     { key: "number", header: "Order", value: (r) => str(r.order_number), sortable: true, filterable: true },
@@ -56,6 +58,19 @@ export function FeastOrders() {
   return (
     <>
       <LookupForm label="Order id" button="Open order" validate={(v) => (isUuid(v) ? null : "Enter the order's id (a UUID).")} onSubmit={setOpenId} />
+      <section className="mb-6 space-y-2" aria-label="Delivery recovery">
+        <h3 className="font-mo-display text-base font-semibold text-mo-ink">Delivery needs attention</h3>
+        <p className="text-xs text-mo-body">Unassigned orders keep searching eligible partners automatically. No delivery is fabricated. Review locked codes or failed delivery with support; cancellation and refunds remain separate decisions.</p>
+        <DataTable caption="Delivery recovery queue" rows={recovery.data} columns={[
+          { key: "order", header: "Order", value: (r) => str(r.order_number) },
+          { key: "restaurant", header: "Restaurant", value: (r) => str(r.restaurant_name) },
+          { key: "issue", header: "Needs attention", value: (r) => humanise(r.issue) },
+          { key: "offers", header: "Live / total offers", value: (r) => `${num(r.live_offers) ?? 0} / ${num(r.offer_attempts) ?? 0}` },
+          { key: "placed", header: "Placed", value: (r) => str(r.placed_at), cell: (r) => when(r.placed_at) },
+          { key: "open", header: "", value: () => null, cell: (r) => <button type="button" className={buttonSecondary} onClick={() => setOpenId(String(r.order_id))}>Review order</button> },
+        ]} rowId={(r) => String(r.order_id)} loading={recovery.isLoading} error={recovery.error} onRetry={recovery.refetch} emptyMessage="No delivery exceptions." />
+        <OffsetPager offset={recoveryOffset} limit={LIMIT} count={recovery.data.length} onChange={setRecoveryOffset} />
+      </section>
       <p className="mb-2 text-xs text-mo-body">The filters search the rows on this page; the server has no order search yet.</p>
       <DataTable caption="Feast orders" rows={list.data} columns={columns} rowId={(r) => String(r.id)} loading={list.isLoading} error={list.error} onRetry={list.refetch} emptyMessage="No orders." pageSize={LIMIT} />
       <OffsetPager offset={offset} limit={LIMIT} count={list.data.length} onChange={setOffset} />
@@ -63,12 +78,18 @@ export function FeastOrders() {
   )
 }
 
-function OrderDetail({ id, onBack }: { id: string; onBack: () => void }) {
+function OrderDetail({ id, onBack, recoveryIssue }: { id: string; onBack: () => void; recoveryIssue?: string }) {
   const { me } = useAdmin()
   const order = useAdminObject("food", `${FOOD}/orders/${encodeURIComponent(id)}`)
   const [cancelling, setCancelling] = useState(false)
   const [refunding, setRefunding] = useState(false)
   const [amount, setAmount] = useState("")
+  const [reissuing, setReissuing] = useState(false)
+  const codeKind = recoveryIssue === "pickup_code_locked" ? "pickup" : recoveryIssue === "delivery_code_locked" ? "delivery" : null
+  const reissue = useAdminMutation<{ reason: string }>({
+    request: ({ reason }) => ({ method: "post", url: `${FOOD}/orders/${encodeURIComponent(id)}/reissue-verification`, body: { kind: codeKind, reason }, idempotent: true }),
+    invalidate: [FOOD_KEY], successMessage: "A new verification code is available to the authorized participant. Delivery is not marked complete.", errorTitle: "Code reissue failed", onDone: () => setReissuing(false),
+  })
 
   const cancel = useAdminMutation<{ reason: string }>({
     request: ({ reason }) => ({ method: "post", url: `${FOOD}/orders/${encodeURIComponent(id)}/cancel`, body: { reason } }),
@@ -85,7 +106,7 @@ function OrderDetail({ id, onBack }: { id: string; onBack: () => void }) {
       idempotent: true,
     }),
     invalidate: [FOOD_KEY],
-    successMessage: "Refund issued",
+    successMessage: "Refund requested. Payment-service confirmation is still required.",
     errorTitle: "Refund failed",
     onDone: () => {
       setRefunding(false)
@@ -134,6 +155,7 @@ function OrderDetail({ id, onBack }: { id: string; onBack: () => void }) {
           ]}
         />
         <div className="mt-4 flex flex-wrap gap-2">
+          {codeKind && can(me, "food", "orders.cancel") ? <button type="button" className={buttonSecondary} onClick={() => setReissuing(true)}>Reissue locked {codeKind} code</button> : null}
           {can(me, "food", "refund.issue") ? (
             <button type="button" className={buttonPrimary} onClick={() => setRefunding(true)}>
               Refund
@@ -177,9 +199,16 @@ function OrderDetail({ id, onBack }: { id: string; onBack: () => void }) {
       </section>
 
       <ConfirmReasonDialog
+        open={reissuing}
+        title={`Reissue the locked ${codeKind ?? "verification"} code?`}
+        description="Confirm the participants and document the support check. The old code will stop working. This does not verify pickup, complete delivery, or change any payment."
+        confirmLabel="Reissue code" destructive busy={reissue.isPending}
+        onConfirm={(reason) => reissue.mutate({ reason })} onClose={() => setReissuing(false)}
+      />
+      <ConfirmReasonDialog
         open={cancelling}
         title="Cancel this order?"
-        description="The customer and restaurant are told. Cancelling needs a fresh 2FA code."
+        description="The customer and restaurant are told."
         confirmLabel="Cancel order"
         destructive
         busy={cancel.isPending}
@@ -189,7 +218,7 @@ function OrderDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <ConfirmReasonDialog
         open={refunding}
         title="Refund this order"
-        description={`Order total ${formatPaise(total)}. Refunds need a fresh 2FA code.`}
+        description={`Order total ${formatPaise(total)}.`}
         confirmLabel="Refund"
         destructive
         busy={refund.isPending}

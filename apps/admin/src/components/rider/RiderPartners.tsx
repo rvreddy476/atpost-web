@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { Details, Field, IdText, OffsetPager, StatusPill } from "@/components/blocks/bits"
@@ -121,19 +122,13 @@ function PartnerDetail({ partner, onBack }: { partner: Row; onBack: () => void }
             ["City", str(p.city_id) ? <IdText key="c" id={p.city_id} /> : null],
             ["KYC", humanise(p.kyc_status)],
             ["Bank", humanise(p.bank_status)],
-            ["Rating", (num(p.rating) ?? 0).toFixed(2)],
-            ["Rides completed / cancelled", `${num(p.total_rides_completed) ?? 0} / ${num(p.total_rides_cancelled) ?? 0}`],
-            ["Acceptance / cancellation rate", `${((num(p.acceptance_rate) ?? 0) * 100).toFixed(0)}% / ${((num(p.cancellation_rate) ?? 0) * 100).toFixed(0)}%`],
-            ["Fraud score", (num(p.fraud_score) ?? 0).toFixed(2)],
-            ["Online", bool(p.is_online) ? "Yes" : "No"],
-            ["Approved", when(p.approved_at)],
             ["Joined", when(p.created_at)],
           ]}
         />
         <div className="mt-4 flex flex-wrap gap-2">
           {mayDecide && status === "pending_verification" ? (
             <>
-              <button type="button" className={buttonPrimary} onClick={() => setPending("partner.approve")}>
+              <button type="button" className={buttonPrimary} disabled={detail.isLoading || Boolean(detail.error) || mutation.isPending} onClick={() => setPending("partner.approve")}>
                 Approve
               </button>
               <button type="button" className={buttonDanger} onClick={() => setPending("partner.reject")}>
@@ -152,8 +147,16 @@ function PartnerDetail({ partner, onBack }: { partner: Row; onBack: () => void }
             </button>
           ) : null}
         </div>
+        {mayDecide && status === "pending_verification" ? <p className="mt-3 text-sm text-mo-body">Review identity, selfie, bank and applicable vehicle documents before approval. <Link className="font-semibold text-mo-cyan underline" href="/rider?tab=documents">Open documents</Link></p> : null}
         {!mayDecide && !maySuspend ? <p className="mt-3 text-xs text-mo-body">Deciding on a partner needs the approve or suspend permission.</p> : null}
       </section>
+      {status !== "pending_verification" ? <details className="rounded-mo border border-mo bg-mo-surface p-4"><summary className="cursor-pointer text-sm font-semibold text-mo-ink">Work activity</summary><Details items={[
+        ["Rating", (num(p.rating) ?? 0).toFixed(2)],
+        ["Rides completed / cancelled", `${num(p.total_rides_completed) ?? 0} / ${num(p.total_rides_cancelled) ?? 0}`],
+        ["Acceptance / cancellation rate", `${((num(p.acceptance_rate) ?? 0) * 100).toFixed(0)}% / ${((num(p.cancellation_rate) ?? 0) * 100).toFixed(0)}%`],
+        ["Online", bool(p.is_online) ? "Yes" : "No"],
+        ["Approved", when(p.approved_at)],
+      ]} /></details> : null}
       <RiderActionDialog write={pending as RiderWrite | null} subject={str(p.full_name)} busy={mutation.isPending} onConfirm={(reason) => pending && run(pending, reason)} onClose={() => setPending(null)} />
     </div>
   )

@@ -139,6 +139,9 @@ describe("Doorstep sections per permission set", () => {
 describe("every write's route and permission (contract x-permission)", () => {
   const t = { id: ID, code: "HYD", skill: "ac_service" }
   const table: [DoorstepWrite, "post" | "patch", string, string][] = [
+ ["change.approve","post",`/partner-changes/${ID}/decide`,"pros.approve"],
+ ["change.reject","post",`/partner-changes/${ID}/decide`,"pros.approve"],
+    ["pro.identity_review", "post", `/professionals/${ID}/identity-review`, "pros.approve"],
     ["pro.tax_registration", "post", `/professionals/${ID}/tax-registration`, "pros.approve"],
     ["pro.approve", "post", `/professionals/${ID}/approve`, "pros.approve"],
     ["pro.reject", "post", `/professionals/${ID}/reject`, "pros.approve"],
@@ -234,6 +237,7 @@ const SERVER_STEP_UP = [
   "POST /commission-rules",
   "PATCH /commission-rules/:id",
   "GET /professionals/:id",
+  "POST /professionals/:id/identity-review",
   "POST /professionals/:id/suspend",
   "POST /professionals/:id/reinstate",
   "POST /professionals/:id/block",
@@ -282,6 +286,7 @@ describe("step-up, two-person and reasons", () => {
 
   it("step-up: account actions, document decisions, ops cancel, refunds and every money setting", () => {
     expect(all.filter(doorstepStepUp)).toEqual([
+      "pro.identity_review",
       "pro.tax_registration",
       "pro.suspend",
       "pro.reinstate",
@@ -299,7 +304,7 @@ describe("step-up, two-person and reasons", () => {
       "commission_rule.update",
       "pro_price.approve",
     ])
-    for (const w of all.filter(doorstepStepUp)) expect(DOORSTEP_WRITES[w].explain).toMatch(/fresh 2FA code/)
+    for (const w of all.filter(doorstepStepUp)) expect(DOORSTEP_WRITES[w].explain).not.toMatch(/2FA/)
   })
 
   it("two-person: the refund, and only the refund", () => {
@@ -309,7 +314,7 @@ describe("step-up, two-person and reasons", () => {
 
   it("a reason is required for every destructive write, and for re-dispatch, reinstate and resolve", () => {
     const needing = all.filter((w) => DOORSTEP_WRITES[w].reason)
-    expect(needing).toEqual(["pro.tax_registration", "pro.reject", "pro.suspend", "pro.reinstate", "pro.block", "skill.revoke", "document.reject", "booking.cancel", "booking.redispatch", "booking.refund", "incident.resolve", "rating.hide", "pro_price.reject"])
+    expect(needing).toEqual(["change.reject", "pro.identity_review", "pro.tax_registration", "pro.reject", "pro.suspend", "pro.reinstate", "pro.block", "skill.revoke", "document.reject", "booking.cancel", "booking.redispatch", "booking.refund", "incident.resolve", "rating.hide", "pro_price.reject"])
     for (const w of all.filter((x) => DOORSTEP_WRITES[x].destructive)) expect(DOORSTEP_WRITES[w].reason).toBe(true)
   })
 
@@ -357,17 +362,17 @@ describe("reads", () => {
 describe("professionals and approvals", () => {
   it("offers only the decisions the status allows", () => {
     expect(proWrites("pending_verification")).toEqual(["pro.approve", "pro.reject", "pro.block"])
-    expect(proWrites("draft")).toEqual(["pro.reject", "pro.block"])
+    expect(proWrites("draft")).toEqual(["pro.approve", "pro.reject", "pro.block"])
     expect(proWrites("approved")).toEqual(["pro.suspend", "pro.block"])
     expect(proWrites("suspended")).toEqual(["pro.reinstate", "pro.block"])
     expect(proWrites("blocked")).toEqual([])
     expect(proWrites(undefined)).toEqual([])
   })
 
-  it("Approve waits for every required onboarding step; PAN is only recommended", () => {
+  it("retains every server-required application check, including PAN", () => {
     const detail = { readiness: { status: "pending_verification", missing_steps: ["police_certificate", "pan"], completed_steps: ["profile"], recommended_steps: ["pan"], can_go_on_duty: false } }
-    expect(approvalBlockers(detail)).toEqual(["Police clearance certificate"])
-    expect(approvalBlockers({ readiness: { missing_steps: ["pan"], completed_steps: [] } })).toEqual([])
+    expect(approvalBlockers(detail)).toEqual(["Police clearance certificate", "PAN number"])
+    expect(approvalBlockers({ readiness: { missing_steps: ["pan"], completed_steps: [] } })).toEqual(["PAN number"])
     expect(approvalBlockers({})).toEqual(["The onboarding readiness could not be read."])
     expect(readReadiness(detail)).toMatchObject({ missing: ["police_certificate", "pan"], completed: ["profile"], canGoOnDuty: false })
   })

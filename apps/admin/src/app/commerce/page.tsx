@@ -8,6 +8,7 @@ import { MStoreBanners, MStoreCodSettle, MStoreCompliance, MStoreDeadLetters } f
 import { useProductQueue, useSellerQueue } from "@/hooks/useAdminCommerce"
 import { findNavGroup } from "@/lib/admin/me"
 import { COMMERCE_SECTIONS } from "@/lib/admin/sections"
+import { CommerceDeliveryReviews, CommerceDeliveryCoverage, CommerceDeliveryJobs } from "@/components/commerce/CommerceDelivery"
 
 const DESCRIPTIONS: Record<string, string> = {
   catalogue: "Attribute definitions, category schemas and publishing",
@@ -60,6 +61,12 @@ export default function MStoreDashboard() {
       extra={<MStoreScreens />}
       renderSection={(id) => {
         switch (id) {
+          case "delivery-partners":
+            return <CommerceDeliveryReviews />
+          case "delivery-coverage":
+            return <CommerceDeliveryCoverage />
+          case "delivery-jobs":
+            return <CommerceDeliveryJobs />
           case "banners":
             return <MStoreBanners />
           case "jobs":

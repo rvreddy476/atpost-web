@@ -21,6 +21,8 @@ import { inr, inrMinor } from '@/lib/money'
 import { cartBlockReason } from '@/lib/cart'
 import { getCheckoutBlockReason } from '@/lib/checkout'
 import { completeOrderPayment } from '@/lib/orderPayment'
+import api from '@atpost/api-client'
+import { DeliveryPinPicker, type DeliveryPin } from '@/components/commerce/LocalDelivery'
 
 function CheckoutContent() {
   const router = useRouter()
@@ -39,6 +41,7 @@ function CheckoutContent() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const checkoutKey = useRef<string | null>(null)
+  const [deliveryPin, setDeliveryPin] = useState<{ addressId: string; pin: DeliveryPin } | null>(null)
 
   // Phase 5 — optional B2B context. If the user belongs to any organization
   // we expose a selector; selecting one unlocks PO / cost center / invoice
@@ -118,6 +121,9 @@ function CheckoutContent() {
         return
       }
 
+      if (deliveryPin?.addressId === selectedAddr && order.status === 'payment_pending') {
+        await api.put(`/v1/commerce/delivery/orders/${order.id}/location`, deliveryPin.pin)
+      }
       await completeOrderPayment(order, createIntent.mutateAsync, confirmPayment.mutateAsync)
 
       router.push(`/orders/${order.id}`)
@@ -207,6 +213,7 @@ function CheckoutContent() {
               )}
             </section>
 
+            {selectedAddr && paymentMethod === 'prepaid' ? <section className="panel panel-pad space-y-3"><h2 className="panel-heading">Precise delivery location</h2><p className="text-sm text-shop-muted">An optional pin helps local delivery in enabled areas. Courier delivery and shipping charges are unchanged if you skip this.</p><DeliveryPinPicker key={selectedAddr} label={addrList.filter(a => a.id === selectedAddr).map(a => `${a.address_line_1}, ${a.city} ${a.postal_code}`).join('')} onChange={pin => setDeliveryPin(pin ? { addressId: selectedAddr, pin } : null)} /></section> : null}
             {myOrgs.length > 0 && (
               <section className="panel panel-pad">
                 <h2 className="panel-heading"><Building2 size={19} className="text-shop-gold" aria-hidden="true" /> Buying for</h2>

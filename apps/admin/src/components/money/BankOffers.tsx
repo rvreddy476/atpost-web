@@ -132,7 +132,7 @@ function OfferForm({
             Cancel edit
           </button>
         ) : null}
-        <span className="text-xs text-mo-body">Needs a fresh 2FA code.</span>
+        <span className="text-xs text-mo-body">This change is recorded.</span>
       </div>
     </form>
   )
@@ -235,7 +235,7 @@ export function BankOffers() {
       <Dialog
         open={deactivating !== null}
         title={`Deactivate ${str(deactivating?.title) ?? "this offer"}?`}
-        description="Checkouts stop offering it at once. Payments already made with it are not affected. Switch it off in the Razorpay dashboard too. Needs a fresh 2FA code."
+        description="Checkouts stop offering it at once. Payments already made with it are not affected. Switch it off in the Razorpay dashboard too."
         onClose={() => setDeactivating(null)}
         dismissible={!write.isPending}
       >

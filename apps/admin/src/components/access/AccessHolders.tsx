@@ -53,7 +53,8 @@ export function AccessHolders({ catalogue }: { catalogue: Catalogue }) {
     onDone: () => setPending(null),
   })
 
-  const columns = (env: boolean): DataColumn<Holder>[] => [
+  const columns = (env: boolean): DataColumn<Holder>[] => {
+    const result: DataColumn<Holder>[] = [
     { key: "user", header: "User", value: (h) => h.userId, filterable: true, cell: (h) => <IdText id={h.userId} /> },
     { key: "role", header: "Role", value: (h) => h.role, sortable: true, cell: (h) => <span className="font-semibold">{humanise(h.role)}</span> },
     { key: "app", header: "Application", value: (h) => h.app ?? "platform", sortable: true, cell: (h) => appLabel(h.app) },
@@ -90,6 +91,9 @@ export function AccessHolders({ catalogue }: { catalogue: Catalogue }) {
       ),
     },
   ]
+
+    return me.stepUpRequired === false ? result.filter(column => column.key !== "mfa") : result
+  }
 
   const rowId = (h: Holder) => `${h.userId}:${h.role}:${h.app ?? "platform"}`
 
@@ -155,7 +159,7 @@ export function AccessHolders({ catalogue }: { catalogue: Catalogue }) {
         description={
           pending ? (
             <>
-              {appLabel(pending.holder.app)} · user {pending.holder.userId}. Their admin sessions end with the role. Needs a fresh 2FA code.
+              {appLabel(pending.holder.app)} · user {pending.holder.userId}. Their admin sessions end with the role.
               {secondApproverNote(pending.holder.role) ? <span className="mt-1 block text-mo-warn">{secondApproverNote(pending.holder.role)}</span> : null}
             </>
           ) : null
@@ -169,7 +173,7 @@ export function AccessHolders({ catalogue }: { catalogue: Catalogue }) {
       <ConfirmReasonDialog
         open={pending?.kind === "logout"}
         title="Sign this user out everywhere?"
-        description={pending ? `User ${pending.holder.userId}: every session they hold is revoked and they must sign in again. Their roles stay. Needs a fresh 2FA code.` : null}
+        description={pending ? `User ${pending.holder.userId}: every session they hold is revoked and they must sign in again. Their roles stay.` : null}
         confirmLabel="Force logout"
         destructive
         busy={logout.isPending}

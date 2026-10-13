@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { CreateGrievance } from "./CreateGrievance"
 import { ArrowLeft } from "lucide-react"
 import { DataTable, type DataColumn } from "@/components/blocks/DataTable"
 import { ChoiceDialog } from "@/components/blocks/ChoiceDialog"
@@ -76,6 +77,7 @@ export function TrustGrievances() {
   return (
     <>
       <div className="mb-3 flex flex-wrap items-end gap-4">
+        <CreateGrievance onCreated={() => { setFilter({overdueOnly:false,status:""}); setOffset(0); void list.refetch() }} />
         <label className="flex items-center gap-2 text-sm text-mo-ink">
           <input
             type="checkbox"
@@ -223,11 +225,11 @@ function GrievanceDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <ChoiceDialog
         open={closing}
         title="Close this grievance"
-        description="The complainant is told the outcome. Closing needs a fresh 2FA code."
+        description="The complainant is told the outcome."
         choiceLabel="Outcome"
         choices={next
           .filter(grievanceNeedsStepUp)
-          .map((s) => ({ value: s, destructive: true, hint: "Needs a fresh 2FA code." }))}
+          .map((s) => ({ value: s, destructive: true, hint: "This change is recorded in the audit log." }))}
         reasonLabel="Resolution notes"
         requireReason
         busy={update.isPending}

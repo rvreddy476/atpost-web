@@ -49,9 +49,12 @@ const FORWARDED_HEADERS = [
     "idempotency-key",
 ]
 
-export async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+export async function proxyRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> },
+    serverOptions?: { upstream?: string; headers?: Headers }) {
     const { path } = await params
-    const target = `${API_GATEWAY}/v1/${path.join("/")}`
+    // Only server code may supply an upstream/extra headers. Incoming browser
+    // headers still go through the strict allowlist below.
+    const target = `${serverOptions?.upstream ?? API_GATEWAY}/v1/${path.join("/")}`
     const url = new URL(target)
 
     // Forward query params
@@ -69,6 +72,7 @@ export async function proxyRequest(req: NextRequest, { params }: { params: Promi
     }
     const requestId = req.headers.get("x-request-id") || crypto.randomUUID()
     headers.set("x-request-id", requestId)
+    serverOptions?.headers?.forEach((value, name) => headers.set(name, value))
 
     // Read body for non-GET/HEAD requests
     let body: BodyInit | null = null

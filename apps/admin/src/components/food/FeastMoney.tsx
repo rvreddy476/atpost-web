@@ -15,6 +15,7 @@ import { REFUND_SECOND_APPROVER_NOTE, formatPaise, rupeesToPaise } from "@/lib/a
 import { adminErrorMessage } from "@/lib/admin/mutation"
 import { can } from "@/lib/admin/sections"
 import { FOOD, FOOD_KEY } from "./FeastApprovals"
+import { foodRefundExecution } from "@/lib/admin/foodRefund"
 
 const LIMIT = 50
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -43,6 +44,10 @@ export function FeastRefunds() {
     { key: "amount", header: "Amount", value: (r) => rupeesToPaise(r.amount), sortable: true, align: "right", cell: (r) => <span className="font-mo-mono">{formatPaise(rupeesToPaise(r.amount))}</span> },
     { key: "reason", header: "Reason", value: (r) => str(r.reason), filterable: true },
     { key: "status", header: "Status", value: (r) => str(r.status), sortable: true, cell: (r) => <StatusPill value={r.status} /> },
+    { key: "execution", header: "Payment execution", value: (r) => foodRefundExecution(r).label, cell: (r) => {
+      const state = foodRefundExecution(r)
+      return <div><strong>{state.label}</strong>{state.detail ? <p className="mt-1 text-xs text-mo-body">{state.detail}</p> : null}</div>
+    } },
     { key: "created", header: "Requested", value: (r) => str(r.created_at), sortable: true, cell: (r) => when(r.created_at) },
     {
       key: "actions",
@@ -50,9 +55,9 @@ export function FeastRefunds() {
       value: () => null,
       align: "right",
       cell: (r) =>
-        str(r.status) === "requested" && can(me, "food", "refund.issue") ? (
+        (str(r.status) === "requested" || foodRefundExecution(r).retryApproval) && can(me, "food", "refund.issue") ? (
           <button type="button" className={buttonSecondary} onClick={() => setDeciding(r)} aria-label={`Decide refund ${str(r.id)}`}>
-            Decide
+            {foodRefundExecution(r).retryApproval ? "Review execution" : "Decide"}
           </button>
         ) : null,
     },
@@ -81,15 +86,17 @@ export function FeastRefunds() {
         description={
           deciding ? (
             <>
-              {formatPaise(rupeesToPaise(deciding.amount))} requested. Deciding needs a fresh 2FA code.{" "}
+              {formatPaise(rupeesToPaise(deciding.amount))} requested.{" "}
               <span data-testid="refund-hint">Approving: {REFUND_SECOND_APPROVER_NOTE}</span>
             </>
           ) : null
         }
         choiceLabel="Decision"
-        choices={[
+        choices={deciding && foodRefundExecution(deciding).retryApproval ? [
+          { value: "approved", label: "Approve execution", hint: "Rechecks the customer, order and refundable balance, then submits one linked refund. " + REFUND_SECOND_APPROVER_NOTE },
+        ] : [
           { value: "approved", label: "Approve", hint: REFUND_SECOND_APPROVER_NOTE },
-          { value: "rejected", label: "Reject", hint: "Rejecting is done once you confirm with 2FA.", destructive: true },
+          { value: "rejected", label: "Reject", hint: "Rejecting is done once you confirm.", destructive: true },
         ]}
         busy={decide.isPending}
         onConfirm={(next, reason) => deciding && decide.mutate({ id: String(deciding.id), status: next, reason })}
@@ -146,7 +153,7 @@ function GenerateSettlements() {
       <ConfirmReasonDialog
         open={confirming}
         title="Generate settlements?"
-        description={`For ${start} to ${end}. This computes what every restaurant and rider is owed, and needs a fresh 2FA code.`}
+        description={`For ${start} to ${end}. This computes what every restaurant and rider is owed,.`}
         confirmLabel="Generate"
         destructive
         busy={generate.isPending}
@@ -217,7 +224,7 @@ function SettlementList({ kind }: { kind: "restaurants" | "delivery-partners" })
         open={paying !== null}
         title="Mark this settlement paid?"
         description={
-          paying ? `${formatPaise(payout(paying))}. Marking paid always goes to a second admin for approval, and needs a fresh 2FA code.` : null
+          paying ? `${formatPaise(payout(paying))}. Marking paid always goes to a second admin for approval,.` : null
         }
         confirmLabel="Send for approval"
         destructive
@@ -313,7 +320,7 @@ function SettlementFiles() {
       <ConfirmReasonDialog
         open={creating}
         title="Create a settlement file"
-        description="The bank upload file for a period. Needs a fresh 2FA code."
+        description="The bank upload file for a period."
         confirmLabel="Create"
         canConfirm={DATE.test(start) && DATE.test(end) && start <= end}
         busy={create.isPending}

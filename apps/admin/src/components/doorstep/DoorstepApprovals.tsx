@@ -1,5 +1,6 @@
 "use client"
 
+import { DoorstepChanges } from "./DoorstepChanges"
 import { useState } from "react"
 import { useAdmin } from "@/components/shell/AdminShell"
 import { can } from "@/lib/admin/sections"
@@ -8,7 +9,7 @@ import { DoorstepDocumentQueue } from "./DoorstepDocuments"
 import { DoorstepPriceQueue } from "./DoorstepPrices"
 import { DoorstepProfessionals } from "./DoorstepProfessionals"
 
-type Area = "professionals" | "documents" | "prices"
+type Area = "changes" | "professionals" | "documents" | "prices"
 
 /**
  * Approvals. Founder rule (4 Oct 2026): nothing a professional submits is
@@ -22,6 +23,7 @@ type Area = "professionals" | "documents" | "prices"
 export function DoorstepApprovals() {
   const { me } = useAdmin()
   const areas = [
+    ...(can(me, "doorstep", "pros.read") ? [{id:"changes" as const,label:"Partner changes"}] : []),
     ...(can(me, "doorstep", "pros.read") ? [{ id: "professionals" as const, label: "Professionals waiting" }] : []),
     ...(can(me, "doorstep", "documents.review") ? [{ id: "documents" as const, label: "Selfies and documents" }] : []),
     ...(can(me, "doorstep", "prices.review") ? [{ id: "prices" as const, label: "Prices" }] : []),
@@ -33,7 +35,7 @@ export function DoorstepApprovals() {
   return (
     <div>
       {areas.length > 1 ? <AreaSwitch value={current} areas={areas} onChange={setArea} label="Which approvals" /> : null}
-      {current === "professionals" ? (
+      {current === "changes" ? <DoorstepChanges /> : current === "professionals" ? (
         <DoorstepProfessionals initialStatus="pending_verification" caption="Professionals waiting for review" />
       ) : current === "documents" ? (
         <DoorstepDocumentQueue />

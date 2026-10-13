@@ -53,6 +53,9 @@ export const TRUST_SECTIONS = [
 
 /** MStore sections on its own dashboard page; the older screens keep their URLs (apps.ts). */
 export const COMMERCE_SECTIONS = [
+  { id: "delivery-partners", label: "Delivery partners", anyOf: ["kyc.verify"] },
+  { id: "delivery-coverage", label: "Delivery coverage & payouts", anyOf: ["catalogue.edit"] },
+  { id: "delivery-jobs", label: "Delivery operations", anyOf: ["catalogue.edit"] },
   { id: "banners", label: "Banners", anyOf: ["banners.edit"] },
   { id: "jobs", label: "Dead-letter jobs", anyOf: ["jobs.read"] },
   { id: "compliance", label: "Compliance gaps", anyOf: ["compliance.read", "compliance.sweep"] },

@@ -8,7 +8,7 @@ import { buttonPrimary, buttonSecondary, inputClass } from "@/components/blocks/
 import adminApi, { ADMIN_SESSION_ROUTES, withBasePath } from "@/lib/admin/api"
 import { safeNextPath } from "@/lib/admin/cookies"
 import { isCompleteOtp, normaliseOtp } from "@/lib/admin/stepUp"
-import { describeSignInError, initialSignInState, readPendingToken, signInReducer } from "@/lib/admin/signIn"
+import { describeSignInError, initialSignInState, isLocalPasswordSession, readPendingToken, signInReducer } from "@/lib/admin/signIn"
 
 /**
  * Sign-in on the console's own host: password, then a code from the admin's
@@ -30,6 +30,12 @@ function SignInForm() {
     dispatch({ type: "submit-credentials" })
     try {
       const response = await adminApi.post(ADMIN_SESSION_ROUTES.login, { identifier: identifier.trim(), password })
+      if (isLocalPasswordSession(response.data)) {
+        setPassword("")
+        dispatch({ type: "local-session-accepted" })
+        window.location.assign(withBasePath(next))
+        return
+      }
       const pendingToken = readPendingToken(response.data)
       if (!pendingToken) {
         dispatch({ type: "credentials-refused", error: describeSignInError({ status: 500, data: null }) })
@@ -68,7 +74,7 @@ function SignInForm() {
       {state.step === "credentials" ? (
         <form onSubmit={submitCredentials} className="mt-6 space-y-4" aria-label="Admin sign-in">
           <p className="text-sm text-mo-body">
-            Use your admin account. You will then be asked for a code from your authenticator app.
+            Use your admin email or phone and password.
           </p>
           <div>
             <label className="block text-sm font-semibold text-mo-ink" htmlFor="admin-identifier">

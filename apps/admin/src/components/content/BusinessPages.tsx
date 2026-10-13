@@ -224,7 +224,7 @@ function PageDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <ConfirmReasonDialog
         open={current !== null}
         title={current?.title ?? ""}
-        description={current ? `${current.explain}${current.stepUp ? " Needs a fresh 2FA code." : ""}` : null}
+        description={current ? `${current.explain}${current.stepUp ? "" : ""}` : null}
         confirmLabel={current?.label ?? "Confirm"}
         destructive={current?.destructive ?? false}
         requireReason={action === "approve" || action === "reinstate" ? false : true}
@@ -235,7 +235,7 @@ function PageDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <ConfirmReasonDialog
         open={docDecision !== null}
         title={docDecision?.decision === "approve" ? "Approve this document?" : "Reject this document?"}
-        description={docDecision ? `${humanise(docDecision.doc.document_type)}. ${docDecision.decision === "approve" ? "It counts towards the page's verification." : "The owner sees your reason and can upload another."} Needs a fresh 2FA code.` : null}
+        description={docDecision ? `${humanise(docDecision.doc.document_type)}. ${docDecision.decision === "approve" ? "It counts towards the page's verification." : "The owner sees your reason and can upload another."}` : null}
         confirmLabel={docDecision?.decision === "approve" ? "Approve" : "Reject"}
         destructive={docDecision?.decision === "reject"}
         busy={decideDoc.isPending}

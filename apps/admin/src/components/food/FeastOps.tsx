@@ -276,7 +276,7 @@ export function FeastCoupons() {
       <ConfirmReasonDialog
         open={toggling !== null}
         title={toggling && bool(toggling.is_active) ? "Deactivate this coupon?" : "Activate this coupon?"}
-        description="Changing a coupon needs a fresh 2FA code."
+        description="Changes apply to future orders."
         confirmLabel={toggling && bool(toggling.is_active) ? "Deactivate" : "Activate"}
         destructive={!!toggling && bool(toggling.is_active)}
         busy={toggle.isPending}

@@ -90,7 +90,7 @@ export function useDoorstepStepUpRead(url: string, { enabled = true }: { enabled
 export function StepUpDismissedNote({ what, onRetry }: { what: string; onRetry: () => void }) {
   return (
     <div className="rounded-mo border border-dashed border-mo-strong bg-mo-sunken p-6 text-center">
-      <p className="mb-3 text-sm text-mo-body">{what} needs a fresh 2FA code. The read is recorded in the audit trail.</p>
+      <p className="mb-3 text-sm text-mo-body">{what} is private. The read is recorded in the audit trail.</p>
       <button type="button" className={buttonPrimary} onClick={onRetry}>
         Enter the code
       </button>

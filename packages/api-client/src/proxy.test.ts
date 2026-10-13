@@ -15,6 +15,21 @@ function request(requestId?: string, extraHeaders: Record<string, string> = {}):
 afterEach(() => vi.unstubAllGlobals())
 
 describe('proxyRequest', () => {
+  it('drops client local-login keys and uses only trusted server overrides', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('ok'))
+    vi.stubGlobal('fetch', fetchMock)
+    const context = { params: Promise.resolve({ path: ['auth', 'admin-session', 'login'] }) }
+    await proxyRequest(request(undefined, { 'X-Admin-Local-Password-Key': 'forged' }), context)
+    const ordinaryHeaders = fetchMock.mock.calls[0][1].headers as Headers
+    expect(ordinaryHeaders.get('X-Admin-Local-Password-Key')).toBeNull()
+
+    await proxyRequest(request(undefined, { 'X-Admin-Local-Password-Key': 'forged' }), context, {
+      upstream: 'http://identity-auth:8081',
+      headers: new Headers({ 'X-Admin-Local-Password-Key': 'server-key' }),
+    })
+    expect(fetchMock.mock.calls[1][0]).toContain('http://identity-auth:8081/v1/auth/admin-session/login')
+    expect((fetchMock.mock.calls[1][1].headers as Headers).get('X-Admin-Local-Password-Key')).toBe('server-key')
+  })
   it('returns a safe gateway error and preserves the request id', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection refused')))
     const response = await proxyRequest(request('request-123'), {

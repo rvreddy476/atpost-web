@@ -185,7 +185,7 @@ export function QaQuestions() {
       <ConfirmReasonDialog
         open={write !== null}
         title={def ? `${def.label}?` : ""}
-        description={def ? `${def.explain}${def.stepUp ? " Needs a fresh 2FA code." : ""} ${reasonNote}` : null}
+        description={def ? `${def.explain}${def.stepUp ? "" : ""} ${reasonNote}` : null}
         confirmLabel={def?.label ?? "Confirm"}
         destructive={def?.destructive ?? false}
         requireReason

@@ -139,7 +139,7 @@ function CouponForm({
             Cancel edit
           </button>
         ) : null}
-        <span className="text-xs text-mo-body">Needs a fresh 2FA code.</span>
+        <span className="text-xs text-mo-body">This change is recorded.</span>
       </div>
     </form>
   )
@@ -284,7 +284,7 @@ export function StoreCoupons() {
       <Dialog
         open={deactivating !== null}
         title={`Deactivate ${str(deactivating?.code) ?? "this coupon"}?`}
-        description="The code stops working for new orders at once; orders already placed keep their discount. Needs a fresh 2FA code."
+        description="The code stops working for new orders at once; orders already placed keep their discount."
         onClose={() => setDeactivating(null)}
         dismissible={!write.isPending}
       >

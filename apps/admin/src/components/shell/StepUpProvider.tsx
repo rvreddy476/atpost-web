@@ -25,10 +25,12 @@ const StepUpContext = createContext<RequestStepUp | null>(null)
 export function StepUpProvider({
   children,
   windowSeconds = STEP_UP_WINDOW_SECONDS,
+  disabled = false,
 }: {
   children: React.ReactNode
   /** `step_up_window_seconds` from /me. */
   windowSeconds?: number
+  disabled?: boolean
 }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -47,6 +49,7 @@ export function StepUpProvider({
   }, [])
 
   const requestStepUp = useCallback<RequestStepUp>(() => {
+    if (disabled) return Promise.resolve(true)
     if (pending.current) return pending.current.promise
     let resolve: (ok: boolean) => void = () => undefined
     const promise = new Promise<boolean>((r) => {
@@ -55,7 +58,7 @@ export function StepUpProvider({
     pending.current = { promise, resolve }
     setOpen(true)
     return promise
-  }, [])
+  }, [disabled])
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
