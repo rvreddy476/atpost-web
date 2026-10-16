@@ -108,6 +108,22 @@ export function useAdminMutation<Vars>({
 }
 
 /**
+ * One write with the console's step-up handling, for a flow that drives its
+ * own progress and errors instead of a toast (the sound library's upload).
+ * Resolves the outcome; rejects with the request's error.
+ */
+export function useAdminSend() {
+  const stepUp = useStepUp()
+  return useCallback(
+    (request: AdminRequest): Promise<MutationOutcome> => {
+      const { send } = prepareSend(request, transport)
+      return runAdminMutation(send, stepUp)
+    },
+    [stepUp],
+  )
+}
+
+/**
  * A READ that may need a step-up (a panic location, rider KYC, pending
  * payouts, a settlement file link). Resolves the body, or null when the admin
  * dismissed the 2FA prompt. Two-person never applies to reads.

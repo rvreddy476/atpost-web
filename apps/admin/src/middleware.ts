@@ -15,12 +15,15 @@ export function middleware(request: NextRequest) {
   crypto.getRandomValues(bytes)
   const nonce = btoa(String.fromCharCode(...bytes))
 
+  const dev = process.env.NODE_ENV === "development"
   const csp = buildContentSecurityPolicy({
     nonce,
     maps: /(?:^|\/)doorstep(?:\/|$)/.test(request.nextUrl.pathname),
-    dev: process.env.NODE_ENV === "development",
+    dev,
     apiOrigin: process.env.NEXT_PUBLIC_ADMIN_API_ORIGIN ?? null,
     imageOrigins: splitOrigins(process.env.ADMIN_IMAGE_ORIGINS ?? "https://*.cleestudio.com"),
+    // Where presigned uploads go (media-service's MINIO_PUBLIC_ENDPOINT); local MinIO in development.
+    uploadOrigins: splitOrigins(process.env.ADMIN_UPLOAD_ORIGINS ?? (dev ? "http://localhost:9000 https://*.cleestudio.com" : "https://*.cleestudio.com")),
   })
 
   const requestHeaders = new Headers(request.headers)

@@ -46,6 +46,15 @@ describe("admin CSP", () => {
     expect(d["script-src"]).toHaveLength(3)
   })
 
+  it("lets presigned uploads reach only the storage origins given, and only as connections", () => {
+    const d = directives(
+      buildContentSecurityPolicy({ nonce: NONCE, dev: false, uploadOrigins: ["https://media.cleestudio.com/bucket", "javascript:alert(1)"] }),
+    )
+    expect(d["connect-src"]).toEqual(["'self'", "https://media.cleestudio.com"])
+    expect(d["img-src"]).not.toContain("https://media.cleestudio.com")
+    expect(d["media-src"]).toEqual(["blob:"])
+  })
+
   it("permits Maps only when explicitly enabled, retaining strict script policy", () => {
     const d = directives(buildContentSecurityPolicy({nonce:NONCE,dev:false,maps:true}))
     expect(d["connect-src"]).toContain("https://*.googleapis.com")

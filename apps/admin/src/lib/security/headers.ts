@@ -44,6 +44,13 @@ export interface CspOptions {
   apiOrigin?: string | null
   /** Extra image origins (product photos, KYC documents). */
   imageOrigins?: string[]
+  /**
+   * Storage origins the console may PUT a file to with a presigned URL (the
+   * sound library's upload goes straight to storage, not through the API).
+   * Set on every page, not only /sounds: a client-side navigation keeps the
+   * CSP of the document the admin first loaded.
+   */
+  uploadOrigins?: string[]
 }
 
 /** Only `scheme://host[:port]` survives; anything else is dropped, not trusted. */
@@ -69,10 +76,11 @@ export function splitOrigins(value: string | null | undefined): string[] {
     .filter((v): v is string => !!v)
 }
 
-export function buildContentSecurityPolicy({ nonce, dev, apiOrigin, imageOrigins = [], maps = false }: CspOptions): string {
+export function buildContentSecurityPolicy({ nonce, dev, apiOrigin, imageOrigins = [], uploadOrigins = [], maps = false }: CspOptions): string {
   if (!/^[A-Za-z0-9+/=_-]{16,}$/.test(nonce)) throw new Error("CSP nonce must be at least 16 base64 characters")
   const api = sanitiseOrigin(apiOrigin)
   const images = imageOrigins.map((o) => sanitiseOrigin(o)).filter((o): o is string => !!o)
+  const uploads = uploadOrigins.map((o) => sanitiseOrigin(o)).filter((o): o is string => !!o)
 
   const directives: Record<string, string[]> = {
     "default-src": ["'none'"],
@@ -85,7 +93,7 @@ export function buildContentSecurityPolicy({ nonce, dev, apiOrigin, imageOrigins
     "media-src": ["blob:"],
     "font-src": ["'self'", "data:"],
     // Dev needs the HMR websocket on the same host.
-    "connect-src": ["'self'", ...(api ? [api] : []), ...(dev ? ["ws:", "wss:"] : [])],
+    "connect-src": ["'self'", ...(api ? [api] : []), ...uploads, ...(dev ? ["ws:", "wss:"] : [])],
     "manifest-src": ["'self'"],
     "worker-src": ["'self'", "blob:"],
     "frame-src": ["'none'"],
