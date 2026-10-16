@@ -25,6 +25,9 @@ export const ADMIN_APPS = [
   { id: "qa", label: "Q&A" },
   { id: "chat", label: "Chat" },
   { id: "live", label: "Live" },
+  // The sound library: admin-service's `media` permission scope
+  // (media:sounds.*), beside the content apps whose posts use the sounds.
+  { id: "media", label: "Sound library" },
   { id: "rider", label: "Mopedu" },
   { id: "doorstep", label: "Doorstep" },
   { id: "trust_safety", label: "Trust & safety" },
@@ -43,18 +46,23 @@ export function adminAppLabel(id: AdminAppId): string {
   return BY_ID.get(id)?.label ?? id
 }
 
-/** The console URL of an application's dashboard. Trust & safety lives at /trust. */
+/** The console URL of an application's dashboard. Trust & safety lives at /trust, the sound library at /sounds. */
 export function appHref(id: AdminAppId): string {
-  return id === "trust_safety" ? "/trust" : `/${id}`
+  if (id === "trust_safety") return "/trust"
+  if (id === "media") return "/sounds"
+  return `/${id}`
 }
 
 /**
  * Apps whose page needs one particular permission rather than any permission
  * in the app (the action, without the app prefix). Live opens only with
  * live:streams.read: every other live permission acts on what that list shows.
+ * The sound library opens only with media:sounds.read, so another media
+ * permission alone never puts it in the rail.
  */
 export const APP_ENTRY_PERMISSIONS: Partial<Record<AdminAppId, string>> = {
   live: "streams.read",
+  media: "sounds.read",
 }
 
 export function adminAppOrder(id: AdminAppId): number {

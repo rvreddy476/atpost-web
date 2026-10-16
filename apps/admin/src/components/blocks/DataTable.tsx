@@ -75,6 +75,7 @@ export function DataTable<Row>({
   pageSize = 25,
   selectable = false,
   bulkActions,
+  onRowClick,
 }: {
   caption: string
   rows: Row[] | undefined
@@ -86,6 +87,12 @@ export function DataTable<Row>({
   emptyMessage?: string
   pageSize?: number
   selectable?: boolean
+  /**
+   * Opens a row's detail on a click anywhere in the row. A pointer shortcut
+   * only: keep a button in one of the cells for keyboard users. Clicks on a
+   * control inside the row are left to that control.
+   */
+  onRowClick?: (row: Row) => void
   /** Rendered above the table while rows are selected. */
   bulkActions?: (selectedIds: string[], clear: () => void) => React.ReactNode
 }) {
@@ -214,7 +221,18 @@ export function DataTable<Row>({
                 const id = rowId(row)
                 const checked = state.selected.includes(id)
                 return (
-                  <tr key={id} className={`border-b border-mo last:border-0 ${checked ? "bg-mo-raised/60" : ""}`}>
+                  <tr
+                    key={id}
+                    className={`border-b border-mo last:border-0 ${checked ? "bg-mo-raised/60" : ""} ${onRowClick ? "cursor-pointer hover:bg-mo-raised/40" : ""}`}
+                    onClick={
+                      onRowClick
+                        ? (event) => {
+                            if ((event.target as HTMLElement).closest("button, a, input, select, textarea, label")) return
+                            onRowClick(row)
+                          }
+                        : undefined
+                    }
+                  >
                     {selectable ? (
                       <td className="px-3 py-2">
                         <input
